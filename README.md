@@ -127,7 +127,7 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed structure.
 - ✅ **Barcode Scanning** - Scan panel barcodes to build pallets
 - ✅ **Excel Integration** - Automatic workbook updates
 - ✅ **Pallet History** - Track all pallets with search and export
-- ✅ **Export to Excel** - Date-organized pallet exports
+- ✅ **Export to Excel** - Date-organized pallet exports with capacity-specific templates (25/26/30/35)
 - ✅ **Sun Simulator Import** - Import and process simulator data
 - ✅ **Professional Installers** - Easy installation wizards
 - ✅ **Cross-Platform** - Works on macOS & Windows
@@ -152,7 +152,7 @@ scripts\install_all_windows.bat   # Windows
 
 **Run tests:**
 ```bash
-python test_bugs.py
+pytest
 ```
 
 **Create icons:**

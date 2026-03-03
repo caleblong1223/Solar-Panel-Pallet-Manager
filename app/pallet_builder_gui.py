@@ -1067,12 +1067,45 @@ class PalletBuilderGUI:
         capacity_frame = tk.Frame(panels_inner_frame, bg=self.root.cget('bg'))
         capacity_frame.pack(side=tk.LEFT)
         
-        tk.Radiobutton(capacity_frame, text="25 Panels", variable=self.max_panels_var, 
-                      value=25, bg=self.root.cget('bg'), font=("Arial", 10),
-                      command=self._on_max_panels_changed).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Radiobutton(capacity_frame, text="26 Panels", variable=self.max_panels_var, 
-                      value=26, bg=self.root.cget('bg'), font=("Arial", 10),
-                      command=self._on_max_panels_changed).pack(side=tk.LEFT)
+        tk.Radiobutton(
+            capacity_frame,
+            text="25 Panels",
+            variable=self.max_panels_var,
+            value=25,
+            bg=self.root.cget('bg'),
+            font=("Arial", 10),
+            command=self._on_max_panels_changed,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Radiobutton(
+            capacity_frame,
+            text="26 Panels",
+            variable=self.max_panels_var,
+            value=26,
+            bg=self.root.cget('bg'),
+            font=("Arial", 10),
+            command=self._on_max_panels_changed,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Radiobutton(
+            capacity_frame,
+            text="30 Panels",
+            variable=self.max_panels_var,
+            value=30,
+            bg=self.root.cget('bg'),
+            font=("Arial", 10),
+            command=self._on_max_panels_changed,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Radiobutton(
+            capacity_frame,
+            text="35 Panels",
+            variable=self.max_panels_var,
+            value=35,
+            bg=self.root.cget('bg'),
+            font=("Arial", 10),
+            command=self._on_max_panels_changed,
+        ).pack(side=tk.LEFT)
         
         # Scan area frame
         scan_frame = tk.Frame(self.root)
@@ -1197,8 +1230,8 @@ class PalletBuilderGUI:
             if config_file.exists():
                 with open(config_file, 'r') as f:
                     value = int(f.read().strip())
-                    # Validate: only allow 25 or 26
-                    if value in [25, 26]:
+                    # Validate: only allow known capacities
+                    if value in [25, 26, 30, 35]:
                         return value
             # Default to 25 if file doesn't exist or invalid value
             return 25
@@ -1285,7 +1318,7 @@ class PalletBuilderGUI:
         """Handle max panels toggle change"""
         if self.max_panels_var:
             new_max = self.max_panels_var.get()
-            if new_max != self.max_panels and new_max in [25, 26]:
+            if new_max != self.max_panels and new_max in [25, 26, 30, 35]:
                 self.max_panels = new_max
                 self._save_max_panels_setting(new_max)
                 # Refresh slot display to show correct number of slots
@@ -1295,6 +1328,41 @@ class PalletBuilderGUI:
                     count = len(self.current_pallet.get('serial_numbers', []))
                     if self.status_label:
                         self.status_label.config(text=f"Slots: {count}/{self.max_panels}", fg="black")
+
+    def _get_template_workbook_for_capacity(self) -> Optional[Path]:
+        """
+        Select a template workbook based on the current panel capacity.
+        
+        Mapping:
+        - 25 or 26 panels → EXCEL/26.xlsx
+        - 30 panels       → EXCEL/30.xlsx
+        - 35 panels       → EXCEL/35.xlsx
+        
+        If the specific template file does not exist, returns None and the
+        exporter will fall back to its default source workbook.
+        """
+        try:
+            # Derive project root and EXCEL directory in the same way we locate the main workbook
+            if self.workbook_path and self.workbook_path.parent.name == "EXCEL":
+                project_root = self.workbook_path.parent.parent
+            else:
+                project_root = get_base_dir()
+
+            excel_dir = project_root / "EXCEL"
+
+            if self.max_panels in (25, 26):
+                filename = "26.xlsx"
+            elif self.max_panels == 30:
+                filename = "30.xlsx"
+            elif self.max_panels == 35:
+                filename = "35.xlsx"
+            else:
+                return None
+
+            template_path = excel_dir / filename
+            return template_path if template_path.exists() else None
+        except Exception:
+            return None
     
     def _show_modal_error_dialog(self, title: str, message: str, error_type: str = "error"):
         """
@@ -2190,7 +2258,9 @@ class PalletBuilderGUI:
             return
         
         # Show panel type selection dialog
-        dialog_result = self._select_panel_type_dialog(self.current_pallet.get('pallet_number') if self.current_pallet else None)
+        dialog_result = self._select_panel_type_dialog(
+            self.current_pallet.get('pallet_number') if self.current_pallet else None
+        )
         if not dialog_result:
             # User cancelled panel type selection
             return
@@ -2221,6 +2291,9 @@ class PalletBuilderGUI:
             )
             return
         
+        # Determine template workbook based on current capacity (25/26/30/35)
+        template_workbook = self._get_template_workbook_for_capacity()
+
         # Update active customer display (do this AFTER export to avoid blocking)
         self.active_customer_display = customer_display_name
         result = messagebox.askyesnocancel(
@@ -2258,12 +2331,15 @@ class PalletBuilderGUI:
             progress_window.update()
             
             try:
-                # Export pallet to Excel file (pass selected panel type, customer, and progress callback)
+                # Export pallet to Excel file (pass selected panel type, customer, progress callback, and template)
                 export_result = self.pallet_exporter.export_pallet(
                     self.current_pallet,
                     panel_type,
                     customer=customer,
-                    progress_callback=lambda stage, percent: self._update_progress(progress_window, stage, percent)
+                    progress_callback=lambda stage, percent: self._update_progress(
+                        progress_window, stage, percent
+                    ),
+                    template_workbook=template_workbook,
                 )
                 # Unpack export path and datetime
                 export_path, export_datetime = export_result
@@ -2638,8 +2714,16 @@ class PalletBuilderGUI:
                         )
                         return
                     
+                    # Determine template workbook based on current capacity (25/26/30/35)
+                    template_workbook = self._get_template_workbook_for_capacity()
+                    
                     try:
-                        export_result = self.pallet_exporter.export_pallet(self.current_pallet, panel_type, customer=customer)
+                        export_result = self.pallet_exporter.export_pallet(
+                            self.current_pallet,
+                            panel_type,
+                            customer=customer,
+                            template_workbook=template_workbook,
+                        )
                         export_path, export_datetime = export_result
 
                         # Store customer information in pallet before saving to history
@@ -3249,7 +3333,8 @@ class PalletBuilderGUI:
                 for customer_name in self.customer_manager.get_customer_names():
                     customer_listbox.insert(tk.END, customer_name)
             except Exception as e:
-                messagebox.showerror("Error", f"Could not load customers:\n{e}", parent=dialog)
+                # Use the main window as parent to avoid crashes if dialog is closing
+                messagebox.showerror("Error", f"Could not load customers:\n{e}", parent=self.root)
         
         # Show "Loading..." message initially
         customer_listbox.insert(0, "Loading customers...")
@@ -3269,7 +3354,7 @@ class PalletBuilderGUI:
                 "Excel File Opened",
                 "The customer Excel file has been opened.\n\n"
                 "After making changes, click 'Refresh List' to update the dropdown menu.",
-                parent=dialog
+                parent=self.root
             )
         
         # Add/Edit Customer Section
@@ -3353,7 +3438,7 @@ class PalletBuilderGUI:
             """Load customer data into form fields for editing"""
             customer = self.customer_manager.get_customer_by_name(display_name)
             if not customer:
-                messagebox.showerror("Error", f"Customer '{display_name}' not found.", parent=dialog)
+                messagebox.showerror("Error", f"Customer '{display_name}' not found.", parent=self.root)
                 return
             
             # Populate fields
@@ -3389,7 +3474,7 @@ class PalletBuilderGUI:
             zip_code = field_vars[5].get().strip()
             
             if not all([name, business, address, city, state, zip_code]):
-                messagebox.showerror("Error", "All fields are required.", parent=dialog)
+                messagebox.showerror("Error", "All fields are required.", parent=self.root)
                 return
             
             if editing_customer["display_name"]:
@@ -3408,7 +3493,7 @@ class PalletBuilderGUI:
                     if was_active_customer:
                         self.active_customer_display = new_display_name
                     
-                    messagebox.showinfo("Success", "Customer updated successfully!", parent=dialog)
+                    messagebox.showinfo("Success", "Customer updated successfully!", parent=self.root)
                     clear_form()
                     refresh_listbox()
                     
@@ -3427,12 +3512,12 @@ class PalletBuilderGUI:
                 else:
                     error_msg = "Failed to update customer.\n\n"
                     error_msg += "If Excel file is open, please close it and try again."
-                    messagebox.showerror("Error", error_msg, parent=dialog)
+                    messagebox.showerror("Error", error_msg, parent=self.root)
             else:
                 # Add new customer
                 result = self.customer_manager.add_customer(name, business, address, city, state, zip_code)
                 if result:
-                    messagebox.showinfo("Success", "Customer added successfully!", parent=dialog)
+                    messagebox.showinfo("Success", "Customer added successfully!", parent=self.root)
                     clear_form()
                     refresh_listbox()
                     # Update customer menu on main window (force refresh since customer was updated)
@@ -3441,7 +3526,7 @@ class PalletBuilderGUI:
                     # Check if it's a permission error or duplicate
                     error_msg = "Customer already exists or Excel file is locked.\n\n"
                     error_msg += "If Excel is open, please close it and try again."
-                    messagebox.showerror("Error", error_msg, parent=dialog)
+                    messagebox.showerror("Error", error_msg, parent=self.root)
         
         # Bind save button to save_customer function
         save_btn.config(command=save_customer)
@@ -3449,17 +3534,17 @@ class PalletBuilderGUI:
         def remove_customer():
             selection = customer_listbox.curselection()
             if not selection:
-                messagebox.showwarning("No Selection", "Please select a customer to remove.", parent=dialog)
+                messagebox.showwarning("No Selection", "Please select a customer to remove.", parent=self.root)
                 return
             
             customer_name = customer_listbox.get(selection[0])
             
             # Don't allow removing the last customer
             if len(self.customer_manager.get_customers()) <= 1:
-                messagebox.showerror("Error", "Cannot remove the last customer.", parent=dialog)
+                messagebox.showerror("Error", "Cannot remove the last customer.", parent=self.root)
                 return
             
-            if messagebox.askyesno("Confirm", f"Remove customer '{customer_name}'?", parent=dialog):
+            if messagebox.askyesno("Confirm", f"Remove customer '{customer_name}'?", parent=self.root):
                 # Check if the customer being removed is the active customer
                 was_active_customer = (self.active_customer_display == customer_name)
                 
@@ -3474,14 +3559,14 @@ class PalletBuilderGUI:
                         self.active_customer_display = None
                         # _update_customer_menu will set it to the first available customer
                     
-                    messagebox.showinfo("Success", "Customer removed successfully!", parent=dialog)
+                    messagebox.showinfo("Success", "Customer removed successfully!", parent=self.root)
                     refresh_listbox()
                     # Update customer menu on main window (force refresh since customer was removed)
                     self._update_customer_menu(force_refresh=True)
                 else:
                     error_msg = "Failed to remove customer.\n\n"
                     error_msg += "If Excel file is open, please close it and try again."
-                    messagebox.showerror("Error", error_msg, parent=dialog)
+                    messagebox.showerror("Error", error_msg, parent=self.root)
         
         # Info label
         info_label = tk.Label(main_frame, 

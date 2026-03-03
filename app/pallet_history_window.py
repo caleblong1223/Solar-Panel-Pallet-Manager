@@ -1201,23 +1201,36 @@ class PalletHistoryWindow:
             List[Path]: List of PDF file paths created (one per excel file)
         """
         import tempfile
+        from app.debug_logger import get_logger
+        logger = get_logger()
         
-        # Try method 1: Excel COM automation (Windows + Microsoft Excel)
-        if platform.system() == 'Windows':
-            try:
-                return self._excel_to_pdf_com(excel_files, pdf_path, progress_label)
-            except Exception as e:
-                print(f"Excel COM automation failed: {e}")
-                print("Trying LibreOffice...")
-        
-        # Try method 2: LibreOffice UNO (cross-platform, works with LibreOffice)
+        # Prefer LibreOffice first (cross-platform) to avoid Excel COM hangs,
+        # especially on newer Windows systems where Office automation can be
+        # blocked by security prompts or missing installations.
+        logger.info("PDF export: attempting LibreOffice conversion first")
         try:
-            return self._excel_to_pdf_libreoffice(excel_files, pdf_path, progress_label)
+            result = self._excel_to_pdf_libreoffice(excel_files, pdf_path, progress_label)
+            logger.info("PDF export: LibreOffice path succeeded")
+            return result
         except Exception as e:
+            logger.warning(f"PDF export: LibreOffice conversion failed, falling back. Error: {e}")
             print(f"LibreOffice conversion failed: {e}")
-            print("Falling back to reportlab...")
+            print("Trying Excel COM automation (Windows only)...")
         
-        # Fallback: reportlab (cross-platform but basic formatting)
+        # Windows-only fallback: Excel COM automation
+        if platform.system() == 'Windows':
+            logger.info("PDF export: attempting Excel COM conversion (Windows fallback)")
+            try:
+                result = self._excel_to_pdf_com(excel_files, pdf_path, progress_label)
+                logger.info("PDF export: Excel COM path succeeded")
+                return result
+            except Exception as e:
+                logger.warning(f"PDF export: Excel COM conversion failed, falling back to reportlab. Error: {e}")
+                print(f"Excel COM automation failed: {e}")
+                print("Falling back to reportlab...")
+        
+        logger.info("PDF export: using reportlab fallback PDF generator")
+        # Final fallback: reportlab (cross-platform but basic formatting)
         return self._excel_to_pdf_reportlab(excel_files, pdf_path, progress_label)
     
     def _excel_to_pdf_com(self, excel_files: List[Path], pdf_path: Path, progress_label: tk.Label):

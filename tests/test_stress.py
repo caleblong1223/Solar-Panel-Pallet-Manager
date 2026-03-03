@@ -319,6 +319,16 @@ class StressTestSuite:
             
             return True
         
+        except Exception as e:
+            # Ensure the GUI is cleaned up if anything goes wrong inside run_test
+            if app:
+                try:
+                    app.root.destroy()
+                except Exception:
+                    pass
+            # Re-raise so outer timeout/exception handling can log it
+            raise e
+        
         start_time = time.time()
         try:
             self.run_with_timeout(run_test, self.test_timeout)

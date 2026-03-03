@@ -45,7 +45,8 @@ class PalletExporter:
     
     def export_pallet(self, pallet: Dict, panel_type: Optional[str] = None,
                      customer: Optional[Dict] = None,
-                     progress_callback: Optional[callable] = None) -> Path:
+                     progress_callback: Optional[callable] = None,
+                     template_workbook: Optional[Path] = None) -> Path:
         """
         Export a pallet to a standalone Excel file.
 
@@ -60,6 +61,11 @@ class PalletExporter:
         Args:
             pallet: Pallet dict with serial_numbers list
             panel_type: Panel type string (e.g., "200WT", "220WT", etc.) to write to Cell B1
+            customer: Optional customer dict for formatting Cell A3
+            progress_callback: Optional callback for UI progress updates
+            template_workbook: Optional override for the source workbook template
+                (e.g., 26/30/35 panel templates). If provided and exists, this path
+                is used instead of self.source_workbook for this export only.
 
         Returns:
             Path to exported Excel file
@@ -69,8 +75,11 @@ class PalletExporter:
             KeyError: If required sheets are missing
             PermissionError: If source workbook is locked
         """
-        if not self.source_workbook.exists():
-            raise FileNotFoundError(f"Source workbook not found: {self.source_workbook}")
+        # Determine which workbook to use as the source template for this export
+        source_workbook = template_workbook if template_workbook and template_workbook.exists() else self.source_workbook
+
+        if not source_workbook.exists():
+            raise FileNotFoundError(f"Source workbook not found: {source_workbook}")
 
         # Capture export date once to ensure consistency across all date operations
         # This prevents date mismatches when export crosses midnight
@@ -101,7 +110,7 @@ class PalletExporter:
         
         # Copy the entire source workbook to the export location
         # Use copyfile instead of copy2 for faster operation (we don't need metadata)
-        shutil.copyfile(self.source_workbook, temp_export_path)
+        shutil.copyfile(source_workbook, temp_export_path)
         
         # Progress: 20-30% - Loading workbook
         if progress_callback:
