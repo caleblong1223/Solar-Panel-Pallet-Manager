@@ -1135,6 +1135,539 @@
           ]
         }
       ]
+    },
+    "feature-2.0": {
+      "metadata": {
+        "name": "feature-2.0",
+        "description": "Pallet Manager 2.0 implementation driven from PRD",
+        "created": "2026-03-03"
+      },
+      "tasks": [
+        {
+          "id": "1",
+          "title": "Draft Pallet Manager 2.0 PRD document",
+          "description": "Create a detailed Product Requirements Document for Pallet Manager 2.0 capturing goals, non-goals, users, scope, architecture, data model, APIs, UI/UX, migration strategy, and success metrics.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Author docs/PRD_PALLET_MANAGER_2_0.md based on 1.1 lessons learned and new 2.0 objectives. Ensure the document clearly describes intranet/offline-capable architecture, core entities, endpoint groups, and operational KPIs so that engineering and operations share the same expectations.",
+          "testStrategy": "Verify PRD lives at docs/PRD_PALLET_MANAGER_2_0.md, is complete across all major sections, and is understandable to both technical and non-technical stakeholders."
+        },
+        {
+          "id": "2",
+          "title": "Define 2.0 technical direction and architecture",
+          "description": "Lock in the 2.0 stack: Tauri + React desktop app, FastAPI backend, PostgreSQL, MinIO object storage, background job strategy, and intranet deployment modes.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "1"
+          ],
+          "details": "Confirm that the product will ship as a Tauri-wrapped React desktop client talking to a FastAPI service backed by PostgreSQL and MinIO, with support for dedicated intranet server, packout-hosted fallback, and offline-tolerant local deployment. Capture this direction in PRD Section 8 and supporting diagrams in the TDD.",
+          "testStrategy": "Review PRD and TDD to ensure the chosen technologies, deployment modes, and data ownership model are explicitly documented and agreed."
+        },
+        {
+          "id": "3",
+          "title": "Author Pallet Manager 2.0 Technical Design Document (TDD)",
+          "description": "Create a TDD that translates the PRD into concrete module boundaries, APIs, data flows, and deployment details.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "1",
+            "2"
+          ],
+          "details": "Author docs/TDD_PALLET_MANAGER_2_0.md to cover high-level component diagrams, service responsibilities, data model mapping from legacy JSON to PostgreSQL, API contracts, background processing model, and error-handling patterns. Ensure the design stays aligned with the PRD but is specific enough to guide implementation.",
+          "testStrategy": "Review TDD for coverage of all PRD functional areas (auth, pallet lifecycle, search, simulator import, exports, audit) and verify there are no obvious gaps or contradictions."
+        },
+        {
+          "id": "4",
+          "title": "Scaffold backend FastAPI project and database tooling",
+          "description": "Create the backend service skeleton with FastAPI, configuration management, routing layout, Alembic migrations, and initial SQL schema file.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "3"
+          ],
+          "details": "Set up backend/ with a FastAPI app, config loading, routing modules, and Alembic migration environment. Add backend/alembic/versions/20260303_0001_initial_schema.py and backend/schema_v1.sql as the first schema baseline. Ensure Dockerfile and tests are present so the service can be started in isolation.",
+          "testStrategy": "Run backend unit tests and start the FastAPI app locally. Confirm Alembic can create and upgrade the schema from an empty database using the initial migration."
+        },
+        {
+          "id": "5",
+          "title": "Scaffold React + Tauri frontend project",
+          "description": "Initialize the Tauri + React/Vite desktop client with starter UI and project structure that matches PRD screens.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "3"
+          ],
+          "details": "Create frontend/ with a Vite-based React app wired into Tauri, including basic routing, layout shell, and placeholder screens for Login, Dashboard, Pallet Builder, History Explorer, Import Center, Export Library, and Admin/Settings. Ensure dev scripts work on the target OS.",
+          "testStrategy": "Run the Tauri dev build, confirm the app window opens and navigation between placeholder screens works without errors."
+        },
+        {
+          "id": "6",
+          "title": "Create intranet Docker stack for API, DB, and MinIO",
+          "description": "Provide a docker-compose configuration for the intranet deployment stack including API, PostgreSQL, MinIO, and optional worker.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "4"
+          ],
+          "details": "Add docker-compose.intranet.yml with services for FastAPI, PostgreSQL, MinIO, and any background worker. Configure volumes for DB and object storage and expose ports suitable for intranet use. Resolve port conflicts (e.g., move Postgres host port to 5433) and ensure services can be brought up with a single command.",
+          "testStrategy": "Run docker-compose using the intranet file and verify that API, Postgres, and MinIO are all reachable and healthy from the local machine."
+        },
+        {
+          "id": "7",
+          "title": "Implement initial migration tooling and validate legacy import",
+          "description": "Build Python scripts to migrate existing legacy JSON/CSV data into PostgreSQL and reconcile results against current 1.1 records.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "4",
+            "6"
+          ],
+          "details": "Implement backend/scripts/migrate_legacy_data.py, backend/scripts/reconcile_migration.py, and backend/scripts/bootstrap_local_stack.sh to bootstrap the stack, run migrations, and compare counts and sample records. Use these tools to run a real migration and reconcile pallets, pallet_items, customers, and exports.",
+          "testStrategy": "Run the migration end-to-end and verify that counts match expectations (e.g., pallets 4, pallet_items 15, customers 21, exports 4) and that reconciliation surfaces no critical discrepancies."
+        },
+        {
+          "id": "8",
+          "title": "Establish 1.1 and 2.0 git branching model",
+          "description": "Set up git branches main, release/1.1-fallback, and develop/2.0 and document the branching strategy for ongoing work.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [],
+          "details": "Create and push the main, release/1.1-fallback, and develop/2.0 branches to GitHub, and add docs/BRANCHING_STRATEGY.md describing how 1.1 bugfixes and 2.0 features should flow through these branches.",
+          "testStrategy": "Confirm all three branches exist on origin and that the branching strategy document accurately reflects the intended workflow."
+        },
+        {
+          "id": "9",
+          "title": "Finalize and approve 2.0 PRD scope",
+          "description": "Review the PRD with stakeholders, lock scope for 2.0, and track any out-of-scope items for future versions.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "1",
+            "2",
+            "3"
+          ],
+          "details": "Walk through docs/PRD_PALLET_MANAGER_2_0.md with operations, purchasing, and IT to confirm goals, non-goals, and constraints. Capture sign-off, explicitly document open questions and decisions, and ensure scope aligns with realistic timeline and resources.",
+          "testStrategy": "Hold a review session and record decisions; verify PRD is updated with final scope, open questions are clearly called out, and stakeholders acknowledge acceptance."
+        },
+        {
+          "id": "10",
+          "title": "Finalize v1 data model and indexing strategy",
+          "description": "Refine the PostgreSQL schema and indexes for users, roles, customers, pallets, pallet_items, sim_import_batches, sim_panels, exports, and audit_events based on PRD Section 9.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "4",
+            "7"
+          ],
+          "details": "Iterate on backend/schema_v1.sql and Alembic migrations to ensure constraints, relationships, soft-delete behavior, and indexing (including partial/trigram indexes where useful) satisfy 2.0 search, reporting, and traceability requirements.",
+          "testStrategy": "Run migrations against a fresh database and validate schema against PRD requirements. Use representative queries for search and history endpoints to confirm performance and correctness.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Inventory core queries and reports",
+              "description": "List concrete queries from PRD/backlog for search, history, reporting, and audit so indexes and schema can be designed around real workloads."
+            },
+            {
+              "id": 2,
+              "title": "Refine logical schema and relationships",
+              "description": "Update the logical ERD/schema doc for users, customers, pallets, pallet_items, sim_import_batches, sim_panels, exports, and audit_events."
+            },
+            {
+              "id": 3,
+              "title": "Design indexing strategy",
+              "description": "Choose b-tree, partial, and trigram indexes per entity and query pattern to satisfy performance targets."
+            },
+            {
+              "id": 4,
+              "title": "Apply schema in Alembic and schema_v1.sql",
+              "description": "Update Alembic migrations and schema_v1.sql to match the refined model, including constraints and indexes."
+            },
+            {
+              "id": 5,
+              "title": "Run performance spike on realistic data",
+              "description": "Seed the database with a representative dataset and benchmark core queries, adjusting indexes as needed."
+            },
+            {
+              "id": 6,
+              "title": "Document data model and indexes",
+              "description": "Add a short data model and index reference section to the TDD for future developers."
+            }
+          ]
+        },
+        {
+          "id": "11",
+          "title": "Implement core authentication",
+          "description": "Build FastAPI auth endpoints and middleware to support login, session/refresh, and logout for intranet users.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "10"
+          ],
+          "details": "Implement /auth/* endpoints using secure password hashing (bcrypt/Argon2) and session or token management appropriate for Tauri clients. All authenticated users may perform application actions; there is no role-based permission separation. Ensure audit events are emitted for login and logout to support traceability.",
+          "testStrategy": "Write API tests that cover login, invalid credentials, and session expiry. Verify that authenticated users can access protected endpoints and unauthenticated requests are rejected.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Choose token/session model for Tauri",
+              "description": "Decide between cookie-based sessions and JWTs for the intranet Tauri client, documenting tradeoffs."
+            },
+            {
+              "id": 2,
+              "title": "Implement user auth models and repositories",
+              "description": "Ensure user persistence and password hash storage support the chosen auth approach."
+            },
+            {
+              "id": 3,
+              "title": "Implement /auth/login and /auth/me endpoints",
+              "description": "Handle credential verification, token or session creation, and return current user info for the client."
+            },
+            {
+              "id": 4,
+              "title": "Implement refresh and logout behavior",
+              "description": "Add token refresh (if used) and logout endpoints or flows to clean up sessions on demand."
+            },
+            {
+              "id": 5,
+              "title": "Wire audit logging for auth events",
+              "description": "Emit audit_events for login success/failure and logout for traceability."
+            },
+            {
+              "id": 6,
+              "title": "Add auth test coverage",
+              "description": "Create tests for valid login, invalid credentials, expired sessions, and access to protected endpoints."
+            }
+          ]
+        },
+        {
+          "id": "12",
+          "title": "Implement pallet lifecycle APIs",
+          "description": "Create FastAPI endpoints for creating pallets, adding/removing serials, enforcing capacity templates, completing/resetting/deleting pallets, and retrieving pallet details and history.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "10",
+            "11"
+          ],
+          "details": "Implement /pallets/* endpoints following PRD Sections 6.2 and 6.4, enforcing capacity rules per template type, tracking status changes, and emitting audit events. Ensure pallet state transitions are validated and idempotent where appropriate.",
+          "testStrategy": "Write tests that exercise full pallet lifecycle flows, including edge cases like duplicate serials, capacity limits, resets, and soft deletes with audit retention.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define pallet state machine",
+              "description": "Document pallet states and legal transitions in the TDD to guide implementation."
+            },
+            {
+              "id": 2,
+              "title": "Implement pallet create and update endpoints",
+              "description": "Add /pallets/create and update endpoints with schema validation and error handling."
+            },
+            {
+              "id": 3,
+              "title": "Implement add/remove serial operations",
+              "description": "Support adding and removing serials with capacity and duplicate checks using pallet_items."
+            },
+            {
+              "id": 4,
+              "title": "Implement complete/reset/delete flows",
+              "description": "Handle completion, reset, and soft delete operations enforcing the state machine rules."
+            },
+            {
+              "id": 5,
+              "title": "Emit audit events for lifecycle changes",
+              "description": "Write pallet-related audit_events for key lifecycle actions with old/new state details."
+            },
+            {
+              "id": 6,
+              "title": "Add lifecycle test coverage",
+              "description": "Create tests for valid and invalid transitions, duplicates, and capacity enforcement."
+            }
+          ]
+        },
+        {
+          "id": "13",
+          "title": "Implement barcode and history search APIs",
+          "description": "Expose endpoints for barcode/serial search and pallet history filtering with pagination, sorting, and combined filters.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "10",
+            "12"
+          ],
+          "details": "Implement /barcodes/search and pallet history endpoints that support filtering by serial, date range, status, customer, operator, pallet number, and presence of specific serials. Leverage appropriate indexes to meet PRD performance targets.",
+          "testStrategy": "Create tests using realistic datasets that verify correct filtering, pagination, and performance under expected load.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Design search and history API contracts",
+              "description": "Specify request/response models for barcode search and pallet history endpoints."
+            },
+            {
+              "id": 2,
+              "title": "Implement barcode search endpoint",
+              "description": "Query pallet_items and sim_panels for exact and partial matches using appropriate indexes."
+            },
+            {
+              "id": 3,
+              "title": "Implement pallet history filter endpoint",
+              "description": "Build history queries with filters for date range, status, customer, operator, and pallet number."
+            },
+            {
+              "id": 4,
+              "title": "Add pagination and sorting layer",
+              "description": "Provide a consistent pagination and sorting abstraction that search and history endpoints share."
+            },
+            {
+              "id": 5,
+              "title": "Benchmark and tune search performance",
+              "description": "Run load tests against search and history endpoints and refine indexes or queries as needed."
+            },
+            {
+              "id": 6,
+              "title": "Add search API test coverage",
+              "description": "Write tests that verify filter combinations, ordering, and pagination semantics."
+            }
+          ]
+        },
+        {
+          "id": "14",
+          "title": "Implement simulator import and background processing flows",
+          "description": "Build endpoints and background jobs for uploading simulator files, validating schemas, processing records into sim_import_batches and sim_panels, and surfacing import diagnostics.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "10"
+          ],
+          "details": "Implement /simulator/imports/* endpoints to upload files in the existing operational format, validate headers, queue background processing, and record both normalized records and source file metadata. Integrate optional MinIO storage for raw files where required.",
+          "testStrategy": "Test imports with valid and invalid simulator files, verify error diagnostics, ensure idempotency protections, and confirm processed records appear correctly in the database.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define import batch lifecycle",
+              "description": "Specify statuses and transitions for sim_import_batches and how they are surfaced to the UI."
+            },
+            {
+              "id": 2,
+              "title": "Implement upload endpoint and batch creation",
+              "description": "Create an endpoint that accepts simulator files, stores them, and creates a pending batch row."
+            },
+            {
+              "id": 3,
+              "title": "Implement simulator parser adapter",
+              "description": "Parse the existing simulator format into sim_panels with row-level error collection."
+            },
+            {
+              "id": 4,
+              "title": "Wire background processing worker",
+              "description": "Choose and configure a background job mechanism to process imports asynchronously."
+            },
+            {
+              "id": 5,
+              "title": "Store raw uploads in MinIO",
+              "description": "Persist original files to MinIO with object keys and checksums linked to the batch."
+            },
+            {
+              "id": 6,
+              "title": "Implement import monitoring endpoints",
+              "description": "Expose batch status and error summaries for the UI to poll or subscribe to."
+            }
+          ]
+        },
+        {
+          "id": "15",
+          "title": "Implement export generation, storage, and retrieval APIs",
+          "description": "Create endpoints to generate pallet export PDFs, store them in MinIO with metadata in the exports table, and provide signed URL download flows.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "10",
+            "12"
+          ],
+          "details": "Implement /exports/* endpoints that generate export artifacts, write them to MinIO with checksum, size, template type, and timestamps, and link them to pallets. Ensure signed URLs are used for retrieval and that audit events capture export and download actions.",
+          "testStrategy": "Verify exports can be created and downloaded end-to-end, with correct metadata in the database and proper authorization checks.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define export template and metadata model",
+              "description": "Decide how export templates and their versions are modeled and recorded in the database."
+            },
+            {
+              "id": 2,
+              "title": "Implement export generation service",
+              "description": "Generate PDFs from pallet data, reusing or evolving existing 1.1 export logic."
+            },
+            {
+              "id": 3,
+              "title": "Upload exports to MinIO and persist metadata",
+              "description": "Store export PDFs in MinIO and create exports rows with checksum, size, and object key."
+            },
+            {
+              "id": 4,
+              "title": "Implement export list and download endpoints",
+              "description": "Add endpoints for querying exports and returning signed download URLs."
+            },
+            {
+              "id": 5,
+              "title": "Add audit logging for exports",
+              "description": "Emit audit events when exports are created and when users download them."
+            },
+            {
+              "id": 6,
+              "title": "Add export API test coverage",
+              "description": "Test export creation, listing, and download flows including error cases."
+            }
+          ]
+        },
+        {
+          "id": "16",
+          "title": "Build core 2.0 UI flows in Tauri + React",
+          "description": "Implement the main UI screens and navigation shell: Login, Dashboard, Live Pallet Builder, Pallet History Explorer, Simulator Import Center, Export Library, and Admin/Settings.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "5",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15"
+          ],
+          "details": "Replace placeholder screens in the Tauri client with functional views wired to the API. Implement keyboard-first scan flow for the pallet builder, search-centric history explorer, import monitoring views, and export browsing and download UI, following the PRD UX and accessibility guidelines.",
+          "testStrategy": "Perform manual UX walkthroughs of each core flow and add UI tests where practical to confirm that users can complete daily operations without backend errors.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Implement design system and layout shell",
+              "description": "Create theme tokens, typography, layout shell, navigation, and global notification components."
+            },
+            {
+              "id": 2,
+              "title": "Build auth flow and route guards",
+              "description": "Implement login screen, auth context, route guards, and token refresh handling in the Tauri app."
+            },
+            {
+              "id": 3,
+              "title": "Build Live Pallet Builder UI",
+              "description": "Create the pallet build screen with keyboard-first scanning, capacity feedback, and completion UX."
+            },
+            {
+              "id": 4,
+              "title": "Build Pallet History Explorer UI",
+              "description": "Implement server-driven table, filters, and details pane for pallet history exploration."
+            },
+            {
+              "id": 5,
+              "title": "Build Import Center and Export Library UIs",
+              "description": "Create screens for import upload/progress and export browsing/download, wired to backend APIs."
+            },
+            {
+              "id": 6,
+              "title": "Build Admin/Settings UI",
+              "description": "Implement settings views for templates and system health suitable for intranet use."
+            }
+          ]
+        },
+        {
+          "id": "17",
+          "title": "Implement audit logging, monitoring, and backup routines",
+          "description": "Ensure all critical actions are logged, backups are configured for Postgres and MinIO, and basic health/monitoring endpoints are in place.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "10",
+            "11",
+            "12",
+            "15"
+          ],
+          "details": "Implement audit_events recording for key flows, configure scheduled backups for Postgres and MinIO according to PRD Section 14, and expose /health/* endpoints with structured logs to support uptime and incident response.",
+          "testStrategy": "Simulate representative operations and verify audit trails exist, run backup and restore drills in a non-production environment, and confirm health endpoints behave correctly under normal and degraded conditions.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define audit event schema and taxonomy",
+              "description": "Specify event types, payload fields, and correlation IDs for audit_events."
+            },
+            {
+              "id": 2,
+              "title": "Implement audit hooks across key flows",
+              "description": "Add audit logging to auth, pallet lifecycle, imports, and exports."
+            },
+            {
+              "id": 3,
+              "title": "Implement health and monitoring endpoints",
+              "description": "Expose /health/* and configure structured logging to support monitoring."
+            },
+            {
+              "id": 4,
+              "title": "Design backup and restore strategy",
+              "description": "Define backup cadence, retention, and storage for Postgres and MinIO."
+            },
+            {
+              "id": 5,
+              "title": "Implement backup scripts and scheduling",
+              "description": "Create scripts or jobs for regular Postgres and MinIO backups in intranet environments."
+            },
+            {
+              "id": 6,
+              "title": "Run restore drill and document runbook",
+              "description": "Perform a restore into a test environment and document the steps and outcomes."
+            }
+          ]
+        },
+        {
+          "id": "18",
+          "title": "Execute 2.0 stabilization, UAT, and cutover",
+          "description": "Run stabilization, performance tuning, UAT, and the migration cutover plan from legacy 1.1 to 2.0.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17"
+          ],
+          "details": "Follow the PRD release plan phases to stabilize the system, run user acceptance testing with packout and purchasing, execute dual-write and DB-first phases, validate migrated data, and finalize rollback plans. Confirm all acceptance criteria in the PRD are met before declaring 2.0 live.",
+          "testStrategy": "Track UAT sessions, performance metrics, and incident reports during a trial window; verify that success criteria in PRD Section 18 are satisfied and that legacy workflows can be fully retired.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define stabilization and readiness criteria",
+              "description": "Specify performance, reliability, and bug thresholds required before cutover."
+            },
+            {
+              "id": 2,
+              "title": "Implement end-to-end test suite for critical flows",
+              "description": "Create API and UI tests for login, pallet build, import, export, and search."
+            },
+            {
+              "id": 3,
+              "title": "Plan and run UAT sessions",
+              "description": "Script UAT scenarios with packout and purchasing and track issues and sign-off."
+            },
+            {
+              "id": 4,
+              "title": "Rehearse migration and cutover steps",
+              "description": "Perform dry-run of migration, dual-write, and rollback steps in a non-production environment."
+            },
+            {
+              "id": 5,
+              "title": "Execute production cutover",
+              "description": "Deploy 2.0, migrate data, switch clients, and monitor for issues over the acceptance window."
+            },
+            {
+              "id": 6,
+              "title": "Capture post-cutover lessons and 2.x backlog",
+              "description": "Record lessons learned and seed follow-on improvement tasks for future versions."
+            }
+          ]
+        }
+      ]
     }
   }
 }

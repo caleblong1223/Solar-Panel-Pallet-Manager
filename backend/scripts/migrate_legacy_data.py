@@ -67,25 +67,32 @@ def parse_customer_rows(path: Path) -> list[dict[str, str]]:
 
     headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws[1]]
 
-    def idx(name: str) -> int | None:
-        return headers.index(name) if name in headers else None
+    def idx(*names: str) -> int | None:
+        for name in names:
+            if name in headers:
+                return headers.index(name)
+        return None
 
-    i_name = idx("name")
-    i_business = idx("business")
-    i_email = idx("email")
-    i_phone = idx("phone")
+    i_name = idx("name", "contact", "contact_name")
+    i_business = idx("business", "business_name", "company")
+    i_email = idx("email", "email address")
+    i_phone = idx("phone", "phone number", "telephone")
 
     out: list[dict[str, str]] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
-        name = str(row[i_name]).strip() if i_name is not None and row[i_name] else ""
-        business = str(row[i_business]).strip() if i_business is not None and row[i_business] else ""
-        email = str(row[i_email]).strip() if i_email is not None and row[i_email] else ""
-        phone = str(row[i_phone]).strip() if i_phone is not None and row[i_phone] else ""
+        name = str(row[i_name]).strip() if i_name is not None and i_name < len(row) and row[i_name] else ""
+        business = (
+            str(row[i_business]).strip()
+            if i_business is not None and i_business < len(row) and row[i_business]
+            else ""
+        )
+        email = str(row[i_email]).strip() if i_email is not None and i_email < len(row) and row[i_email] else ""
+        phone = str(row[i_phone]).strip() if i_phone is not None and i_phone < len(row) and row[i_phone] else ""
 
         if not name and not business:
             continue
 
-        display_name = f"{name} | {business}".strip(" |")
+        display_name = f"{name} | {business}".strip(" |") if (name and business) else (name or business)
         out.append(
             {
                 "display_name": display_name,
@@ -159,7 +166,15 @@ def get_customer_id(cur: Any, display_name: str | None) -> int | None:
     return row[0] if row else None
 
 
-def insert_pallet(cur: Any, pallet: dict[str, Any], user_id: int, apply: bool) -> int | None:
+def resolve_actor_user_id(cur: Any, requested_user_id: int | None) -> int | None:
+    if requested_user_id is None:
+        return None
+    cur.execute("SELECT id FROM users WHERE id = %s", (requested_user_id,))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def insert_pallet(cur: Any, pallet: dict[str, Any], user_id: int, apply: bool) -> tuple[int | None, bool]:
     completed_at = parse_legacy_dt(pallet.get("completed_at"))
     status = "completed" if completed_at else "active"
     customer_display = None
@@ -167,11 +182,40 @@ def insert_pallet(cur: Any, pallet: dict[str, Any], user_id: int, apply: bool) -
     customer_obj = pallet.get("customer")
     if isinstance(customer_obj, dict):
         customer_display = customer_obj.get("display_name")
+    elif isinstance(customer_obj, str):
+        customer_display = customer_obj.strip() or None
 
     customer_id = get_customer_id(cur, customer_display) if apply else None
 
     if not apply:
-        return None
+        return None, False
+
+    cur.execute(
+        """
+        SELECT id FROM pallets
+        WHERE pallet_number = %s
+          AND status = %s
+          AND COALESCE(template_type, '') = COALESCE(%s, '')
+          AND COALESCE(customer_id, -1) = COALESCE(%s, -1)
+          AND (
+            (completed_at IS NULL AND %s IS NULL)
+            OR completed_at = %s
+          )
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (
+            int(pallet.get("pallet_number") or 0),
+            status,
+            pallet.get("panel_type"),
+            customer_id,
+            completed_at,
+            completed_at,
+        ),
+    )
+    existing = cur.fetchone()
+    if existing:
+        return existing[0], False
 
     cur.execute(
         """
@@ -193,7 +237,7 @@ def insert_pallet(cur: Any, pallet: dict[str, Any], user_id: int, apply: bool) -
             completed_at,
         ),
     )
-    return cur.fetchone()[0]
+    return cur.fetchone()[0], True
 
 
 def insert_pallet_items(cur: Any, pallet_id: int, serials: list[str], user_id: int, apply: bool) -> int:
@@ -207,11 +251,12 @@ def insert_pallet_items(cur: Any, pallet_id: int, serials: list[str], user_id: i
             """
             INSERT INTO pallet_items (pallet_id, serial, slot_index, added_by)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (pallet_id, serial) DO NOTHING
+            ON CONFLICT DO NOTHING
             """,
-            (pallet_id, serial.strip().upper(), idx, user_id),
+            (pallet_id, serial.strip().upper(), idx + 1, user_id),
         )
-        count += 1
+        if cur.rowcount > 0:
+            count += 1
     return count
 
 
@@ -226,6 +271,10 @@ def insert_export(cur: Any, pallet_id: int, pallet: dict[str, Any], user_id: int
 
     if not apply:
         return 1
+
+    cur.execute("SELECT id FROM exports WHERE pallet_id = %s AND object_key = %s", (pallet_id, object_key))
+    if cur.fetchone():
+        return 0
 
     cur.execute(
         """
@@ -264,6 +313,10 @@ def main() -> None:
 
         with psycopg.connect(db_url) as conn:
             with conn.cursor() as cur:
+                actor_user_id = resolve_actor_user_id(cur, args.default_user_id)
+                if actor_user_id is None:
+                    print("Default user id not found; migration will use NULL actor ids for created_by/completed_by/added_by.")
+
                 for c in customers:
                     stats.customers_seen += 1
                     upsert_customer(cur, c, apply=apply)
@@ -271,8 +324,8 @@ def main() -> None:
 
                 for p in pallets:
                     stats.pallets_seen += 1
-                    pallet_id = insert_pallet(cur, p, args.default_user_id, apply=apply)
-                    if pallet_id is not None:
+                    pallet_id, inserted = insert_pallet(cur, p, actor_user_id, apply=apply)
+                    if inserted and pallet_id is not None:
                         stats.pallets_inserted += 1
 
                     serials = p.get("serial_numbers") or []
@@ -280,7 +333,7 @@ def main() -> None:
                         cur,
                         pallet_id if pallet_id is not None else -1,
                         serials,
-                        args.default_user_id,
+                        actor_user_id,
                         apply=apply,
                     )
 
@@ -288,7 +341,7 @@ def main() -> None:
                         cur,
                         pallet_id if pallet_id is not None else -1,
                         p,
-                        args.default_user_id,
+                        actor_user_id,
                         apply=apply,
                     )
 

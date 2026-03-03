@@ -1,7 +1,12 @@
 -- Generated baseline schema for Pallet Manager 2.0
--- Canonical source is Alembic migration: 20260303_0001_initial_schema.py
+-- Canonical source is Alembic migrations:
+--   20260303_0001_initial_schema.py
+--   20260303_0002_schema_indexes_and_trgm.py
 
 -- Use: psql -d pallet_manager -f schema_v1.sql
+
+-- Enable pg_trgm extension for trigram indexes used in search
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS roles (
   id BIGSERIAL PRIMARY KEY,
@@ -124,7 +129,41 @@ CREATE INDEX IF NOT EXISTS ix_pallet_items_serial ON pallet_items(serial);
 CREATE INDEX IF NOT EXISTS ix_pallets_completed_at ON pallets(completed_at);
 CREATE INDEX IF NOT EXISTS ix_pallets_status ON pallets(status);
 CREATE INDEX IF NOT EXISTS ix_pallets_customer_id ON pallets(customer_id);
+CREATE INDEX IF NOT EXISTS ix_pallets_pallet_number ON pallets(pallet_number);
+CREATE INDEX IF NOT EXISTS ix_pallets_customer_status_completed
+  ON pallets(customer_id, status, completed_at);
+CREATE INDEX IF NOT EXISTS ix_pallets_completed_by ON pallets(completed_by);
+
+CREATE INDEX IF NOT EXISTS ix_sim_import_batches_status_created_at
+  ON sim_import_batches(status, created_at);
+CREATE INDEX IF NOT EXISTS ix_sim_import_batches_imported_by
+  ON sim_import_batches(imported_by);
+
 CREATE INDEX IF NOT EXISTS ix_sim_panels_serial ON sim_panels(serial);
+CREATE INDEX IF NOT EXISTS ix_sim_panels_batch_id ON sim_panels(batch_id);
+
 CREATE INDEX IF NOT EXISTS ix_exports_pallet_id ON exports(pallet_id);
 CREATE INDEX IF NOT EXISTS ix_exports_created_at ON exports(created_at);
+CREATE INDEX IF NOT EXISTS ix_exports_pallet_id_created_at
+  ON exports(pallet_id, created_at);
+
 CREATE INDEX IF NOT EXISTS ix_audit_events_created_at ON audit_events(created_at);
+CREATE INDEX IF NOT EXISTS ix_audit_events_resource
+  ON audit_events(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS ix_audit_events_actor_created_at
+  ON audit_events(actor_user_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_audit_events_event_type
+  ON audit_events(event_type);
+
+-- Trigram indexes for partial search
+CREATE INDEX IF NOT EXISTS ix_pallet_items_serial_trgm
+  ON pallet_items
+  USING gin (serial gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS ix_sim_panels_serial_trgm
+  ON sim_panels
+  USING gin (serial gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS ix_customers_display_name_trgm
+  ON customers
+  USING gin (display_name gin_trgm_ops);

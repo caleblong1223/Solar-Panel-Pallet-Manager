@@ -156,6 +156,7 @@ Scale:
 ### PM2-040
 - Title: Implement export generation service
 - Description: Generate PDF artifacts from completed pallet data.
+- Execution note: Export generation will integrate the existing Pallet Manager 1.1 template/workbook assets as the source template set, then evolve behind compatibility checks (no immediate template replacement in this phase).
 - Dependencies: PM2-021, PM2-022
 - Acceptance criteria: Export file generated for supported templates with tests.
 - Effort: L

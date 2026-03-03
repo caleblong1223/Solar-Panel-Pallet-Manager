@@ -51,7 +51,16 @@ export DATABASE_URL='postgresql://pallet_user:pallet_pass@localhost:5433/pallet_
 python scripts/reconcile_migration.py
 ```
 
+## 4) Seed auth baseline manually
+
+```bash
+cd backend
+export DATABASE_URL='postgresql://pallet_user:pallet_pass@localhost:5433/pallet_manager'
+python scripts/seed_auth_data.py --username admin --email admin@local.test --password 'ChangeMe123!'
+```
+
 Notes:
 - Customer import uses `data/CUSTOMERS/customers.xlsx` if available.
 - Legacy pallet history import uses `data/PALLETS/pallet_history.json`.
 - Export records are indexed from `exported_file` path in legacy history.
+- If `--default-user-id` does not exist in `users`, migration falls back to `NULL` for `created_by`/`completed_by`/`added_by` fields to satisfy FK constraints.
