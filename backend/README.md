@@ -20,3 +20,5 @@ alembic upgrade head
 ## Environment
 
 Copy `.env.example` to `.env` and set values.
+
+See `docs/BACKEND_ENVIRONMENT_STRATEGY.md` for the env matrix and secrets rotation process.

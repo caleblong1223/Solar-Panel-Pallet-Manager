@@ -91,32 +91,21 @@ def test_pallet_lifecycle_and_history() -> None:
         assert "pallet.completed" in event_types
 
 
-def test_reset_and_delete_require_admin() -> None:
-    operator = DummyUser(user_id=201, roles=["packout_operator"])
-    with _make_test_client(operator) as client:
-        create_response = client.post("/api/v1/pallets", json={"max_panels": 1})
-        pallet_id = create_response.json()["id"]
-        client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER001"})
-        client.post(f"/api/v1/pallets/{pallet_id}/complete")
+def test_reset_and_delete_allowed_for_all_roles() -> None:
+    for idx, role in enumerate(["packout_operator", "admin"], start=201):
+        user = DummyUser(user_id=idx, roles=[role])
+        with _make_test_client(user) as client:
+            create_response = client.post("/api/v1/pallets", json={"max_panels": 1})
+            pallet_id = create_response.json()["id"]
+            client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": f"SER{idx}"})
+            client.post(f"/api/v1/pallets/{pallet_id}/complete")
 
-        reset_response = client.post(f"/api/v1/pallets/{pallet_id}/reset")
-        assert reset_response.status_code == 403
-        delete_response = client.delete(f"/api/v1/pallets/{pallet_id}")
-        assert delete_response.status_code == 403
+            reset_response = client.post(f"/api/v1/pallets/{pallet_id}/reset")
+            assert reset_response.status_code == 200
+            assert reset_response.json()["status"] == "active"
 
-    admin = DummyUser(user_id=202, roles=["admin"])
-    with _make_test_client(admin) as client:
-        create_response = client.post("/api/v1/pallets", json={"max_panels": 1})
-        pallet_id = create_response.json()["id"]
-        client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER002"})
-        client.post(f"/api/v1/pallets/{pallet_id}/complete")
+            delete_response = client.delete(f"/api/v1/pallets/{pallet_id}")
+            assert delete_response.status_code == 200
 
-        reset_response = client.post(f"/api/v1/pallets/{pallet_id}/reset")
-        assert reset_response.status_code == 200
-        assert reset_response.json()["status"] == "active"
-
-        delete_response = client.delete(f"/api/v1/pallets/{pallet_id}")
-        assert delete_response.status_code == 204
-
-        get_deleted = client.get(f"/api/v1/pallets/{pallet_id}")
-        assert get_deleted.status_code == 404
+            get_deleted = client.get(f"/api/v1/pallets/{pallet_id}")
+            assert get_deleted.status_code == 404

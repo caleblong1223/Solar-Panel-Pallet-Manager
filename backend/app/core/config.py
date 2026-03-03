@@ -11,13 +11,13 @@ class Settings(BaseSettings):
 
     database_url: str
 
-    jwt_secret: str = "change_me"
+    jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_access_token_minutes: int = 30
 
     minio_endpoint: str = "localhost:9000"
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: str = "minioadmin"
+    minio_access_key: str
+    minio_secret_key: str
     minio_bucket_exports: str = "pallet-exports"
     minio_bucket_imports: str = "simulator-imports"
     minio_secure: bool = False

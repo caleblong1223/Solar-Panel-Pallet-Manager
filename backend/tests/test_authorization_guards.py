@@ -61,7 +61,7 @@ def test_all_authenticated_roles_can_access_read_search_endpoints() -> None:
             assert barcode_response.status_code == 200
 
 
-def test_simulator_import_requires_packout_or_admin(monkeypatch) -> None:
+def test_simulator_import_all_roles_allowed(monkeypatch) -> None:
     from app.api.v1.endpoints import simulator as simulator_endpoint
 
     monkeypatch.setattr(
@@ -73,28 +73,14 @@ def test_simulator_import_requires_packout_or_admin(monkeypatch) -> None:
         ),
     )
     csv_file = {"file": ("sim.csv", "SerialNo\nABC001\n", "text/csv")}
-    with _client_for(DummyUser(user_id=10, roles=["purchasing_manager"])) as client:
-        denied = client.post("/api/v1/simulator/imports", files=csv_file)
-        assert denied.status_code == 403
-
-    with _client_for(DummyUser(user_id=11, roles=["packout_operator"])) as client:
-        allowed = client.post("/api/v1/simulator/imports", files=csv_file)
-        assert allowed.status_code == 201
-
-    with _client_for(DummyUser(user_id=12, roles=["admin"])) as client:
-        allowed = client.post("/api/v1/simulator/imports", files=csv_file)
-        assert allowed.status_code == 201
+    for idx, role in enumerate(["purchasing_manager", "packout_operator", "admin"], start=10):
+        with _client_for(DummyUser(user_id=idx, roles=[role])) as client:
+            response = client.post("/api/v1/simulator/imports", files=csv_file)
+            assert response.status_code == 201
 
 
-def test_export_create_requires_packout_or_admin() -> None:
-    with _client_for(DummyUser(user_id=20, roles=["purchasing_manager"])) as client:
-        denied = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
-        assert denied.status_code == 403
-
-    with _client_for(DummyUser(user_id=21, roles=["packout_operator"])) as client:
-        allowed = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
-        assert allowed.status_code != 403
-
-    with _client_for(DummyUser(user_id=22, roles=["admin"])) as client:
-        allowed = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
-        assert allowed.status_code != 403
+def test_export_create_all_roles_allowed() -> None:
+    for idx, role in enumerate(["purchasing_manager", "packout_operator", "admin"], start=20):
+        with _client_for(DummyUser(user_id=idx, roles=[role])) as client:
+            response = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
+            assert response.status_code in {200, 201, 409, 404}

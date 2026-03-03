@@ -27,7 +27,51 @@ Override defaults if needed:
 DB_PORT=5434 DB_PASSWORD='your_pass' ./backend/scripts/bootstrap_local_stack.sh
 ```
 
-## 1) Dry run migration
+Admin seed password is required for bootstrap/setup:
+
+```bash
+SEED_ADMIN_PASSWORD='set-a-strong-password' ./backend/scripts/bootstrap_local_stack.sh
+```
+
+## 0b) First-time setup wrapper
+
+```bash
+cd "/Users/caleblong/Documents/Crossroads Solar/Pallet Manager 1.1"
+SEED_ADMIN_PASSWORD='set-a-strong-password' ./backend/scripts/first_time_setup.sh
+```
+
+Useful options:
+
+```bash
+./backend/scripts/first_time_setup.sh --dry-run --no-docker
+```
+
+This wrapper runs (in order): dependency install, alembic upgrade, auth seeding, legacy migration apply, and strict reconciliation.
+
+## 1) Backup stack (Postgres + MinIO)
+
+```bash
+cd "/Users/caleblong/Documents/Crossroads Solar/Pallet Manager 1.1"
+./backend/scripts/backup_stack.sh
+```
+
+## 2) Restore stack from backup directory
+
+```bash
+cd "/Users/caleblong/Documents/Crossroads Solar/Pallet Manager 1.1"
+./backend/scripts/restore_stack.sh backups/<timestamp>
+```
+
+## 3) Run full restore drill (backup + restore + checks)
+
+```bash
+cd "/Users/caleblong/Documents/Crossroads Solar/Pallet Manager 1.1"
+./backend/scripts/restore_drill.sh
+```
+
+See `docs/BACKUP_RESTORE_RUNBOOK.md` for schedule and drill evidence checklist.
+
+## 4) Dry run migration
 
 ```bash
 cd backend
@@ -35,7 +79,7 @@ export DATABASE_URL='postgresql://pallet_user:pallet_pass@localhost:5433/pallet_
 python scripts/migrate_legacy_data.py --dry-run
 ```
 
-## 2) Apply migration
+## 5) Apply migration
 
 ```bash
 cd backend
@@ -43,7 +87,7 @@ export DATABASE_URL='postgresql://pallet_user:pallet_pass@localhost:5433/pallet_
 python scripts/migrate_legacy_data.py --apply
 ```
 
-## 3) Reconcile
+## 6) Reconcile
 
 ```bash
 cd backend
@@ -51,12 +95,12 @@ export DATABASE_URL='postgresql://pallet_user:pallet_pass@localhost:5433/pallet_
 python scripts/reconcile_migration.py
 ```
 
-## 4) Seed auth baseline manually
+## 7) Seed auth baseline manually
 
 ```bash
 cd backend
 export DATABASE_URL='postgresql://pallet_user:pallet_pass@localhost:5433/pallet_manager'
-python scripts/seed_auth_data.py --username admin --email admin@local.test --password 'ChangeMe123!'
+python scripts/seed_auth_data.py --username admin --email admin@local.test --password "$SEED_ADMIN_PASSWORD"
 ```
 
 Notes:

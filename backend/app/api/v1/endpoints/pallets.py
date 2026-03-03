@@ -366,7 +366,10 @@ def reset_pallet(
     return _to_pallet_response(pallet)
 
 
-@router.delete("/{pallet_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{pallet_id}",
+    status_code=status.HTTP_200_OK,
+)
 def delete_pallet(
     pallet_id: int,
     db: Session = Depends(get_db),

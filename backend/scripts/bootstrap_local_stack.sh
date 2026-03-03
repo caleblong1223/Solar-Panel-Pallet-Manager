@@ -22,6 +22,14 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "Missing required command: $1"; exit 1; }
 }
 
+require_env() {
+  local name="$1"
+  if [ -z "${!name:-}" ]; then
+    echo "Missing required environment variable: $name"
+    exit 1
+  fi
+}
+
 wait_for_postgres() {
   log "Waiting for Postgres at ${DB_HOST}:${DB_PORT}..."
   local attempts=0
@@ -36,33 +44,9 @@ wait_for_postgres() {
   log "Postgres is ready."
 }
 
-seed_admin_and_roles() {
-  log "Seeding baseline roles and admin user..."
-  DATABASE_URL="$SCRIPT_DATABASE_URL" python - <<'PY'
-import os
-import psycopg
-
-db_url = os.environ["DATABASE_URL"]
-with psycopg.connect(db_url) as conn:
-    with conn.cursor() as cur:
-        cur.execute("INSERT INTO roles (id,name,description) VALUES (1,'admin','Administrator') ON CONFLICT (name) DO NOTHING")
-        cur.execute("INSERT INTO roles (id,name,description) VALUES (2,'packout_operator','Packout Operator') ON CONFLICT (name) DO NOTHING")
-        cur.execute("INSERT INTO roles (id,name,description) VALUES (3,'purchasing_manager','Purchasing Manager') ON CONFLICT (name) DO NOTHING")
-        cur.execute(
-            """
-            INSERT INTO users (id, username, email, password_hash, is_active)
-            VALUES (1, 'admin', 'admin@local', 'bootstrap-reset-required', true)
-            ON CONFLICT (username) DO NOTHING
-            """
-        )
-        cur.execute("INSERT INTO user_roles (user_id, role_id) VALUES (1,1) ON CONFLICT DO NOTHING")
-    conn.commit()
-print("seeded")
-PY
-}
-
 require_cmd docker
 require_cmd psql
+require_env SEED_ADMIN_PASSWORD
 
 log "Starting Docker services..."
 docker compose -f "$COMPOSE_FILE" up -d
@@ -86,13 +70,14 @@ wait_for_postgres
 log "Running Alembic migrations..."
 DATABASE_URL="$ALEMBIC_DATABASE_URL" python -m alembic upgrade head
 
-seed_admin_and_roles
+log "Seeding baseline roles and admin user..."
+DATABASE_URL="$SCRIPT_DATABASE_URL" python scripts/seed_auth_data.py --username "${SEED_ADMIN_USERNAME:-admin}" --email "${SEED_ADMIN_EMAIL:-admin@local.test}" --password "${SEED_ADMIN_PASSWORD}"
 
 log "Applying legacy data migration..."
 DATABASE_URL="$SCRIPT_DATABASE_URL" python scripts/migrate_legacy_data.py --apply
 
 log "Running reconciliation report..."
-DATABASE_URL="$SCRIPT_DATABASE_URL" python scripts/reconcile_migration.py
+DATABASE_URL="$SCRIPT_DATABASE_URL" python scripts/reconcile_migration.py --strict
 
 log "Done."
 log "API: http://localhost:8000"

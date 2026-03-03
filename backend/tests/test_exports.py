@@ -123,20 +123,6 @@ def test_list_exports_and_filters(monkeypatch) -> None:
                 f"checksum{export_id}",
             ),
         )
-        first = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
-        assert first.status_code == 403
-
-    with _client_with_pallet(DummyUser(user_id=4, roles=["admin"])) as client:
-        from app.api.v1.endpoints import exports as exports_endpoint
-
-        monkeypatch.setattr(
-            exports_endpoint,
-            "upload_export_artifact",
-            lambda export_id, pallet_id, filename, content: (
-                f"exports/2026/03/{pallet_id}/{export_id}/{filename}",
-                f"checksum{export_id}",
-            ),
-        )
         create_a = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
         create_b = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "550WT"})
         assert create_a.status_code == 201

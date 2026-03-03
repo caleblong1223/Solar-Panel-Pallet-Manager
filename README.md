@@ -1,252 +1,198 @@
-# Pallet Manager
+## Pallet Manager 2.0
 
-**Version 1.1.0**
+**Branch:** `develop/2.0`  
+**Previous desktop-only version:** see `release/1.1-fallback` branch.
 
-A professional application for managing solar panel pallets with automated barcode scanning, Excel integration, and comprehensive pallet tracking.
+Pallet Manager 2.0 is a **client–server rewrite** of the original 1.1 desktop app.  
+It adds a proper backend API, a shared Postgres database, and a React/Tauri desktop UI so multiple stations can work against the same pallets in real time.
 
-## 🚀 Quick Start
+### What 2.0 implements
 
-### For End Users
+- **Backend API (FastAPI + Postgres + MinIO)**
+  - Auth, pallets, customers, barcodes, simulator imports, exports.
+  - Schema migrations via Alembic.
+  - Object storage integration for PDF exports and raw imports.
+- **Modern UI (React + Tauri desktop app)**
+  - Live Builder screen for packout operators.
+  - History/Barcode search for purchasing.
+  - Import Center + Export Library to manage simulator uploads and export artifacts.
+  - Shared background login with a single “station” account (no per-user login UI).
+- **Multi-station operation**
+  - One “Packout Computer” hosts the backend + DB.
+  - Additional Windows machines run the desktop EXE and talk to the Packout host over the LAN.
+- **Execution backlog and runbooks**
+  - Version 2.0 work is tracked in `docs/TASKMASTER_BACKLOG_2_0.md` / `.json`.
+  - UAT and rollout plans live in:
+    - `docs/UAT_PLAN_PALLET_MANAGER_2_0.md`
+    - `docs/ROLLBACK_AND_CUTOVER_PLAN_PALLET_MANAGER_2_0.md`
+    - `docs/BACKUP_RESTORE_RUNBOOK.md`
+    - `docs/BACKEND_ENVIRONMENT_STRATEGY.md`
 
-**macOS:**
-1. Download `PalletManager-Installer.pkg` or `PalletManager-Installer.dmg`
-2. Double-click to install
-3. Follow the installation wizard
-4. Launch from Applications folder
+---
 
-**Windows:**
-1. Download `Pallet Manager-Setup.exe`
-2. Double-click to install
-3. Follow the installation wizard
-4. Launch from Start Menu or Desktop
+## Deployment – Pallet Manager 2.0
 
-**First Run:**
-- The app automatically creates required folders
-- Place Excel workbooks in `EXCEL/` folder
-- Drop sun simulator files in `SUN SIMULATOR DATA/` folder
-- Start scanning barcodes to build pallets!
+The recommended production setup:
 
-### For Developers
+- **Packout Computer (host)**: runs Docker containers (Postgres + backend API + MinIO).
+- **User Computers (2, 3, 4)**: run only the **Windows desktop EXE**, which calls the backend on the Packout Computer over Wi‑Fi.
+
+### 1. Network assumptions
+
+- All machines connect to the same Wi‑Fi / LAN, e.g. **`Crossroads-WiFi`**.
+- Packout Computer has a **stable IP** on that network, for example:
+  - `10.20.10.62` (your current setup).
+- Other machines can reach the host:
+
+```bash
+ping 10.20.10.62
+```
+
+---
+
+### 2. Backend stack on Packout Computer
 
 **Prerequisites:**
-- Python 3.11+
-- Required packages (see `requirements.txt`)
 
-**Setup:**
+- Docker Desktop (or Docker Engine + docker-compose) installed on Packout.
+
+**Steps:**
+
+- From the project root:
+
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+cd backend
+# Ensure FastAPI listens on all interfaces
+# APP_HOST=0.0.0.0, APP_PORT=8000 via .env / environment
 
-# Verify dependencies
-python verify_dependencies.py
+cd ..
+docker compose -f docker-compose.intranet.yml up -d   # or your intranet compose file
 ```
 
-**Run from Source:**
-```bash
-python app/pallet_builder_gui.py
+This should start:
+
+- Postgres
+- MinIO (for exports/imports)
+- FastAPI backend exposed on `0.0.0.0:8000` → `http://10.20.10.62:8000`.
+
+**Health check (from another machine):**
+
+In a browser on Computer 2/3/4:
+
+```text
+http://10.20.10.62:8000/health/live
 ```
 
-**Build Installers:**
-```bash
-# macOS
-./scripts/install_all.sh
+You should see `{"status":"ok"}`.  
+If not, open Packout’s firewall for inbound TCP port **8000**.
 
-# Windows
-scripts\install_all_windows.bat
+---
+
+### 3. Building the Windows desktop EXE (Tauri)
+
+You need a Windows dev machine (can be Packout or another PC) with:
+
+- Node.js (LTS)
+- Rust (`rustup`)
+- Tauri CLI (`cargo install tauri-cli`)
+
+**Build steps:**
+
+```bash
+cd frontend
+
+# Point the UI at the Packout backend
+set VITE_API_BASE_URL=http://10.20.10.62:8000/api/v1   # Command Prompt
+# or: $env:VITE_API_BASE_URL = "http://10.20.10.62:8000/api/v1"   # PowerShell
+
+npm install
+npm run build
+npm run tauri build
 ```
 
-**Release New Version:**
+Tauri will produce a **Windows EXE** in `frontend/src-tauri/target/release/` (or similar), e.g.:
+
+```text
+frontend/src-tauri/target/release/PalletManager.exe
+```
+
+This EXE has the API base URL baked in and will always talk to `http://10.20.10.62:8000/api/v1`.
+
+---
+
+### 4. Installing the EXE on workstations (Computers 2–4)
+
+On each workstation:
+
+1. Copy the built EXE from the build machine (USB/share).
+2. Optionally create a desktop shortcut (rename to `Pallet Manager 2.0`).
+3. Make sure the workstation is on `Crossroads-WiFi` and can reach Packout:
+
+   ```bash
+   ping 10.20.10.62
+   ```
+
+4. Double‑click the EXE:
+   - The app will launch.
+   - It performs **background login** with the shared account.
+   - All calls go to the backend on the Packout Computer.
+
+No Docker/DB/MinIO is needed on Computers 2–4.
+
+---
+
+## Local development (2.0)
+
+### Backend (FastAPI)
+
+- See `backend/README.md` for details.
+- Quick start:
+
 ```bash
-./scripts/release.sh 1.0.1
+cd backend
+python -m venv .venv
+source .venv/bin/activate      # or .venv\Scripts\activate on Windows
+pip install -e .
+uvicorn app.main:app --reload --port 8000
+```
+
+Run migrations:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+Environment setup:
+
+- Copy `.env.example` → `.env` and fill in DB, JWT, MinIO settings.  
+- See `docs/BACKEND_ENVIRONMENT_STRATEGY.md` for the full matrix.
+
+### Frontend (React + Vite + Tauri)
+
+```bash
+cd frontend
+npm install
+
+# For dev against a local backend:
+set VITE_API_BASE_URL=http://localhost:8000/api/v1
+npm run dev
+```
+
+To run Playwright UI smoke tests:
+
+```bash
+cd frontend
+VITE_API_BASE_URL=http://localhost:8000/api/v1 npx playwright test
 ```
 
 ---
 
-## 📚 Documentation
+## Branches and legacy 1.1
 
-### 📘 [Complete Application Overview](APP_OVERVIEW.md) ⭐ **START HERE**
-**Comprehensive guide explaining what the app does and how it works:**
-- What is Pallet Manager?
-- What problem does it solve?
-- Who uses it and why?
-- Complete workflow explanation
-- Technical architecture
-- Data flow and processes
-- File structure and organization
+- **`develop/2.0`**: active Pallet Manager 2.0 development (this README).
+- **`main`**: mainline; will eventually track stable 2.0 once cutover is complete.
+- **`release/1.1-fallback`**: legacy Python/Tkinter desktop app (version 1.1).
+  - Old `app/pallet_builder_gui.py` UI and installer scripts live there.
 
-### 📖 [Complete User Guide](docs/USER_GUIDE.md)
-**Everything users need to know:**
-- Installation instructions (macOS & Windows)
-- First-time setup
-- Using the application
-- Troubleshooting common issues
-- FAQ
-
-### 🛠️ [Developer Guide](docs/DEVELOPER_GUIDE.md)
-**Everything developers need:**
-- Project structure
-- Build and packaging instructions
-- Scripts reference
-- Deployment guide
-- Update distribution
-- Performance optimizations
-
-### 📋 Quick References
-- **[Scripts Guide](SCRIPTS_GUIDE.md)** - All available scripts and their usage
-- **[Project Structure](PROJECT_STRUCTURE.md)** - Directory organization
-- **[Troubleshooting](docs/USER_GUIDE.md#troubleshooting)** - Common issues and solutions
-
----
-
-## 📁 Project Structure
-
-```
-.
-├── app/                    # Application source code
-├── scripts/                # Build and installer scripts
-├── docs/                   # Documentation
-├── assets/                 # Application icons and assets
-├── tools/                  # External tools and dependencies
-├── data/                   # User data and runtime files
-│   ├── CUSTOMERS/          # Customer data
-│   ├── EXCEL/              # Excel workbooks
-│   ├── PALLETS/            # Exported pallets
-│   ├── IMPORTED DATA/      # Processed simulator data
-│   ├── SUN SIMULATOR DATA/ # Drop new simulator files here
-│   └── LOGS/               # Application logs
-├── tests/                  # Test suite
-└── [other files]           # Build configs, requirements, etc.
-```
-
-See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed structure.
-
----
-
-## ✨ Features
-
-- ✅ **Barcode Scanning** - Scan panel barcodes to build pallets
-- ✅ **Excel Integration** - Automatic workbook updates
-- ✅ **Pallet History** - Track all pallets with search and export
-- ✅ **Export to Excel** - Date-organized pallet exports with capacity-specific templates (25/26/30/35)
-- ✅ **Sun Simulator Import** - Import and process simulator data
-- ✅ **Professional Installers** - Easy installation wizards
-- ✅ **Cross-Platform** - Works on macOS & Windows
-- ✅ **Standalone** - No Python installation required for end users
-
----
-
-## 🛠️ Development
-
-### Common Tasks
-
-**Build installers:**
-```bash
-./scripts/install_all.sh          # macOS
-scripts\install_all_windows.bat   # Windows
-```
-
-**Release new version:**
-```bash
-./scripts/release.sh 1.0.1
-```
-
-**Run tests:**
-```bash
-pytest
-```
-
-**Create icons:**
-```bash
-./scripts/create_icons.sh icons/Pallet\ icon.png
-```
-
-See [SCRIPTS_GUIDE.md](SCRIPTS_GUIDE.md) for complete scripts reference.
-
----
-
-## 📦 Building Installers
-
-### macOS
-
-```bash
-# Complete installer (recommended)
-./scripts/install_all.sh
-
-# Or step by step:
-./scripts/build_macos.sh
-./scripts/create_macos_installer.sh
-./scripts/create_dmg.sh
-```
-
-**Output:**
-- `dist/Pallet Manager.app` - Application bundle
-- `dist/PalletManager-Installer.pkg` - Professional installer
-- `dist/PalletManager-Installer.dmg` - DMG file
-
-### Windows
-
-```bash
-# Complete installer (recommended)
-scripts\install_all_windows.bat
-
-# Or step by step:
-scripts\setup_windows.bat
-scripts\build_windows.bat
-scripts\create_windows_installer.bat
-```
-
-**Output:**
-- `dist/Pallet Manager.exe` - Standalone executable
-- `dist/Pallet Manager-Setup.exe` - Installer
-
-**Note:** Windows installer requires NSIS (Nullsoft Scriptable Install System)
-
----
-
-## 🆘 Support
-
-**For Users:**
-- See [Complete User Guide](docs/USER_GUIDE.md) for installation and usage help
-- Check [Troubleshooting](docs/USER_GUIDE.md#troubleshooting) for common issues
-
-**For Developers:**
-- See [Developer Guide](docs/DEVELOPER_GUIDE.md) for build and deployment
-- Check [Scripts Guide](SCRIPTS_GUIDE.md) for available scripts
-
----
-
-## 📝 License
-
-Copyright (c) 2024 Crossroads Solar. All rights reserved.
-
----
-
-## 📊 Version
-
-**Current Version:** 1.1.0
-
-### Version History
-
-- **[Version 1.1.0 Changelog](VERSION_1.1_CHANGELOG.md)** - Latest release
-  - Enhanced Pallet History interface
-  - Customer filtering and barcode search
-  - Sortable table headers
-  - Delete pallet functionality
-  - Improved data import handling
-  - Bug fixes and performance improvements
-
-- **Version 1.0.0** - Initial release
-  - Core pallet building functionality
-  - Barcode scanning and validation
-  - Excel export and integration
-  - Pallet history tracking
-  - PDF creation and printing
-
-### Version Information
-
-Current version details: See `app/version.py`
-
-To update version:
-```bash
-python scripts/update_version.py 1.1.1
-```
+For 1.1‑specific docs (Excel folders, standalone installers, etc.), see the `release/1.1-fallback` branch. This branch focuses on the 2.0 client–server architecture and deployment. 

@@ -4,6 +4,49 @@ Source docs:
 - `docs/PRD_PALLET_MANAGER_2_0.md`
 - `docs/TDD_PALLET_MANAGER_2_0.md`
 
+## Execution Tracking (Updated 2026-03-03)
+
+- Completed:
+  - `PM2-001`
+  - `PM2-002`
+  - `PM2-003`
+  - `PM2-004`
+  - `PM2-010`
+  - `PM2-011`
+  - `PM2-012`
+  - `PM2-013`
+  - `PM2-020`
+  - `PM2-021`
+  - `PM2-022`
+  - `PM2-023`
+  - `PM2-030`
+  - `PM2-031`
+  - `PM2-032`
+  - `PM2-040`
+  - `PM2-041`
+  - `PM2-042`
+  - `PM2-060`
+  - `PM2-061`
+  - `PM2-062`
+  - `PM2-063`
+  - `PM2-071`
+  - `PM2-050`
+  - `PM2-051`
+  - `PM2-052`
+  - `PM2-053`
+
+- In progress:
+  - None
+
+- Remaining:
+  - `PM2-072`
+  - `PM2-073`
+
+## Least-Dependent Next Queue
+
+Priority order (fewest unmet dependencies first):
+1. `PM2-072` -> `PM2-073`
+
 Scale:
 - Effort: `S` (<=1 day), `M` (2-4 days), `L` (5+ days)
 - Risk: `Low`, `Medium`, `High`

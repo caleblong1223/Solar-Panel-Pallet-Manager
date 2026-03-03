@@ -1,24 +1,21 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import ProtectedRoute from "./components/ProtectedRoute";
+import AppHomePage from "./pages/AppHomePage";
+import HistoryExplorerPage from "./pages/HistoryExplorerPage";
+import LiveBuilderPage from "./pages/LiveBuilderPage";
+import ImportExportPage from "./pages/ImportExportPage";
+import SectionPlaceholderPage from "./pages/SectionPlaceholderPage";
+
 export default function App() {
   return (
-    <main className="app-shell">
-      <header>
-        <p className="eyebrow">Pallet Manager 2.0</p>
-        <h1>Modern UI Scaffold Ready</h1>
-      </header>
-      <section className="card-grid">
-        <article className="card">
-          <h2>Builder</h2>
-          <p>Task placeholder: Live pallet build workflow screen.</p>
-        </article>
-        <article className="card">
-          <h2>History</h2>
-          <p>Task placeholder: Search + filter + detail panel.</p>
-        </article>
-        <article className="card">
-          <h2>Imports/Exports</h2>
-          <p>Task placeholder: Simulator import and PDF object retrieval.</p>
-        </article>
-      </section>
-    </main>
+    <Routes>
+      <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<AppHomePage />} />
+        <Route path="/builder" element={<LiveBuilderPage />} />
+        <Route path="/history" element={<HistoryExplorerPage />} />
+        <Route path="/imports-exports" element={<ImportExportPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

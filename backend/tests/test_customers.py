@@ -79,12 +79,12 @@ def test_customer_crud_flow_for_packout_and_admin() -> None:
         assert get_one.json()["is_active"] is False
 
 
-def test_customer_permissions_and_conflict() -> None:
+def test_customer_create_and_conflict_any_role() -> None:
     with _client_for(DummyUser(user_id=3, roles=["purchasing_manager"])) as client:
         list_response = client.get("/api/v1/customers")
         assert list_response.status_code == 200
-        create_denied = client.post("/api/v1/customers", json={"display_name": "Gamma Solar"})
-        assert create_denied.status_code == 403
+        create_a = client.post("/api/v1/customers", json={"display_name": "Gamma Solar"})
+        assert create_a.status_code == 201
 
     with _client_for(DummyUser(user_id=4, roles=["admin"])) as client:
         create_a = client.post("/api/v1/customers", json={"display_name": "Dup Solar"})

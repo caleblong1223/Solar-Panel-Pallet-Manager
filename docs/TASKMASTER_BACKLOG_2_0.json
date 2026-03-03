@@ -2,13 +2,59 @@
   "version": "2.0",
   "generated_from": "docs/TASKMASTER_BACKLOG_2_0.md",
   "generated_at": "2026-03-03",
+  "execution_tracking": {
+    "updated_at": "2026-03-03",
+    "completed_ids": [
+      "PM2-001",
+      "PM2-002",
+      "PM2-003",
+      "PM2-004",
+      "PM2-010",
+      "PM2-011",
+      "PM2-012",
+      "PM2-013",
+      "PM2-020",
+      "PM2-021",
+      "PM2-022",
+      "PM2-023",
+      "PM2-030",
+      "PM2-031",
+      "PM2-032",
+      "PM2-040",
+      "PM2-041",
+      "PM2-042",
+      "PM2-060",
+      "PM2-061",
+      "PM2-062",
+      "PM2-063",
+      "PM2-071",
+      "PM2-050",
+      "PM2-051",
+      "PM2-052",
+      "PM2-053",
+      "PM2-070"
+    ],
+    "in_progress_ids": [
+      "PM2-072"
+    ],
+    "remaining_ids": [
+      "PM2-073"
+    ],
+    "least_dependent_next_queue": [
+      "PM2-073"
+    ]
+  },
   "scale": {
     "effort": {
       "S": "<=1 day",
       "M": "2-4 days",
       "L": "5+ days"
     },
-    "risk": ["Low", "Medium", "High"]
+    "risk": [
+      "Low",
+      "Medium",
+      "High"
+    ]
   },
   "milestones": [
     {
@@ -33,7 +79,9 @@
           "id": "PM2-002",
           "title": "Configure backend environment and secrets strategy",
           "description": "Create .env profile strategy for local/dev/prod and define secret handling and rotation process.",
-          "dependencies": ["PM2-001"],
+          "dependencies": [
+            "PM2-001"
+          ],
           "acceptance_criteria": [
             "Documented env matrix",
             "No hardcoded secrets in code",
@@ -47,7 +95,9 @@
           "id": "PM2-003",
           "title": "Apply Alembic migration baseline",
           "description": "Run initial schema migration and verify table/index creation.",
-          "dependencies": ["PM2-001"],
+          "dependencies": [
+            "PM2-001"
+          ],
           "acceptance_criteria": [
             "Revision 20260303_0001 applied",
             "All expected tables exist"
@@ -60,7 +110,9 @@
           "id": "PM2-004",
           "title": "Add CI checks for backend and frontend skeletons",
           "description": "Add lint/test/build workflows to prevent drift.",
-          "dependencies": ["PM2-001"],
+          "dependencies": [
+            "PM2-001"
+          ],
           "acceptance_criteria": [
             "CI pipeline runs on PR",
             "Pipeline fails on lint/test/build errors"
@@ -79,7 +131,9 @@
           "id": "PM2-010",
           "title": "Implement user/role models and repository layer",
           "description": "Add ORM models and data access layer for users, roles, and user_roles.",
-          "dependencies": ["PM2-003"],
+          "dependencies": [
+            "PM2-003"
+          ],
           "acceptance_criteria": [
             "CRUD/query functions exist",
             "Tests cover users and role assignments"
@@ -92,7 +146,9 @@
           "id": "PM2-011",
           "title": "Implement password hashing and JWT issuance",
           "description": "Implement login flow with secure password verification and access/refresh token creation.",
-          "dependencies": ["PM2-010"],
+          "dependencies": [
+            "PM2-010"
+          ],
           "acceptance_criteria": [
             "/auth/login and /auth/me implemented",
             "Refresh and logout flow implemented"
@@ -105,7 +161,9 @@
           "id": "PM2-012",
           "title": "Enforce endpoint role guards",
           "description": "Add reusable authorization dependencies and protect sensitive routes.",
-          "dependencies": ["PM2-011"],
+          "dependencies": [
+            "PM2-011"
+          ],
           "acceptance_criteria": [
             "Restricted operations return 403 for unauthorized roles"
           ],
@@ -117,7 +175,9 @@
           "id": "PM2-013",
           "title": "Build frontend auth shell",
           "description": "Build login screen, auth context, route guard, and token refresh handling.",
-          "dependencies": ["PM2-011"],
+          "dependencies": [
+            "PM2-011"
+          ],
           "acceptance_criteria": [
             "Unauthenticated users blocked from app routes",
             "Session persists and refreshes"
@@ -136,7 +196,9 @@
           "id": "PM2-020",
           "title": "Implement customer endpoints",
           "description": "Create CRUD/list endpoints for customers with validation and pagination.",
-          "dependencies": ["PM2-012"],
+          "dependencies": [
+            "PM2-012"
+          ],
           "acceptance_criteria": [
             "Customers are manageable via API",
             "Tests pass for customer flows"
@@ -149,7 +211,9 @@
           "id": "PM2-021",
           "title": "Implement pallet lifecycle endpoints",
           "description": "Create/update/complete/reset/delete pallets with state transitions and audit events.",
-          "dependencies": ["PM2-012"],
+          "dependencies": [
+            "PM2-012"
+          ],
           "acceptance_criteria": [
             "Valid transitions enforced",
             "Invalid transitions rejected"
@@ -162,7 +226,9 @@
           "id": "PM2-022",
           "title": "Implement pallet item (serial) operations",
           "description": "Add/remove serials with duplicate constraints and slot index checks.",
-          "dependencies": ["PM2-021"],
+          "dependencies": [
+            "PM2-021"
+          ],
           "acceptance_criteria": [
             "Duplicate and overflow checks pass",
             "Edge-case tests included"
@@ -175,7 +241,9 @@
           "id": "PM2-023",
           "title": "Implement barcode search endpoint",
           "description": "Support fast exact/partial search across pallet_items and sim_panels.",
-          "dependencies": ["PM2-022"],
+          "dependencies": [
+            "PM2-022"
+          ],
           "acceptance_criteria": [
             "P95 response target met",
             "Pagination and sorting supported"
@@ -194,7 +262,9 @@
           "id": "PM2-030",
           "title": "Implement upload/ingest API and batch tracking",
           "description": "Add file upload endpoint and batch status lifecycle.",
-          "dependencies": ["PM2-012"],
+          "dependencies": [
+            "PM2-012"
+          ],
           "acceptance_criteria": [
             "Batch rows include pending/processing/completed/failed statuses"
           ],
@@ -206,7 +276,9 @@
           "id": "PM2-031",
           "title": "Build parser adapter for existing simulator format",
           "description": "Normalize current sun simulator sheet format to sim_panels schema.",
-          "dependencies": ["PM2-030"],
+          "dependencies": [
+            "PM2-030"
+          ],
           "acceptance_criteria": [
             "Known files parse reliably",
             "Row-level reject reasons captured"
@@ -219,7 +291,9 @@
           "id": "PM2-032",
           "title": "Store raw source uploads in MinIO",
           "description": "Persist original upload objects and store object keys/checksums.",
-          "dependencies": ["PM2-030"],
+          "dependencies": [
+            "PM2-030"
+          ],
           "acceptance_criteria": [
             "Raw file retrieval works",
             "Metadata is linked to batch"
@@ -238,7 +312,10 @@
           "id": "PM2-040",
           "title": "Implement export generation service",
           "description": "Generate PDF artifacts from completed pallet data.",
-          "dependencies": ["PM2-021", "PM2-022"],
+          "dependencies": [
+            "PM2-021",
+            "PM2-022"
+          ],
           "acceptance_criteria": [
             "Export file generated for supported templates",
             "Tests cover export generation"
@@ -251,7 +328,9 @@
           "id": "PM2-041",
           "title": "Upload exports to MinIO and persist metadata",
           "description": "Upload object and create exports row with checksum/size.",
-          "dependencies": ["PM2-040"],
+          "dependencies": [
+            "PM2-040"
+          ],
           "acceptance_criteria": [
             "Export row includes object key",
             "Signed URL retrieval works"
@@ -264,7 +343,9 @@
           "id": "PM2-042",
           "title": "Export retrieval/list APIs",
           "description": "Query exports by pallet/date/customer and provide download URL endpoint.",
-          "dependencies": ["PM2-041"],
+          "dependencies": [
+            "PM2-041"
+          ],
           "acceptance_criteria": [
             "Filtered export list works",
             "Pagination and sort are supported"
@@ -283,7 +364,9 @@
           "id": "PM2-050",
           "title": "Establish design system and layout shell",
           "description": "Create theme tokens, typography, app frame, nav, and global notifications.",
-          "dependencies": ["PM2-013"],
+          "dependencies": [
+            "PM2-013"
+          ],
           "acceptance_criteria": [
             "Reusable UI primitives available",
             "Design tokens documented"
@@ -296,7 +379,11 @@
           "id": "PM2-051",
           "title": "Build Live Builder screen",
           "description": "Implement pallet create/add/remove/complete UX with keyboard-first flow.",
-          "dependencies": ["PM2-021", "PM2-022", "PM2-050"],
+          "dependencies": [
+            "PM2-021",
+            "PM2-022",
+            "PM2-050"
+          ],
           "acceptance_criteria": [
             "Operator can run complete build cycle without fallback UI"
           ],
@@ -308,7 +395,10 @@
           "id": "PM2-052",
           "title": "Build History Explorer screen",
           "description": "Implement server-side search, filters, table, details panel, and actions.",
-          "dependencies": ["PM2-023", "PM2-050"],
+          "dependencies": [
+            "PM2-023",
+            "PM2-050"
+          ],
           "acceptance_criteria": [
             "Purchasing can locate pallet/export by serial within target time"
           ],
@@ -320,7 +410,11 @@
           "id": "PM2-053",
           "title": "Build Import Center and Export Library screens",
           "description": "Implement upload/import progress and export browsing/download UX.",
-          "dependencies": ["PM2-031", "PM2-042", "PM2-050"],
+          "dependencies": [
+            "PM2-031",
+            "PM2-042",
+            "PM2-050"
+          ],
           "acceptance_criteria": [
             "Import and export workflows complete from UI"
           ],
@@ -338,7 +432,9 @@
           "id": "PM2-060",
           "title": "Migrate legacy customers into DB",
           "description": "Import existing customer workbook into customers table.",
-          "dependencies": ["PM2-003"],
+          "dependencies": [
+            "PM2-003"
+          ],
           "acceptance_criteria": [
             "Customer count matches source after normalization"
           ],
@@ -350,7 +446,9 @@
           "id": "PM2-061",
           "title": "Migrate pallet history JSON into DB",
           "description": "Convert historical pallets and items into new tables.",
-          "dependencies": ["PM2-003"],
+          "dependencies": [
+            "PM2-003"
+          ],
           "acceptance_criteria": [
             "All pallets and serials loaded",
             "Spot checks pass"
@@ -363,7 +461,9 @@
           "id": "PM2-062",
           "title": "Index historical exports into DB/MinIO references",
           "description": "Create export metadata rows for existing files.",
-          "dependencies": ["PM2-061"],
+          "dependencies": [
+            "PM2-061"
+          ],
           "acceptance_criteria": [
             "Existing exports are searchable",
             "Metadata-based open works"
@@ -376,7 +476,11 @@
           "id": "PM2-063",
           "title": "Build migration reconciliation report",
           "description": "Compare legacy counts/keys vs DB and output mismatch report.",
-          "dependencies": ["PM2-060", "PM2-061", "PM2-062"],
+          "dependencies": [
+            "PM2-060",
+            "PM2-061",
+            "PM2-062"
+          ],
           "acceptance_criteria": [
             "Report generated",
             "No critical mismatches before cutover"
@@ -395,7 +499,9 @@
           "id": "PM2-070",
           "title": "End-to-end test suite for critical workflows",
           "description": "Add API and UI integration tests for login, build, import, export, and search.",
-          "dependencies": ["PM2-053"],
+          "dependencies": [
+            "PM2-053"
+          ],
           "acceptance_criteria": [
             "Critical flows pass in CI against ephemeral stack"
           ],
@@ -407,7 +513,9 @@
           "id": "PM2-071",
           "title": "Backup/restore validation and runbook",
           "description": "Script and test Postgres and MinIO backup/restore on schedule.",
-          "dependencies": ["PM2-001"],
+          "dependencies": [
+            "PM2-001"
+          ],
           "acceptance_criteria": [
             "Successful restore drill documented"
           ],
@@ -419,7 +527,12 @@
           "id": "PM2-072",
           "title": "UAT with packout and purchasing workflows",
           "description": "Run role-based acceptance sessions and track sign-off criteria.",
-          "dependencies": ["PM2-051", "PM2-052", "PM2-053", "PM2-063"],
+          "dependencies": [
+            "PM2-051",
+            "PM2-052",
+            "PM2-053",
+            "PM2-063"
+          ],
           "acceptance_criteria": [
             "No critical blockers",
             "Formal sign-off achieved"
@@ -432,7 +545,10 @@
           "id": "PM2-073",
           "title": "Production rollout and cutover",
           "description": "Deploy, migrate, monitor, and switch clients to 2.0 default.",
-          "dependencies": ["PM2-072", "PM2-071"],
+          "dependencies": [
+            "PM2-072",
+            "PM2-071"
+          ],
           "acceptance_criteria": [
             "Stable operations for 2 weeks",
             "No Sev-1 data issues"
@@ -445,23 +561,90 @@
     }
   ],
   "critical_path": [
-    ["PM2-001", "PM2-003", "PM2-010", "PM2-011", "PM2-012"],
-    ["PM2-021", "PM2-022", "PM2-023"],
-    ["PM2-030", "PM2-031"],
-    ["PM2-040", "PM2-041", "PM2-042"],
-    ["PM2-050", "PM2-051", "PM2-052", "PM2-053"],
-    ["PM2-061", "PM2-062", "PM2-063"],
-    ["PM2-070", "PM2-072", "PM2-073"]
+    [
+      "PM2-001",
+      "PM2-003",
+      "PM2-010",
+      "PM2-011",
+      "PM2-012"
+    ],
+    [
+      "PM2-021",
+      "PM2-022",
+      "PM2-023"
+    ],
+    [
+      "PM2-030",
+      "PM2-031"
+    ],
+    [
+      "PM2-040",
+      "PM2-041",
+      "PM2-042"
+    ],
+    [
+      "PM2-050",
+      "PM2-051",
+      "PM2-052",
+      "PM2-053"
+    ],
+    [
+      "PM2-061",
+      "PM2-062",
+      "PM2-063"
+    ],
+    [
+      "PM2-070",
+      "PM2-072",
+      "PM2-073"
+    ]
   ],
   "week_plan": {
-    "week_1": ["PM2-001", "PM2-002", "PM2-003", "PM2-004", "PM2-010"],
-    "week_2": ["PM2-011", "PM2-012", "PM2-020", "PM2-021"],
-    "week_3": ["PM2-022", "PM2-023", "PM2-030", "PM2-031"],
-    "week_4": ["PM2-032", "PM2-040", "PM2-041"],
-    "week_5": ["PM2-042", "PM2-050", "PM2-051"],
-    "week_6": ["PM2-052", "PM2-053"],
-    "week_7": ["PM2-060", "PM2-061", "PM2-062", "PM2-063"],
-    "week_8": ["PM2-070", "PM2-071", "PM2-072", "PM2-073"]
+    "week_1": [
+      "PM2-001",
+      "PM2-002",
+      "PM2-003",
+      "PM2-004",
+      "PM2-010"
+    ],
+    "week_2": [
+      "PM2-011",
+      "PM2-012",
+      "PM2-020",
+      "PM2-021"
+    ],
+    "week_3": [
+      "PM2-022",
+      "PM2-023",
+      "PM2-030",
+      "PM2-031"
+    ],
+    "week_4": [
+      "PM2-032",
+      "PM2-040",
+      "PM2-041"
+    ],
+    "week_5": [
+      "PM2-042",
+      "PM2-050",
+      "PM2-051"
+    ],
+    "week_6": [
+      "PM2-052",
+      "PM2-053"
+    ],
+    "week_7": [
+      "PM2-060",
+      "PM2-061",
+      "PM2-062",
+      "PM2-063"
+    ],
+    "week_8": [
+      "PM2-070",
+      "PM2-071",
+      "PM2-072",
+      "PM2-073"
+    ]
   },
   "first_10_tasks": [
     "PM2-001",
