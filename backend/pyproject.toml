@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pallet-manager-backend"
+version = "0.1.0"
+description = "Pallet Manager 2.0 backend API"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn[standard]>=0.35.0",
+  "sqlalchemy>=2.0.40",
+  "alembic>=1.16.0",
+  "psycopg[binary]>=3.2.0",
+  "pydantic-settings>=2.10.0",
+  "python-jose[cryptography]>=3.4.0",
+  "passlib[bcrypt]>=1.7.4",
+  "python-multipart>=0.0.20",
+  "boto3>=1.39.0",
+  "openpyxl>=3.1.5",
+  "httpx>=0.28.1"
+]
+
+[tool.alembic]
+script_location = "alembic"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["tests*", "scripts*", "alembic*"]
+
+[tool.ruff]
+line-length = 100

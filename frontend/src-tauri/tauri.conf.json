@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Pallet Manager",
+  "version": "2.0.0",
+  "identifier": "com.crossroadssolar.palletmanager",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Pallet Manager 2.0",
+        "width": 1440,
+        "height": 900,
+        "resizable": true
+      }
+    ]
+  }
+}
