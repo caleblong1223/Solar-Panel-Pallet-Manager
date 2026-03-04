@@ -1,9 +1,11 @@
 import {
   listOutboxOperations,
+  markOperationNeedsReview,
   removeOutboxOperation,
   type OutboxOperation,
   updateOutboxOperation,
 } from "./outbox";
+import { ApiError } from "../lib/api";
 import { resolvePalletId } from "./idMap";
 import { repoApplyPalletIdMapping } from "../features/palletRepo";
 import {
@@ -14,6 +16,7 @@ import {
   removePalletItem,
 } from "../features/pallets";
 import { upsertLocalPallet } from "../features/localPalletStore";
+import { setSyncState } from "./syncState";
 
 let onlineListenerRegistered = false;
 let syncInFlight = false;
@@ -36,6 +39,21 @@ function isRetryReady(operation: OutboxOperation): boolean {
 function calcNextRetry(attemptCount: number): string {
   const backoffMs = Math.min(60_000, 1_000 * Math.max(1, attemptCount));
   return new Date(Date.now() + backoffMs).toISOString();
+}
+
+function isHardConflict(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 409 || error.status === 422);
+}
+
+function refreshSyncCounts(): void {
+  const operations = listOutboxOperations();
+  const needsReview = operations.filter((operation) => operation.state === "needs_review");
+  const failed = operations.filter((operation) => operation.state === "pending" && operation.last_error);
+  setSyncState({
+    pending_count: operations.length,
+    failed_count: failed.length,
+    needs_review_count: needsReview.length,
+  });
 }
 
 async function replayOperation(token: string, operation: OutboxOperation): Promise<void> {
@@ -111,6 +129,7 @@ async function syncOutbox(): Promise<void> {
     return;
   }
   syncInFlight = true;
+  setSyncState({ syncing: true });
   try {
     const token = getAccessToken();
     if (!token) {
@@ -118,24 +137,37 @@ async function syncOutbox(): Promise<void> {
     }
     const operations = listOutboxOperations();
     for (const operation of operations) {
+      if (operation.state === "needs_review") {
+        continue;
+      }
       if (!isRetryReady(operation)) {
         continue;
       }
       try {
         await replayOperation(token, operation);
         removeOutboxOperation(operation.op_id);
+        refreshSyncCounts();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Sync replay failed";
+        if (isHardConflict(error)) {
+          markOperationNeedsReview(operation.op_id, message);
+          refreshSyncCounts();
+          continue;
+        }
         const nextAttempt = operation.attempt_count + 1;
         updateOutboxOperation(operation.op_id, {
           attempt_count: nextAttempt,
           last_error: message,
           next_retry_at: calcNextRetry(nextAttempt),
         });
+        refreshSyncCounts();
       }
     }
+    setSyncState({ last_sync_at: new Date().toISOString() });
   } finally {
     syncInFlight = false;
+    refreshSyncCounts();
+    setSyncState({ syncing: false });
   }
 }
 
@@ -146,5 +178,24 @@ export function startSyncEngine(): void {
   onlineListenerRegistered = true;
   window.addEventListener("online", () => void syncOutbox());
   window.setInterval(() => void syncOutbox(), 10_000);
+  void syncOutbox();
+}
+
+export function triggerSyncNow(): Promise<void> {
+  return syncOutbox();
+}
+
+export function discardOutboxOperation(opId: string): void {
+  removeOutboxOperation(opId);
+  refreshSyncCounts();
+}
+
+export function retryOutboxOperation(opId: string): void {
+  updateOutboxOperation(opId, {
+    state: "pending",
+    next_retry_at: null,
+    last_error: null,
+  });
+  refreshSyncCounts();
   void syncOutbox();
 }

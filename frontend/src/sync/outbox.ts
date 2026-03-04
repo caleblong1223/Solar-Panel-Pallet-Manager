@@ -12,6 +12,7 @@ export type OutboxOperation = {
   attempt_count: number;
   last_error: string | null;
   next_retry_at: string | null;
+  state: "pending" | "needs_review";
 };
 
 const OUTBOX_KEY = "pm2_sync_outbox";
@@ -21,8 +22,22 @@ function parseOutbox(raw: string | null): OutboxOperation[] {
     return [];
   }
   try {
-    const parsed = JSON.parse(raw) as OutboxOperation[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as Array<Partial<OutboxOperation>>;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter((item) => typeof item.op_id === "string" && typeof item.op_type === "string")
+      .map((item) => ({
+        op_id: item.op_id ?? crypto.randomUUID(),
+        op_type: item.op_type as OutboxOperationType,
+        payload: (item.payload as Record<string, unknown>) ?? {},
+        created_at: item.created_at ?? new Date().toISOString(),
+        attempt_count: item.attempt_count ?? 0,
+        last_error: item.last_error ?? null,
+        next_retry_at: item.next_retry_at ?? null,
+        state: item.state ?? "pending",
+      }));
   } catch {
     return [];
   }
@@ -44,6 +59,7 @@ export function enqueueOutboxOperation(
     attempt_count: 0,
     last_error: null,
     next_retry_at: null,
+    state: "pending",
   };
   const existing = listOutboxOperations();
   const next = [...existing, operation];
@@ -65,4 +81,12 @@ export function updateOutboxOperation(opId: string, patch: Partial<OutboxOperati
 
 export function clearOutbox(): void {
   localStorage.removeItem(OUTBOX_KEY);
+}
+
+export function markOperationNeedsReview(opId: string, reason: string): void {
+  updateOutboxOperation(opId, {
+    state: "needs_review",
+    last_error: reason,
+    next_retry_at: null,
+  });
 }

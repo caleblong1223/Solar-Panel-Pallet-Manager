@@ -126,6 +126,11 @@ h1 {
   margin: 0;
 }
 
+.sync-summary {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
 .card-grid {
   display: grid;
   gap: var(--space-4);
@@ -320,6 +325,12 @@ h1 {
 
 .flat-list small {
   color: var(--color-text-muted);
+}
+
+.sync-issue-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
 }
 
 .toast-stack {

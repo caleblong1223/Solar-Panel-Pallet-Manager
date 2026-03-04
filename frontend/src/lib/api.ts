@@ -2,6 +2,19 @@ import { loadRuntimeSettings } from "./runtimeConfig";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+export class ApiError extends Error {
+  status: number;
+  method: HttpMethod;
+  path: string;
+
+  constructor(message: string, status: number, method: HttpMethod, path: string) {
+    super(message);
+    this.status = status;
+    this.method = method;
+    this.path = path;
+  }
+}
+
 export async function apiRequest<TResponse>(
   path: string,
   method: HttpMethod,
@@ -37,7 +50,7 @@ export async function apiRequest<TResponse>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `${method} ${path} failed with status ${response.status}`);
+    throw new ApiError(text || `${method} ${path} failed with status ${response.status}`, response.status, method, path);
   }
 
   if (response.status === 204) {

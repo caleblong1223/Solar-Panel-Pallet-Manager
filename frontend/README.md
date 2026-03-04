@@ -28,6 +28,7 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 - Offline mutations are written to a local outbox queue (`localStorage`) for later replay.
 - A background sync engine now replays queued operations when connectivity is restored.
 - Replays send `X-Client-Operation-Id` so backend can dedupe duplicate mutation attempts.
+- Sync status is surfaced in navigation/settings, and unresolved conflicts are listed in `/sync-issues` for operator action.
 
 ## Tauri
 
