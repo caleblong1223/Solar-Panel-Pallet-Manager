@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
-import AppHomePage from "./pages/AppHomePage";
 import HistoryExplorerPage from "./pages/HistoryExplorerPage";
 import LiveBuilderPage from "./pages/LiveBuilderPage";
 import ImportExportPage from "./pages/ImportExportPage";
@@ -11,7 +10,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<ProtectedRoute />}>
-        <Route path="/" element={<AppHomePage />} />
+        <Route path="/" element={<Navigate to="/builder" replace />} />
         <Route path="/builder" element={<LiveBuilderPage />} />
         <Route path="/history" element={<HistoryExplorerPage />} />
         <Route path="/imports-exports" element={<ImportExportPage />} />

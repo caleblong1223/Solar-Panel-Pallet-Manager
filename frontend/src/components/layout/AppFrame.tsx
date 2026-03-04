@@ -10,7 +10,6 @@ type Props = {
 };
 
 const navItems = [
-  { to: "/", label: "Dashboard" },
   { to: "/builder", label: "Builder" },
   { to: "/history", label: "History" },
   { to: "/imports-exports", label: "Imports/Exports" },
