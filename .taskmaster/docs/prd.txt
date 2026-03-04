@@ -1,0 +1,351 @@
+<context>
+# Overview
+A local, offline Python 3.11 tool that imports sun simulator export files and automatically updates the current pallet Excel workbook. This enables packout operators to scan barcodes and automatically populate electrical values without manual data entry or network connections. The system is completely offline - operators manually copy simulator export files onto the packout computer.
+
+# Core Features
+1. **Automated File Processing**: Automatically detects and processes the newest simulator export file from CSV_INPUT/ directory
+2. **Smart Workbook Selection**: Intelligently selects the current quarter's pallet workbook based on CURRENT.xlsx pointer or filename pattern matching
+3. **Data Normalization**: Handles both .xlsx and .csv input files, normalizes data (strips whitespace, removes Excel wrappers, converts to proper types)
+4. **Latest-Run-Wins Logic**: Ensures only the most recent data per SerialNo is kept, using Date/TTime or file modification time as tiebreakers
+5. **Safe Excel Updates**: Updates existing rows or appends new ones without modifying formulas or formatting in PALLET SHEET
+6. **Automatic Backup**: Creates timestamped backups before any modifications
+7. **Comprehensive Logging**: Detailed logs of all operations for troubleshooting
+8. **One-Click Execution**: Simple batch/shell scripts for Windows and macOS
+
+# User Experience
+**User Persona**: Packout operators who need to quickly import simulator data and print pallet sheets
+
+**Key User Flow**:
+1. Operator copies simulator export file into CSV_INPUT/ folder
+2. Operator double-clicks run_import.bat (Windows) or run_import.command (macOS)
+3. Script processes file automatically
+4. Operator opens pallet workbook
+5. Operator scans barcodes - electrical values are automatically populated via VLOOKUP
+6. Operator prints pallet sheets
+
+**UX Principles**:
+- Zero configuration required
+- No manual file selection
+- No quarterly code changes needed
+- Clear console output showing what was processed
+- Error handling that never crashes
+</context>
+<PRD>
+# Technical Architecture
+
+## Folder Structure (Required)
+```
+SunSim_Packout/
+├─ import_sunsim.py
+├─ run_import.bat            (Windows one-click runner)
+├─ run_import.command        (macOS one-click runner)
+├─ requirements.txt
+│
+├─ CSV_INPUT/                (operators drop simulator exports here; .xlsx or .csv)
+├─ EXCEL/
+│   ├─ CURRENT.xlsx          (optional pointer to current quarter pallet workbook)
+│   └─ BUILD YYYY Q-X.xlsx   (quarterly pallet workbooks)
+│
+├─ EXCEL/backups/
+├─ LOGS/import_log.txt
+└─ ARCHIVE/processed_files/
+```
+
+## System Components
+
+### 1. Main Script (import_sunsim.py)
+- File detection and selection logic
+- Input file parsing (CSV/XLSX)
+- Data normalization and deduplication
+- Excel workbook manipulation using openpyxl
+- Backup creation
+- Logging system
+- Command-line argument handling
+
+### 2. Workbook Selection Logic
+Priority order:
+1. If EXCEL/CURRENT.xlsx exists → use that file
+2. Otherwise, find most recently modified .xlsx in EXCEL/ that:
+   - Contains "BUILD" in filename
+   - Contains a year (e.g., 2026)
+   - Contains quarter token (Q1, Q-1, Q 1, etc.)
+3. Ignore files starting with "~$" (Excel temp files)
+4. Allow override via --xlsx command-line argument
+
+### 3. Data Processing Pipeline
+1. Locate newest file in CSV_INPUT/ (by modification time)
+2. Parse file (handle both .csv and .xlsx)
+3. Normalize data:
+   - Strip whitespace from all fields
+   - Remove Excel-style ="SERIAL" wrappers
+   - Convert numeric values to floats
+   - Handle missing/empty values
+4. Apply latest-run-wins logic:
+   - Group by SerialNo
+   - Prefer latest Date + TTime combination
+   - If Date/TTime missing, use last row
+   - If multiple files, newest file modification time wins
+5. Validate required fields: SerialNo, Pm, Isc, Voc(V), Ipm, Vpm(V)
+6. Skip rows with missing or non-numeric electrical values
+
+### 4. Excel Update Logic
+Target workbook structure:
+- Sheet "DATA": Source data for VLOOKUP
+  - Column B: SerialNo (barcode key)
+  - Column C: Date (optional update)
+  - Column D: TTime (optional update)
+  - Column H: Pm(W)
+  - Column I: Isc(A)
+  - Column J: Voc(V)
+  - Column K: Ipm(A)
+  - Column L: Vpm(V)
+- Sheet "PALLET SHEET": Contains VLOOKUP formulas (DO NOT MODIFY)
+
+Update process:
+1. Open workbook using openpyxl (preserve formatting)
+2. Create timestamped backup in EXCEL/backups/
+3. For each processed SerialNo:
+   - Search column B for existing SerialNo
+   - If found: Update columns H-L (and optionally C-D)
+   - If not found: Append new row with all data
+4. Save workbook
+5. Never modify formulas or formatting in PALLET SHEET
+
+### 5. Input File Format Handling
+Supported formats: .xlsx, .csv
+
+Expected headers (flexible):
+- id, SerialNo, Date, TTime, curveTag, Prefix, Catalogue,
+- Pm, Isc, Voc(V), Ipm, Vpm(V), FF, Eff, Temp, ...
+
+Required fields:
+- SerialNo (barcode identifier)
+- Pm (power)
+- Isc (short-circuit current)
+- Voc(V) (open-circuit voltage)
+- Ipm (current at max power)
+- Vpm(V) (voltage at max power)
+
+### 6. Logging System
+Log file: LOGS/import_log.txt
+
+Log entries include:
+- Timestamp
+- Processed filename
+- Selected pallet workbook
+- Updated count (existing rows modified)
+- Added count (new rows appended)
+- Skipped count (invalid rows)
+- First 10 SerialNos processed
+- Any errors or warnings
+- File archive location
+
+### 7. Console Output
+User-friendly summary:
+```
+Import complete.
+Updated: X
+Added: Y
+Skipped: Z
+Open the pallet sheet, scan barcodes, and print.
+```
+
+### 8. Runner Scripts
+- run_import.bat (Windows): Simple batch file that runs Python script
+- run_import.command (macOS): Shell script with execute permissions
+
+## Data Models
+
+### Simulator Export Record
+- SerialNo: str (required, unique key)
+- Date: str/date (optional)
+- TTime: str/time (optional)
+- Pm: float (required)
+- Isc: float (required)
+- Voc: float (required)
+- Vpm: float (required)
+- Ipm: float (required)
+- Other fields: preserved but not used
+
+### Processing Result
+- updated_count: int
+- added_count: int
+- skipped_count: int
+- processed_serials: list[str]
+- errors: list[str]
+- warnings: list[str]
+
+## Dependencies
+- Python 3.11
+- openpyxl: Excel file manipulation
+- pandas: Optional but helpful for CSV parsing and data manipulation
+- python-dateutil: Optional for date parsing if needed
+
+# Development Roadmap
+
+## Phase 1: Core Infrastructure
+- Set up project folder structure
+- Create requirements.txt with dependencies
+- Implement basic file detection (newest file in CSV_INPUT/)
+- Implement basic logging system
+- Create directory structure validation
+
+## Phase 2: Input File Processing
+- Implement CSV file parsing
+- Implement XLSX file parsing
+- Implement data normalization (whitespace stripping, wrapper removal)
+- Implement numeric conversion and validation
+- Handle missing/empty values gracefully
+
+## Phase 3: Data Deduplication Logic
+- Implement latest-run-wins grouping by SerialNo
+- Implement Date + TTime comparison logic
+- Implement file modification time tiebreaker
+- Handle edge cases (missing dates, duplicate timestamps)
+
+## Phase 4: Workbook Selection
+- Implement CURRENT.xlsx detection
+- Implement BUILD pattern matching (year + quarter)
+- Implement most-recently-modified selection
+- Implement command-line override (--xlsx)
+- Add validation and error messages
+
+## Phase 5: Excel Update Logic
+- Implement openpyxl workbook opening (preserve formatting)
+- Implement backup creation with timestamps
+- Implement SerialNo lookup in DATA sheet column B
+- Implement row update logic (columns H-L)
+- Implement row append logic
+- Ensure PALLET SHEET is never modified
+
+## Phase 6: Safety and Validation
+- Implement row validation (skip invalid rows)
+- Implement error handling (never crash on bad data)
+- Implement workbook validation (check sheet existence)
+- Add comprehensive error messages
+
+## Phase 7: Logging and Reporting
+- Implement detailed log file writing
+- Implement console output formatting
+- Log first 10 SerialNos processed
+- Log all errors and warnings
+
+## Phase 8: File Management
+- Implement processed file archiving
+- Move files to ARCHIVE/processed_files/
+- Handle archive directory creation
+
+## Phase 9: Runner Scripts
+- Create run_import.bat for Windows
+- Create run_import.command for macOS
+- Add execute permissions for macOS script
+- Test one-click execution
+
+## Phase 10: Documentation
+- Create README.txt with operator instructions
+- Document folder structure requirements
+- Document troubleshooting steps
+- Document command-line options
+
+## Phase 11: Testing and Validation
+- Test with sample CSV files
+- Test with sample XLSX files
+- Test workbook selection logic
+- Test update vs append scenarios
+- Test error handling with bad data
+- Test backup creation
+- Test logging output
+
+# Logical Dependency Chain
+
+## Foundation Layer (Must Build First)
+1. Project structure and dependencies
+2. Basic file detection
+3. Basic logging
+
+## Data Processing Layer (Builds on Foundation)
+4. Input file parsing (CSV/XLSX)
+5. Data normalization
+6. Data validation
+
+## Business Logic Layer (Builds on Data Processing)
+7. Latest-run-wins deduplication
+8. Workbook selection logic
+
+## Excel Integration Layer (Builds on Business Logic)
+9. Excel workbook opening and backup
+10. Excel update/append logic
+
+## User Experience Layer (Builds on All Previous)
+11. Comprehensive logging
+12. Console output
+13. Runner scripts
+14. Documentation
+
+## Validation Layer (Ongoing)
+15. Error handling throughout
+16. Safety checks
+17. Testing
+
+# Risks and Mitigations
+
+## Technical Challenges
+**Risk**: Excel file corruption during updates
+**Mitigation**: Always create backups before modifications, use openpyxl's safe write methods
+
+**Risk**: Complex date/time parsing across different formats
+**Mitigation**: Use python-dateutil for flexible parsing, handle missing dates gracefully
+
+**Risk**: VLOOKUP breaking if DATA sheet structure changes
+**Mitigation**: Document exact column requirements, validate sheet structure before updates
+
+**Risk**: File encoding issues with CSV files
+**Mitigation**: Try multiple encodings (utf-8, latin-1), handle encoding errors gracefully
+
+## MVP Considerations
+**MVP Scope**: Core functionality that works for one file type (.csv OR .xlsx), basic workbook selection, update/append logic
+**Enhancement**: Support both file types, advanced workbook selection, comprehensive logging
+
+**MVP Validation**: Test with real simulator export file and real pallet workbook
+**Enhancement**: Add unit tests, edge case handling
+
+## Resource Constraints
+**Risk**: Operators may not have Python installed
+**Mitigation**: Provide clear installation instructions, consider PyInstaller for standalone executable (future enhancement)
+
+**Risk**: Different Excel versions may behave differently
+**Mitigation**: Test with common Excel versions, use openpyxl which handles version differences
+
+# Appendix
+
+## Simulator Export Format Examples
+Typical CSV header:
+```
+id,SerialNo,Date,TTime,curveTag,Prefix,Catalogue,Pm,Isc,Voc(V),Ipm,Vpm(V),FF,Eff,Temp
+```
+
+Typical XLSX may have same structure or slight variations in column names.
+
+## Excel Workbook Structure
+- DATA sheet: Must exist, column B is SerialNo key
+- PALLET SHEET: Must exist, contains VLOOKUP formulas referencing DATA sheet
+- Columns H-L in DATA sheet must be available for electrical values
+
+## Command-Line Options
+- `--xlsx "path/to/file.xlsx"`: Override workbook selection
+- Future: `--verbose`: More detailed console output
+- Future: `--dry-run`: Show what would be updated without making changes
+
+## Error Scenarios to Handle
+1. CSV_INPUT/ directory empty
+2. No valid pallet workbook found
+3. DATA sheet missing or wrong structure
+4. Invalid SerialNo (empty, non-string)
+5. Non-numeric electrical values
+6. File permission errors
+7. Disk full errors
+8. Corrupted input files
+
+
+
+

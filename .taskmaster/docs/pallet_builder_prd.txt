@@ -1,0 +1,269 @@
+<context>
+# Overview
+
+We need a simple, offline "live pallet builder" application that sits on top of the existing SunSim Packout tool. Instead of operators manually managing pallets in Excel, they will scan barcodes into a dedicated GUI that tracks the 25 panels on a pallet, then exports a pallet-specific Excel file ready for printing.
+
+The existing system already:
+- Imports simulator export files into the main pallet workbook (`BUILD YYYY Q-X.xlsx`)
+- Maintains a DATA sheet and PALLET SHEET with VLOOKUP formulas
+- Runs 100% offline on a low-spec Windows/macOS machine
+
+The new feature must keep the existing Excel workbook structure and look unchanged. All pallet tracking and history should live outside Excel.
+
+# Goals
+
+- Provide a "live pallet" UI where operators:
+  - Scan each panel's barcode (SerialNo) into a 25-slot pallet
+  - See which slots are filled and which are empty
+  - Can remove a barcode and rescan if needed
+- When 25 slots are full:
+  - Prompt the operator that the pallet is full
+  - Offer to export a pallet-specific Excel file for printing
+- Maintain a history of completed pallets:
+  - Pallet number (1, 2, 3, …)
+  - Completion timestamp
+  - SerialNos on that pallet
+  - Path to the exported Excel file
+- Allow re-printing older pallets later from history
+- Keep everything offline and light-weight (low-spec PC)
+
+# Non-Goals
+
+- Do NOT change the DATA sheet or PALLET SHEET structure in the main workbook
+- Do NOT require a network connection
+- Do NOT introduce a heavy database server
+
+</context>
+
+<PRD>
+# User Experience
+
+## User Persona
+
+- Packout operator on a low-power Windows or macOS PC
+- Uses a barcode scanner that acts as a keyboard (types the code + Enter)
+
+## Primary Workflow
+
+1. Operator launches the "SunSim Pallet Builder" GUI.
+2. The GUI automatically focuses a large "Scan Here" input box.
+3. Operator scans panels one by one:
+   - Each valid scan fills the next empty pallet slot (1–25).
+   - If a barcode is invalid (not found in DATA sheet), show an error and do not add it.
+   - If a barcode is already on the current pallet, show a warning and do not add it twice.
+4. The GUI shows:
+   - Current pallet number (e.g., Pallet #3)
+   - A list of slots 1–25 with SerialNo and a "Remove" button for each populated slot.
+   - Slot count (e.g., "Slots: 17/25").
+5. When slot 25 is filled:
+   - Show a clear message: "Pallet #X is full."
+   - Offer actions:
+     - "Export & Save Pallet" (main action)
+     - "Review/Edit" (keep on current pallet, allow removing barcodes)
+6. On "Export & Save Pallet":
+   - Generate a pallet-specific Excel file in an export folder.
+   - Record the pallet in a JSON history file with pallet number, timestamp, serials, and exported file path.
+   - Start a new empty pallet with pallet number X+1.
+   - Optionally offer to open the export folder.
+
+## Pallet History UX
+
+- From the main window, a "History" button opens a Pallet History window.
+- History window shows a table:
+  - Pallet #
+  - Completed time
+  - Export file name
+- Selecting a pallet shows:
+  - Full list of SerialNos
+  - Buttons:
+    - "Open Export File"
+    - "Open Export Folder"
+- This allows printing older pallets later if the printer was unavailable earlier.
+
+# Technical Architecture
+
+## Technology Choices
+
+- GUI: Python Tkinter (built-in, no extra GUI dependencies)
+- Data storage: JSON file for pallet history
+- Excel: `openpyxl` for reading the main workbook and creating pallet export workbooks
+- OS: Must work on both Windows and macOS, offline
+
+## Folder Structure
+
+Use existing project root as reference:
+
+- `EXCEL/`         (existing, contains main pallet workbook)
+- `EXCEL/CURRENT.xlsx` or `BUILD YYYY Q-X.xlsx` (existing workbook selection rules)
+- `PALLETS/`
+  - `pallet_history.json`        (new - pallet metadata)
+  - `exported/`                  (new - exported pallet-specific Excel files)
+
+Example `PALLETS/exported` contents:
+
+- `Pallet_1_2025-01-15_13-15.xlsx`
+- `Pallet_2_2025-01-15_14-30.xlsx`
+
+## Data Model: Pallet History JSON
+
+```json
+{
+  "pallets": [
+    {
+      "pallet_number": 1,
+      "completed_at": "2025-01-15 13:15:25",
+      "serial_numbers": [
+        "CRS2501FB2001234",
+        "CRS2501FB2001235"
+      ],
+      "exported_file": "PALLETS/exported/Pallet_1_2025-01-15_13-15.xlsx"
+    }
+  ],
+  "next_pallet_number": 2
+}
+```
+
+Constraints:
+- `pallet_number`: integer starting at 1, increments by 1 per completed pallet.
+- `serial_numbers`: list of up to 25 SerialNo strings, in the order they were added.
+- `completed_at`: ISO-ish string timestamp for display and sorting.
+- `exported_file`: relative path to the exported Excel file.
+
+## GUI Components (Tkinter)
+
+### Main Window
+
+- **Header area**
+  - Label: "SunSim Pallet Builder"
+  - Label: "Current Pallet: #X"
+  - Button: "History"
+
+- **Scan area**
+  - Big label: "Scan Barcode Here"
+  - Single-line `Entry` widget:
+    - Always focused
+    - On Enter → process scan
+
+- **Pallet slots area**
+  - Scrollable frame with up to 25 rows:
+    - "[1] SERIAL" + "Remove" button
+    - Empty slots clearly shown (e.g., "[7] (empty)")
+
+- **Status + Actions**
+  - Status label: "Slots: N/25" / "Ready to scan" / error messages
+  - When N < 25: no special actions
+  - When N == 25: show "Pallet is full" and action buttons:
+    - "Export & Save Pallet"
+    - "Review/Edit" (no export yet)
+
+### History Window
+
+- Table listing pallets (most recent first):
+  - Columns: Pallet #, Completed At, Export File Name
+- When a row is selected:
+  - Show details panel:
+    - Pallet #: X
+    - Completed At
+    - List of SerialNos (1–25)
+    - Buttons:
+      - "Open Export File"
+      - "Open Export Folder"
+
+# Functional Requirements
+
+## FR-1: Workbook Detection
+
+- **FR-1.1**: Reuse existing logic to locate the main pallet workbook:
+  - Prefer `EXCEL/CURRENT.xlsx` if it exists.
+  - Else, find the most recent `BUILD YYYY Q-X.xlsx` in `EXCEL/`.
+- **FR-1.2**: If no workbook is found, show a blocking error and exit the GUI gracefully.
+
+## FR-2: Serial Validation
+
+- **FR-2.1**: When a barcode is scanned, check that SerialNo exists in the main workbook `DATA` sheet (column B).
+- **FR-2.2**: If SerialNo not found in `DATA`, show an error (e.g. popup + status text) and do not add to pallet.
+- **FR-2.3**: Do not modify the DATA sheet when validating; open workbook read-only for lookup.
+
+## FR-3: Pallet Slot Management
+
+- **FR-3.1**: Each pallet holds up to 25 SerialNos.
+- **FR-3.2**: Pallet displays:
+  - Slot index (1–25)
+  - SerialNo for filled slots
+- **FR-3.3**: Duplicate SerialNo on the same pallet is not allowed; show a warning and do not add.
+- **FR-3.4**: Operator can remove a SerialNo from any slot:
+  - Removes that entry from the list
+  - UI updates and slot count decreases
+- **FR-3.5**: When slot count reaches 25:
+  - Show a clear "pallet full" state
+  - Show export actions
+
+## FR-4: Pallet Completion and Export
+
+- **FR-4.1**: On "Export & Save Pallet":
+  - Mark the pallet as completed with current timestamp.
+  - Generate a pallet-specific Excel export file in `PALLETS/exported/`.
+- **FR-4.2**: Exported Excel file requirements:
+  - Uses the same visual layout as the existing pallet sheet (as closely as practical without changing the original file).
+  - Contains the 25 SerialNos on that pallet.
+  - Does NOT alter the original workbook; it is a separate file.
+- **FR-4.3**: After a successful export:
+  - Append pallet metadata to `pallet_history.json`.
+  - Increment `next_pallet_number`.
+  - Clear the current pallet and start a new one automatically.
+- **FR-4.4**: If export fails, do not mark the pallet as completed; show an error and allow retry.
+
+## FR-5: Pallet History
+
+- **FR-5.1**: The system maintains a JSON file as the single source of truth for pallet history.
+- **FR-5.2**: History window reads from `pallet_history.json` and shows:
+  - Pallet #, Completed At, Export File Name
+- **FR-5.3**: From history, the operator can:
+  - Open the exported Excel file (system default handler).
+  - Open the export folder in the OS file explorer.
+- **FR-5.4**: History view should tolerate missing export files (e.g., if the file was moved manually) and show a clear warning.
+
+# Non-Functional Requirements
+
+- **Performance**:
+  - GUI must remain responsive on a low-spec PC.
+  - Validating a scanned SerialNo must feel instant for typical DATA sizes.
+- **Reliability**:
+  - If JSON history is corrupted, try to recover gracefully or start fresh with a backup.
+  - Do not crash the entire application on a single pallet export error.
+- **Usability**:
+  - Always keep keyboard focus in the scan entry field after each operation.
+  - Use simple, large fonts and clear messages fit for an operator environment.
+- **Portability**:
+  - Must run on the same Python runtime as the existing tool (3.11).
+  - No heavy GUI dependencies beyond Tkinter and already-used libraries (openpyxl, etc.).
+
+# Development Roadmap (High-Level)
+
+1. **Foundation**
+   - Implement pallet history manager (JSON) with unit tests.
+   - Implement workbook detection and SerialNo validation against DATA sheet.
+
+2. **Core GUI**
+   - Build Tkinter main window with scan box and 25-slot view.
+   - Wire up scanning, validation, duplicate checks, and removal.
+
+3. **Export Logic**
+   - Implement Excel export for a single pallet into `PALLETS/exported/`.
+   - Ensure exported file is visually suitable for printing.
+
+4. **Pallet History UI**
+   - Implement history window (view pallets, open export file/folder).
+   - Handle missing files gracefully.
+
+5. **Polish & Error Handling**
+   - Clear operator messages.
+   - Robust handling of file/permission errors.
+   - Documentation for operators on how to use the Pallet Builder alongside the existing import workflow.
+
+</PRD>
+
+
+
+
+

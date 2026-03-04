@@ -1,0 +1,43 @@
+# SunSim Packout Tool Configuration
+# All paths are relative to app/ directory (where tool_runner.py is located)
+
+# Folder paths
+input_folder: "../data/CSV_INPUT"
+excel_folder: "../data/EXCEL"
+current_workbook: "../data/EXCEL/CURRENT.xlsx"
+backup_folder: "../data/EXCEL/backups"
+log_folder: "../data/LOGS"
+archive_folder: "../data/ARCHIVE/processed_files"
+extra_files_folder: "../data/ARCHIVE/unprocessed_extra"
+status_file: "../data/STATUS.txt"
+instructions_file: "../data/OPERATOR INSTRUCTIONS.txt"
+
+# Workbook selection pattern
+workbook_name_must_contain: ["BUILD", "Q"]
+ignore_prefixes: ["~$"]
+
+# Validation ranges (warn but don't block)
+ranges:
+  pm_w: [0, 1000]
+  voc_v: [0, 100]
+  isc_a: [0, 50]
+  ipm_a: [0, 50]
+  vpm_v: [0, 100]
+
+# Panel type power ranges (from specification table)
+# Format: Panel Type (Watts): [Minimum Output, Maximum Output]
+panel_type_ranges:
+  200: [195, 206]
+  220: [214, 227]
+  325: [316, 335]
+  335: [325, 345.05]
+  380: [369, 391.4]
+  385: [375, 396.55]
+  390: [379, 401.7]
+  395: [384, 406.85]
+  450: [439, 463.5]
+
+
+
+
+

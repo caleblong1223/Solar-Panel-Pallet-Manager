@@ -1,0 +1,1673 @@
+{
+  "tags": {
+    "master": {
+      "metadata": {
+        "name": "master",
+        "description": "Main development tag",
+        "created": "2025-01-27"
+      },
+      "tasks": [
+        {
+          "id": "1",
+          "title": "Set up project folder structure",
+          "description": "Create all required directories (CSV_INPUT/, EXCEL/, EXCEL/backups/, LOGS/, ARCHIVE/processed_files/). Create requirements.txt with openpyxl, pandas, and python-dateutil dependencies. Validate directory structure exists.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Foundation task: Set up the complete folder structure as specified in the PRD. Create requirements.txt with all necessary Python dependencies. This is the first step before any code can be written.",
+          "testStrategy": "Verify all directories exist, requirements.txt contains correct packages, and structure matches PRD specification."
+        },
+        {
+          "id": "2",
+          "title": "Implement basic file detection",
+          "description": "Create function to find newest file in CSV_INPUT/ directory by modification time. Support both .csv and .xlsx file extensions. Handle empty directory gracefully. Return file path or None.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "1"
+          ],
+          "details": "Implement file detection logic that finds the most recently modified file in CSV_INPUT/. Must handle both .csv and .xlsx formats. Should return None if directory is empty and log appropriate message.",
+          "testStrategy": "Test with empty directory, single file, multiple files with different modification times, and files with different extensions."
+        },
+        {
+          "id": "3",
+          "title": "Implement basic logging system",
+          "description": "Create logging module that writes to LOGS/import_log.txt. Include timestamp formatting, log levels (INFO, WARNING, ERROR), and append mode. Create log directory if it doesn't exist.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "1"
+          ],
+          "details": "Set up comprehensive logging system that writes timestamped entries to LOGS/import_log.txt. Support different log levels and ensure directory is created if missing.",
+          "testStrategy": "Verify log file creation, timestamp formatting, log level filtering, and append functionality."
+        },
+        {
+          "id": "4",
+          "title": "Implement CSV file parsing",
+          "description": "Read CSV files from CSV_INPUT/. Handle different encodings (utf-8, latin-1). Parse headers and extract required fields: SerialNo, Pm, Isc, Voc(V), Ipm, Vpm(V), Date, TTime. Return list of dictionaries.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "2",
+            "3"
+          ],
+          "details": "Parse CSV files with flexible encoding handling. Extract all required fields and optional fields. Handle missing headers gracefully. Return structured data as list of dictionaries.",
+          "testStrategy": "Test with various CSV formats, different encodings, missing columns, and malformed data."
+        },
+        {
+          "id": "5",
+          "title": "Implement XLSX file parsing",
+          "description": "Read Excel files from CSV_INPUT/ using openpyxl or pandas. Extract required fields from first sheet. Handle different header row positions. Return list of dictionaries matching CSV format.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "2",
+            "3"
+          ],
+          "details": "Parse Excel files using openpyxl or pandas. Extract data from first sheet, handle header row detection, and return data in same format as CSV parser for consistency.",
+          "testStrategy": "Test with various Excel formats, different header positions, multiple sheets, and edge cases."
+        },
+        {
+          "id": "6",
+          "title": "Implement data normalization",
+          "description": "Strip whitespace from all string fields. Remove Excel-style =\"SERIAL\" wrappers. Convert numeric fields (Pm, Isc, Voc, Ipm, Vpm) to floats. Handle empty strings, None values, and invalid numbers gracefully. Return normalized data.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "4",
+            "5"
+          ],
+          "details": "Normalize all input data to ensure consistency. Remove Excel formula wrappers, clean whitespace, and convert numeric values. Handle edge cases without crashing.",
+          "testStrategy": "Test with wrapped values, extra whitespace, empty fields, None values, and invalid numeric strings."
+        },
+        {
+          "id": "7",
+          "title": "Implement data validation",
+          "description": "Validate required fields (SerialNo, Pm, Isc, Voc, Ipm, Vpm) are present and valid. Check SerialNo is non-empty string. Check numeric fields are valid floats. Skip rows with missing or invalid data. Return valid records and list of skipped records with reasons.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "6"
+          ],
+          "details": "Validate all required fields are present and properly formatted. Skip invalid rows and log reasons. Never crash on bad data.",
+          "testStrategy": "Test with missing fields, invalid types, empty SerialNos, and non-numeric electrical values."
+        },
+        {
+          "id": "8",
+          "title": "Implement latest-run-wins deduplication",
+          "description": "Group records by SerialNo. For duplicates, prefer latest Date + TTime combination. If Date/TTime missing, use last row in group. If processing multiple files, use file modification time as primary tiebreaker. Return single record per SerialNo.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "7"
+          ],
+          "details": "Implement deduplication logic that ensures only the most recent data per SerialNo is kept. Use Date/TTime as primary sort, file modification time as tiebreaker.",
+          "testStrategy": "Test with duplicate SerialNos, missing dates, same timestamps, and multiple files with same SerialNos."
+        },
+        {
+          "id": "9",
+          "title": "Implement workbook selection logic",
+          "description": "Check if EXCEL/CURRENT.xlsx exists and use it. Otherwise, find most recently modified .xlsx in EXCEL/ containing \"BUILD\", a year (e.g., 2026), and quarter token (Q1, Q-1, Q 1, etc.). Ignore files starting with \"~$\". Support --xlsx command-line override. Return workbook path or raise error.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "3"
+          ],
+          "details": "Implement smart workbook selection that prioritizes CURRENT.xlsx, then finds quarterly workbooks by pattern matching. Support command-line override for flexibility.",
+          "testStrategy": "Test with CURRENT.xlsx present, missing CURRENT.xlsx, multiple quarterly files, pattern matching, and command-line override."
+        },
+        {
+          "id": "10",
+          "title": "Implement Excel backup creation",
+          "description": "Before modifying workbook, create timestamped backup in EXCEL/backups/ directory. Format: BUILD_YYYY_Q-X_backup_YYYYMMDD_HHMMSS.xlsx. Use openpyxl to copy workbook. Create backups directory if needed. Log backup location.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "9"
+          ],
+          "details": "Create safety backup before any modifications. Use descriptive filename with timestamp. Ensure backup directory exists.",
+          "testStrategy": "Test backup creation, filename formatting, directory creation, and verify backup is identical to original."
+        },
+        {
+          "id": "11",
+          "title": "Implement SerialNo lookup in DATA sheet",
+          "description": "Open workbook using openpyxl. Find DATA sheet. Search column B for existing SerialNo values. Return dictionary mapping SerialNo to row number. Handle missing DATA sheet gracefully.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "9"
+          ],
+          "details": "Open Excel workbook and locate existing SerialNos in DATA sheet column B. Create mapping for efficient updates. Handle missing sheet error.",
+          "testStrategy": "Test with existing SerialNos, empty DATA sheet, missing DATA sheet, and various SerialNo formats."
+        },
+        {
+          "id": "12",
+          "title": "Implement Excel row update logic",
+          "description": "For existing SerialNos in DATA sheet, update columns H (Pm), I (Isc), J (Voc), K (Ipm), L (Vpm). Optionally update columns C (Date) and D (TTime). Preserve existing formatting. Never modify PALLET SHEET. Use openpyxl cell assignment.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "11"
+          ],
+          "details": "Update existing rows in DATA sheet with new electrical values. Preserve all formatting and formulas. Ensure PALLET SHEET is never touched.",
+          "testStrategy": "Test updating existing rows, verify formatting preserved, verify PALLET SHEET unchanged, and test with various data types."
+        },
+        {
+          "id": "13",
+          "title": "Implement Excel row append logic",
+          "description": "For new SerialNos not in DATA sheet, append new row at end. Populate columns B (SerialNo), C (Date), D (TTime), H (Pm), I (Isc), J (Voc), K (Ipm), L (Vpm). Preserve existing row formatting. Save workbook after updates.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "11"
+          ],
+          "details": "Append new rows for SerialNos not found in DATA sheet. Match existing row formatting. Save workbook after all updates complete.",
+          "testStrategy": "Test appending new rows, verify formatting matches existing rows, test with empty DATA sheet, and verify save functionality."
+        },
+        {
+          "id": "14",
+          "title": "Implement processed file archiving",
+          "description": "After successful processing, move input file from CSV_INPUT/ to ARCHIVE/processed_files/. Create archive directory if needed. Preserve original filename. Log archive location. Handle file move errors gracefully.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "12",
+            "13"
+          ],
+          "details": "Move processed files to archive to prevent reprocessing. Create archive directory if missing. Log archive location for tracking.",
+          "testStrategy": "Test file moving, directory creation, filename preservation, and error handling for permission issues."
+        },
+        {
+          "id": "15",
+          "title": "Implement comprehensive logging",
+          "description": "Log processed filename, selected workbook, updated/added/skipped counts, first 10 SerialNos processed, errors, warnings, and archive location. Format log entries with timestamps. Append to LOGS/import_log.txt.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "12",
+            "13",
+            "14"
+          ],
+          "details": "Create detailed log entries for every import operation. Include all relevant information for troubleshooting and audit trail.",
+          "testStrategy": "Verify all information is logged correctly, timestamps are accurate, and log file is readable."
+        },
+        {
+          "id": "16",
+          "title": "Implement console output",
+          "description": "Display user-friendly summary: \"Import complete. Updated: X, Added: Y, Skipped: Z. Open the pallet sheet, scan barcodes, and print.\" Print selected workbook name. Show any warnings or errors to user.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "15"
+          ],
+          "details": "Provide clear, user-friendly console output that tells operators exactly what happened and what to do next.",
+          "testStrategy": "Verify output format, counts are accurate, and messages are clear for operators."
+        },
+        {
+          "id": "17",
+          "title": "Create Windows runner script",
+          "description": "Create run_import.bat that changes to script directory, runs Python script, and pauses on completion. Make it user-friendly for double-click execution. Handle Python not found errors.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "16"
+          ],
+          "details": "Create simple batch file for Windows operators to double-click and run import. Handle common errors gracefully.",
+          "testStrategy": "Test double-click execution, verify directory change, test with Python not found, and verify pause on completion."
+        },
+        {
+          "id": "18",
+          "title": "Create macOS runner script",
+          "description": "Create run_import.command that changes to script directory, runs Python script, and keeps terminal open. Add execute permissions. Make it user-friendly for double-click execution. Handle Python not found errors.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "16"
+          ],
+          "details": "Create shell script for macOS operators to double-click and run import. Ensure execute permissions are set.",
+          "testStrategy": "Test double-click execution, verify execute permissions, test with Python not found, and verify terminal stays open."
+        },
+        {
+          "id": "19",
+          "title": "Create main script integration",
+          "description": "Combine all components into import_sunsim.py. Implement command-line argument parsing (--xlsx override). Add main() function with error handling. Ensure script never crashes on bad data. Add comprehensive error messages.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "8",
+            "9",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16"
+          ],
+          "details": "Integrate all components into main script. Add command-line interface. Ensure robust error handling throughout.",
+          "testStrategy": "Test complete workflow, error handling, command-line arguments, and edge cases."
+        },
+        {
+          "id": "20",
+          "title": "Create operator documentation",
+          "description": "Write README.txt with clear instructions for operators. Include folder structure requirements, how to use runner scripts, troubleshooting steps, what to do if errors occur, and how to verify successful import.",
+          "status": "done",
+          "priority": "low",
+          "dependencies": [
+            "17",
+            "18",
+            "19"
+          ],
+          "details": "Create comprehensive documentation for packout operators. Make it clear, simple, and focused on their workflow.",
+          "testStrategy": "Verify documentation is clear, complete, and covers all operator scenarios."
+        },
+        {
+          "id": "21",
+          "title": "Add progress indicators",
+          "description": "Add progress indicators to show processing status during import. Display 'Processing X/Y (Z%)' messages every 10 records or at completion. Show progress for both file parsing and Excel update phases. Keep console output clean and user-friendly.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Implement progress feedback for operators, especially important for large files. Show progress during CSV/XLSX parsing and Excel updates.",
+          "testStrategy": "Test with small and large files, verify progress messages appear correctly, ensure output is readable."
+        },
+        {
+          "id": "22",
+          "title": "Implement dry-run mode",
+          "description": "Implement dry-run mode with --dry-run flag. Process all data and show what would be updated/added, but don't actually save changes to Excel workbook. Display detailed summary of changes that would occur. This prevents accidental modifications and builds operator confidence.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Add --dry-run flag mentioned in PRD. Process everything but skip the save step. Show comprehensive summary of what would change.",
+          "testStrategy": "Test dry-run mode shows correct preview, verify no changes are saved, test with various scenarios."
+        },
+        {
+          "id": "23",
+          "title": "Add workbook structure validation",
+          "description": "Add workbook structure validation function. Check that DATA sheet exists, verify required columns (B, H, I, J, K, L) are present, validate column structure matches expected format. Warn if structure looks wrong before processing. This prevents VLOOKUP formula breakage.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Critical safety feature to prevent VLOOKUP breakage. Validate workbook structure before making any changes.",
+          "testStrategy": "Test with correct structure, missing columns, wrong sheet names, and malformed workbooks."
+        },
+        {
+          "id": "24",
+          "title": "Enhance error messages",
+          "description": "Enhance error messages to include row numbers, sample data, and actionable suggestions. When validation fails, show which row and what data caused the issue. Provide helpful hints like 'Check SerialNo format' or 'Verify electrical values are numeric'. Make errors more operator-friendly.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Improve error messages to be more helpful for operators. Include context and actionable advice.",
+          "testStrategy": "Test error messages with various failure scenarios, verify row numbers are correct, check suggestions are helpful."
+        },
+        {
+          "id": "25",
+          "title": "Add range validation for electrical values",
+          "description": "Add range validation for electrical values. Define reasonable ranges (Pm: 0-1000W, Voc/Vpm: 0-100V, Isc/Ipm: 0-50A). Log warnings for out-of-range values but still process them. This catches data quality issues early without blocking valid edge cases.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Add data quality checks with configurable ranges. Warn but don't block processing.",
+          "testStrategy": "Test with values in range, out of range, at boundaries. Verify warnings are logged correctly."
+        },
+        {
+          "id": "26",
+          "title": "Implement verbose mode",
+          "description": "Implement verbose mode with --verbose flag. Show detailed processing information including all SerialNos being processed (not just first 10), detailed field mappings, deduplication decisions, and step-by-step progress. Useful for debugging and troubleshooting.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Add --verbose flag mentioned in PRD. Provide detailed output for troubleshooting.",
+          "testStrategy": "Test verbose mode shows all expected details, verify it doesn't clutter normal output."
+        },
+        {
+          "id": "27",
+          "title": "Optimize performance with itertuples",
+          "description": "Optimize performance by replacing iterrows() with itertuples() in CSV/XLSX parsing. This provides 3-5x speed improvement for large files. Also consider using read_only mode when reading Excel workbooks for SerialNo lookup.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Performance optimization: use itertuples() instead of iterrows(), use read_only mode for reading.",
+          "testStrategy": "Test performance improvement with large files, verify functionality unchanged, benchmark speed."
+        },
+        {
+          "id": "28",
+          "title": "Generate summary report CSV",
+          "description": "Generate summary report CSV file after import. Include all SerialNos processed, before/after values for updates, added records, skipped records with reasons. Save to LOGS/ directory with timestamp. Provides better audit trail than just log file.",
+          "status": "pending",
+          "priority": "low",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Create CSV report for better audit trail and record-keeping.",
+          "testStrategy": "Test report generation, verify all data is included, check CSV format is correct."
+        },
+        {
+          "id": "29",
+          "title": "Improve date/time parsing with python-dateutil",
+          "description": "Improve date/time parsing using python-dateutil for more flexible date format handling. Add date validation to check for future dates and inconsistent formats. Enhance deduplication logic to better handle various date/time formats. This improves data integrity and handles more input file variations.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Use python-dateutil (mentioned in PRD) for better date parsing. Validate dates, check for future dates, improve deduplication.",
+          "testStrategy": "Test with various date formats, future dates, invalid dates, and verify deduplication works correctly."
+        },
+        {
+          "id": "30",
+          "title": "Add SerialNo format validation",
+          "description": "Add SerialNo format validation to detect suspicious patterns. Warn on SerialNos that are all zeros, all same character, or unusually short/long. Log format warnings for operator review. This catches data quality issues without blocking valid SerialNos.",
+          "status": "pending",
+          "priority": "low",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Validate SerialNo patterns to catch data quality issues early.",
+          "testStrategy": "Test with suspicious SerialNos (all zeros, repeated chars, very short/long) and verify warnings are logged."
+        },
+        {
+          "id": "31",
+          "title": "Implement better error recovery",
+          "description": "Implement better error recovery: continue processing even if some rows fail, provide summary of partial failures, and ensure transaction-like behavior where workbook is only saved if all critical operations succeed. This makes the tool more resilient to bad data while maintaining data integrity.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "19"
+          ],
+          "details": "Make tool more resilient by continuing on partial failures while maintaining data integrity.",
+          "testStrategy": "Test with files containing some bad rows, verify processing continues, check partial failure summary."
+        }
+      ]
+    },
+    "pallet-builder": {
+      "metadata": {
+        "name": "pallet-builder",
+        "description": "Live pallet builder GUI application for scanning barcodes and exporting pallet-specific Excel files",
+        "created": "2025-01-27"
+      },
+      "tasks": [
+        {
+          "id": "1",
+          "title": "Implement PalletManager class for JSON-based pallet history",
+          "description": "Create PalletManager class in app/pallet_manager.py that manages pallet history using JSON file. Implement methods: load_history(), save_history(), create_new_pallet(), add_serial(), remove_serial(), complete_pallet(), get_history(). Store data in PALLETS/pallet_history.json with structure: pallets array, next_pallet_number. Handle JSON corruption gracefully.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Foundation for pallet tracking. Use lightweight JSON storage. Each pallet has: pallet_number, completed_at, serial_numbers (max 25), exported_file path. Handle file I/O errors and JSON parsing errors gracefully.",
+          "testStrategy": "Test creating pallets, adding/removing serials, completing pallets, loading/saving history, and handling corrupted JSON files.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create PalletManager class structure with __init__ method",
+              "description": "Define class with history_file parameter, initialize self.data dict, call load_history() in __init__"
+            },
+            {
+              "id": 2,
+              "title": "Implement load_history() method",
+              "description": "Read JSON file, handle FileNotFoundError, handle JSONDecodeError (corruption), return default structure if file missing/corrupted"
+            },
+            {
+              "id": 3,
+              "title": "Implement save_history() method",
+              "description": "Write JSON with indent=2, use atomic write pattern (write to temp file, then rename), handle IOError gracefully"
+            },
+            {
+              "id": 4,
+              "title": "Implement create_new_pallet() method",
+              "description": "Create dict with pallet_number from next_pallet_number, empty serial_numbers list, None completed_at, None exported_file"
+            },
+            {
+              "id": 5,
+              "title": "Implement add_serial() method",
+              "description": "Append serial to pallet['serial_numbers'], enforce max 25 limit, return True if pallet is now full (25 serials)"
+            },
+            {
+              "id": 6,
+              "title": "Implement remove_serial() method",
+              "description": "Remove serial at slot_index from list, handle IndexError if slot_index invalid"
+            },
+            {
+              "id": 7,
+              "title": "Implement complete_pallet() method",
+              "description": "Set completed_at timestamp, set exported_file path, append to data['pallets'], increment next_pallet_number, call save_history()"
+            },
+            {
+              "id": 8,
+              "title": "Implement get_history() method",
+              "description": "Return list of pallets, optionally filter by exported status, sort by pallet_number descending (most recent first)"
+            }
+          ]
+        },
+        {
+          "id": "2",
+          "title": "Implement workbook detection and SerialNo validation",
+          "description": "Create functions to detect main pallet workbook using existing logic (prefer EXCEL/CURRENT.xlsx, else find BUILD YYYY Q-X.xlsx). Implement validate_serial() function that opens workbook read-only, checks DATA sheet column B for SerialNo existence. Return True/False. Handle missing workbook, missing DATA sheet, and file permission errors.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Reuse existing workbook detection from tool_runner.py. For validation, open workbook read-only to check SerialNo exists in DATA sheet column B. Never modify workbook during validation. Must be fast for real-time scanning.",
+          "testStrategy": "Test with CURRENT.xlsx present, BUILD file selection, missing workbook, missing DATA sheet, SerialNo found/not found, and read-only access.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create find_pallet_workbook() function",
+              "description": "Reuse logic from tool_runner.py: check EXCEL/CURRENT.xlsx first, else find BUILD YYYY Q-X.xlsx pattern, return Path or None"
+            },
+            {
+              "id": 2,
+              "title": "Create validate_serial() function",
+              "description": "Take SerialNo string and workbook_path, open workbook read-only with openpyxl, access DATA sheet"
+            },
+            {
+              "id": 3,
+              "title": "Implement SerialNo lookup in column B",
+              "description": "Iterate through DATA sheet column B (starting row 2), compare cell.value with SerialNo, return True if found"
+            },
+            {
+              "id": 4,
+              "title": "Add error handling for missing workbook",
+              "description": "Handle FileNotFoundError, return False with clear error message"
+            },
+            {
+              "id": 5,
+              "title": "Add error handling for missing DATA sheet",
+              "description": "Handle KeyError if 'DATA' not in sheetnames, return False"
+            },
+            {
+              "id": 6,
+              "title": "Add error handling for file permissions",
+              "description": "Handle PermissionError if workbook is locked/open, return False"
+            },
+            {
+              "id": 7,
+              "title": "Optimize for performance",
+              "description": "Use read_only=True, data_only=True, close workbook after lookup, consider caching workbook if needed"
+            }
+          ]
+        },
+        {
+          "id": "3",
+          "title": "Create PALLETS directory structure",
+          "description": "Ensure PALLETS/ directory exists with pallet_history.json and exported/ subdirectory. Create directories on first run if they don't exist. Add initialization code to create structure when PalletManager is instantiated.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "1"
+          ],
+          "details": "Create PALLETS/ directory at project root. Create exported/ subdirectory for pallet Excel files. Initialize pallet_history.json with empty structure if it doesn't exist.",
+          "testStrategy": "Test directory creation, verify structure exists, test with existing directories, and verify permissions.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create ensure_pallets_directory() function",
+              "description": "Check if PALLETS/ exists, create with mkdir(parents=True, exist_ok=True) if missing"
+            },
+            {
+              "id": 2,
+              "title": "Create exported/ subdirectory",
+              "description": "Ensure PALLETS/exported/ exists, create if missing"
+            },
+            {
+              "id": 3,
+              "title": "Initialize pallet_history.json if missing",
+              "description": "Check if JSON file exists, if not create with default structure: {'pallets': [], 'next_pallet_number': 1}"
+            },
+            {
+              "id": 4,
+              "title": "Integrate directory creation into PalletManager.__init__",
+              "description": "Call ensure_pallets_directory() and initialize JSON in PalletManager constructor"
+            }
+          ]
+        },
+        {
+          "id": "4",
+          "title": "Build Tkinter main window layout",
+          "description": "Create PalletBuilderGUI class in app/pallet_builder_gui.py. Build main window with: header (title, current pallet number, History button), scan area (large label, Entry widget), scrollable pallet slots area (25 slots), status area, action buttons area. Set window size 700x600, configure fonts for operator visibility.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "1",
+            "2"
+          ],
+          "details": "Create main GUI window structure. Use Tkinter widgets: Frame, Label, Entry, Canvas with Scrollbar for slots, Button. Configure large fonts (16pt for scan entry, 12pt for labels). Set window title and geometry.",
+          "testStrategy": "Test window displays correctly, all widgets visible, scrollable area works, fonts are readable, window is resizable.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create PalletBuilderGUI class and __init__ method",
+              "description": "Initialize tk.Tk(), set window title 'SunSim Pallet Builder', set geometry '700x600'"
+            },
+            {
+              "id": 2,
+              "title": "Build header frame",
+              "description": "Create Frame for header, add Label 'SunSim Pallet Builder', add Label for current pallet number, add History Button"
+            },
+            {
+              "id": 3,
+              "title": "Build scan area frame",
+              "description": "Create Frame, add large Label 'SCAN BARCODE HERE' (font size 12 bold), add Entry widget (font size 16), pack with padding"
+            },
+            {
+              "id": 4,
+              "title": "Build scrollable slots area",
+              "description": "Create Canvas with Scrollbar, create scrollable Frame inside canvas, configure scrollregion, pack canvas and scrollbar"
+            },
+            {
+              "id": 5,
+              "title": "Build status area",
+              "description": "Create Label for status text ('Ready to scan'), pack at bottom"
+            },
+            {
+              "id": 6,
+              "title": "Build action buttons area",
+              "description": "Create Frame for action buttons (initially empty, populated when pallet full), pack at bottom"
+            },
+            {
+              "id": 7,
+              "title": "Configure fonts and styling",
+              "description": "Set large fonts (16pt Entry, 12pt labels), configure colors for visibility, test on low-res displays"
+            }
+          ]
+        },
+        {
+          "id": "5",
+          "title": "Implement barcode scanning and validation",
+          "description": "Wire up scan Entry widget to process barcode on Enter key. Call validate_serial() to check SerialNo exists in workbook. If invalid, show error popup and status message, clear entry, refocus. If valid, add to current pallet. Check for duplicates on current pallet, show warning if duplicate. Always refocus scan entry after processing.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "4",
+            "2"
+          ],
+          "details": "Handle Enter key event in scan Entry. Validate SerialNo against workbook DATA sheet. Show user-friendly error messages. Prevent duplicate SerialNos on same pallet. Keep focus in scan entry for continuous scanning workflow.",
+          "testStrategy": "Test valid barcode adds to pallet, invalid barcode shows error, duplicate shows warning, focus returns to scan entry, error messages are clear.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Bind Enter key to scan Entry widget",
+              "description": "Use entry.bind('<Return>', self.on_barcode_scanned) to handle Enter key press"
+            },
+            {
+              "id": 2,
+              "title": "Implement on_barcode_scanned() event handler",
+              "description": "Get text from entry, strip whitespace, validate not empty"
+            },
+            {
+              "id": 3,
+              "title": "Call validate_serial() function",
+              "description": "Pass SerialNo and workbook_path to validate_serial(), handle return value"
+            },
+            {
+              "id": 4,
+              "title": "Handle invalid SerialNo",
+              "description": "If validation fails, show messagebox.showerror(), update status label, clear entry, refocus entry"
+            },
+            {
+              "id": 5,
+              "title": "Check for duplicate on current pallet",
+              "description": "Check if SerialNo already in current_pallet['serial_numbers'], show messagebox.showwarning() if duplicate"
+            },
+            {
+              "id": 6,
+              "title": "Add valid SerialNo to pallet",
+              "description": "Call pallet_manager.add_serial(), check if pallet is now full, update slot display"
+            },
+            {
+              "id": 7,
+              "title": "Clear entry and refocus",
+              "description": "Always clear entry text and call entry.focus() after processing (success or error)"
+            }
+          ]
+        },
+        {
+          "id": "6",
+          "title": "Implement pallet slot display and management",
+          "description": "Create update_slot_display() method that shows all 25 slots. Display filled slots with [N] SerialNo and Remove button. Show empty slots as [N] (empty). Update slot count status (Slots: N/25). Implement remove_serial() method that removes SerialNo from specific slot index, updates display, refocuses scan entry.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "4",
+            "5"
+          ],
+          "details": "Display slots in scrollable canvas. Each slot shows index, SerialNo (if filled), and Remove button. Empty slots clearly marked. Remove button calls remove_serial() with slot index. Update display after any change.",
+          "testStrategy": "Test slot display shows all 25 slots, filled slots show SerialNo, empty slots marked, Remove button works, slot count updates correctly, display refreshes after changes.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create update_slot_display() method",
+              "description": "Clear all existing slot widgets, iterate through 25 slots"
+            },
+            {
+              "id": 2,
+              "title": "Create slot widget for each position",
+              "description": "For each slot 1-25: create Frame, add Label with slot number [N], add Label with SerialNo (if filled) or '(empty)'"
+            },
+            {
+              "id": 3,
+              "title": "Add Remove button for filled slots",
+              "description": "If slot has SerialNo, add Button 'Remove' that calls remove_serial(slot_index) with lambda"
+            },
+            {
+              "id": 4,
+              "title": "Pack slot widgets into scrollable frame",
+              "description": "Pack each slot Frame into scrollable frame with padding, update canvas scrollregion"
+            },
+            {
+              "id": 5,
+              "title": "Update slot count status",
+              "description": "Update status label to show 'Slots: N/25' with current count"
+            },
+            {
+              "id": 6,
+              "title": "Implement remove_serial() method",
+              "description": "Call pallet_manager.remove_serial() with slot index, call update_slot_display(), refocus scan entry"
+            }
+          ]
+        },
+        {
+          "id": "7",
+          "title": "Implement pallet full detection and action buttons",
+          "description": "When slot count reaches 25, show 'Pallet is full!' message and display action buttons: 'Export & Save Pallet' and 'Review/Edit'. Hide action buttons when slot count < 25. Implement show_action_buttons() and hide_action_buttons() methods.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "6"
+          ],
+          "details": "Monitor slot count. When 25 slots filled, show prominent message and action buttons. When slots removed below 25, hide action buttons. Clear visual indication of pallet full state.",
+          "testStrategy": "Test action buttons appear at 25 slots, disappear below 25, message is clear, buttons are prominent and clickable.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Monitor slot count in update_slot_display()",
+              "description": "Check if len(current_pallet['serial_numbers']) == 25"
+            },
+            {
+              "id": 2,
+              "title": "Implement show_action_buttons() method",
+              "description": "Clear existing buttons, add Label 'Pallet is full!' (orange/red color), add Button 'Export & Save Pallet', add Button 'Review/Edit'"
+            },
+            {
+              "id": 3,
+              "title": "Implement hide_action_buttons() method",
+              "description": "Destroy all widgets in action buttons frame"
+            },
+            {
+              "id": 4,
+              "title": "Wire up action buttons",
+              "description": "Export button calls export_pallet(), Review/Edit button allows removing items (already implemented)"
+            },
+            {
+              "id": 5,
+              "title": "Update status when pallet full",
+              "description": "Change status label to show 'Pallet is full!' message"
+            }
+          ]
+        },
+        {
+          "id": "8",
+          "title": "Implement PalletExporter class for Excel export",
+          "description": "Create PalletExporter class in app/pallet_exporter.py. Implement export_pallet() method that: loads source workbook read-only, creates new workbook, copies PALLET SHEET format/structure, creates DATA sheet with just the 25 SerialNos and their electrical values, saves to PALLETS/exported/ with filename format: Pallet_N_YYYY-MM-DD_HH-MM.xlsx. Preserve formatting and formulas.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "2"
+          ],
+          "details": "Export creates standalone Excel file with same look as original. Copy PALLET SHEET template. Create DATA sheet with only the 25 SerialNos from pallet. Use openpyxl to copy formatting. Generate timestamped filename.",
+          "testStrategy": "Test export creates file, filename format correct, PALLET SHEET copied correctly, DATA sheet has 25 SerialNos, formatting preserved, file opens in Excel.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create PalletExporter class and __init__",
+              "description": "Store source_workbook Path and export_dir Path, create export_dir if missing"
+            },
+            {
+              "id": 2,
+              "title": "Implement export_pallet() method signature",
+              "description": "Take pallet dict, return Path to exported file"
+            },
+            {
+              "id": 3,
+              "title": "Generate export filename",
+              "description": "Format: 'Pallet_{pallet_number}_{timestamp}.xlsx' where timestamp is YYYY-MM-DD_HH-MM"
+            },
+            {
+              "id": 4,
+              "title": "Load source workbook read-only",
+              "description": "Use openpyxl.load_workbook() with read_only=True to get template"
+            },
+            {
+              "id": 5,
+              "title": "Create new workbook",
+              "description": "Create Workbook(), remove default sheet"
+            },
+            {
+              "id": 6,
+              "title": "Copy PALLET SHEET structure",
+              "description": "Iterate through source PALLET SHEET cells, copy value, font, border, fill, alignment to new sheet"
+            },
+            {
+              "id": 7,
+              "title": "Create DATA sheet with 25 SerialNos",
+              "description": "Copy header row from source DATA, find rows for each SerialNo in pallet, copy entire rows to new DATA sheet"
+            },
+            {
+              "id": 8,
+              "title": "Preserve formatting in new DATA sheet",
+              "description": "Copy cell styles (font, border, fill) from source to maintain visual appearance"
+            },
+            {
+              "id": 9,
+              "title": "Save exported workbook",
+              "description": "Save to export_dir with generated filename, close workbooks, return Path"
+            }
+          ]
+        },
+        {
+          "id": "9",
+          "title": "Wire up Export & Save Pallet functionality",
+          "description": "Implement export_pallet() method in GUI that: calls PalletExporter.export_pallet(), calls PalletManager.complete_pallet() to save to history, shows success message with option to open export folder, starts new pallet automatically. Handle export errors gracefully with error popup, don't mark pallet as completed on failure.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "7",
+            "8",
+            "1"
+          ],
+          "details": "Connect export button to export logic. Show user-friendly success message. Offer to open export folder. Automatically start new pallet after successful export. Never lose pallet data on export failure.",
+          "testStrategy": "Test export button triggers export, success message appears, export folder opens, new pallet starts, errors are handled gracefully, pallet not marked complete on failure.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Implement export_pallet() method in GUI",
+              "description": "Wrap in try/except, call PalletExporter.export_pallet()"
+            },
+            {
+              "id": 2,
+              "title": "Handle successful export",
+              "description": "Call PalletManager.complete_pallet() with exported file path, show success messagebox"
+            },
+            {
+              "id": 3,
+              "title": "Show success dialog with options",
+              "description": "Use messagebox.askyesno() to ask 'Open export folder?', call open_export_folder() if yes"
+            },
+            {
+              "id": 4,
+              "title": "Start new pallet after export",
+              "description": "Call start_new_pallet() after successful export"
+            },
+            {
+              "id": 5,
+              "title": "Handle export errors",
+              "description": "Catch exceptions, show error messagebox, do NOT call complete_pallet(), allow retry"
+            }
+          ]
+        },
+        {
+          "id": "10",
+          "title": "Implement start_new_pallet functionality",
+          "description": "Create start_new_pallet() method that: creates new empty pallet via PalletManager, updates pallet number display, clears slot display, resets status, hides action buttons, refocuses scan entry. Call this after successful export and on GUI initialization.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "6",
+            "1"
+          ],
+          "details": "Reset GUI state for new pallet. Clear all slots, update pallet number, reset status message, ensure scan entry is focused and ready for next pallet.",
+          "testStrategy": "Test new pallet starts correctly, display clears, pallet number increments, scan entry focused, all state reset properly.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create start_new_pallet() method",
+              "description": "Call pallet_manager.create_new_pallet(), store in self.current_pallet"
+            },
+            {
+              "id": 2,
+              "title": "Update pallet number display",
+              "description": "Update header label to show new pallet number"
+            },
+            {
+              "id": 3,
+              "title": "Clear slot display",
+              "description": "Call update_slot_display() which will show empty slots"
+            },
+            {
+              "id": 4,
+              "title": "Reset status message",
+              "description": "Set status label to 'Ready to scan'"
+            },
+            {
+              "id": 5,
+              "title": "Hide action buttons",
+              "description": "Call hide_action_buttons()"
+            },
+            {
+              "id": 6,
+              "title": "Refocus scan entry",
+              "description": "Call scan_entry.focus() to prepare for next scan"
+            }
+          ]
+        },
+        {
+          "id": "11",
+          "title": "Build Pallet History window",
+          "description": "Create PalletHistoryWindow class in app/pallet_history_window.py. Build window with: table/list showing pallet #, completed time, export file name (sorted most recent first), selection handler that shows details panel with full SerialNo list, buttons for 'Open Export File' and 'Open Export Folder'. Handle missing export files gracefully.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [
+            "1"
+          ],
+          "details": "Create separate window for viewing pallet history. Use Tkinter Treeview or Listbox for table. Show details when pallet selected. Buttons open file/folder using platform-appropriate commands. Show warning if export file missing.",
+          "testStrategy": "Test history window opens, shows all pallets, sorted correctly, selection shows details, buttons open file/folder, missing files show warning.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create PalletHistoryWindow class",
+              "description": "Inherit from tk.Toplevel, set window title 'Pallet History', set geometry"
+            },
+            {
+              "id": 2,
+              "title": "Build table/list widget",
+              "description": "Use ttk.Treeview with columns: 'Pallet #', 'Completed', 'File Name', populate from PalletManager.get_history()"
+            },
+            {
+              "id": 3,
+              "title": "Sort pallets by most recent first",
+              "description": "Sort by pallet_number descending in get_history() or after retrieval"
+            },
+            {
+              "id": 4,
+              "title": "Create details panel",
+              "description": "Frame showing selected pallet details: pallet number, completed time, SerialNo list (1-25)"
+            },
+            {
+              "id": 5,
+              "title": "Implement selection handler",
+              "description": "Bind Treeview selection event, update details panel with selected pallet data"
+            },
+            {
+              "id": 6,
+              "title": "Add Open Export File button",
+              "description": "Button calls open_export_file() with selected pallet's exported_file path"
+            },
+            {
+              "id": 7,
+              "title": "Add Open Export Folder button",
+              "description": "Button calls open_export_folder()"
+            },
+            {
+              "id": 8,
+              "title": "Handle missing export files",
+              "description": "Check if file exists before opening, show warning if missing"
+            }
+          ]
+        },
+        {
+          "id": "12",
+          "title": "Wire up History button and window integration",
+          "description": "Connect History button in main window to open PalletHistoryWindow. Ensure history window can be opened multiple times or is singleton. Refresh history data when window opens. Handle window close gracefully.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [
+            "4",
+            "11"
+          ],
+          "details": "Connect History button click to show history window. Load fresh data from JSON when window opens. Handle multiple opens (either allow multiple or make singleton).",
+          "testStrategy": "Test History button opens window, data is current, window can be reopened, closes properly.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Connect History button to handler",
+              "description": "Bind button command to show_history() method"
+            },
+            {
+              "id": 2,
+              "title": "Implement show_history() method",
+              "description": "Create PalletHistoryWindow instance, pass pallet_manager reference"
+            },
+            {
+              "id": 3,
+              "title": "Implement singleton pattern (optional)",
+              "description": "Check if history window already exists, bring to front if exists, or allow multiple windows"
+            },
+            {
+              "id": 4,
+              "title": "Refresh history data on open",
+              "description": "Call PalletManager.get_history() when window opens to get latest data"
+            },
+            {
+              "id": 5,
+              "title": "Handle window close",
+              "description": "Bind window close event, destroy window properly"
+            }
+          ]
+        },
+        {
+          "id": "13",
+          "title": "Implement cross-platform file/folder opening",
+          "description": "Create open_export_file() and open_export_folder() functions that use platform-appropriate commands: Windows (explorer), macOS (open), Linux (xdg-open). Handle file not found errors gracefully. Use subprocess module for cross-platform compatibility.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [
+            "11"
+          ],
+          "details": "Use subprocess to open files/folders. Detect platform using platform.system(). Handle PermissionError and FileNotFoundError gracefully. Show user-friendly error messages.",
+          "testStrategy": "Test file opens on Windows/macOS, folder opens correctly, missing files handled, errors shown clearly.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create open_export_file() function",
+              "description": "Take file_path Path, detect platform using platform.system()"
+            },
+            {
+              "id": 2,
+              "title": "Implement Windows file opening",
+              "description": "Use subprocess.run(['explorer', str(file_path)]) for Windows"
+            },
+            {
+              "id": 3,
+              "title": "Implement macOS file opening",
+              "description": "Use subprocess.run(['open', str(file_path)]) for macOS"
+            },
+            {
+              "id": 4,
+              "title": "Implement Linux file opening",
+              "description": "Use subprocess.run(['xdg-open', str(file_path)]) for Linux"
+            },
+            {
+              "id": 5,
+              "title": "Create open_export_folder() function",
+              "description": "Take folder Path, open folder instead of file"
+            },
+            {
+              "id": 6,
+              "title": "Add error handling",
+              "description": "Handle FileNotFoundError, PermissionError, show user-friendly error messages"
+            }
+          ]
+        },
+        {
+          "id": "14",
+          "title": "Add error handling and user-friendly messages",
+          "description": "Add comprehensive error handling throughout GUI: workbook not found, JSON corruption, export failures, file permission errors, missing export files. Show clear, actionable error messages using messagebox. Never crash application on errors. Log errors for debugging.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "4",
+            "8",
+            "9"
+          ],
+          "details": "Wrap all operations in try/except. Show user-friendly error dialogs. Log errors to file for debugging. Provide actionable error messages (e.g., 'Close Excel and try again'). Never lose pallet data on errors.",
+          "testStrategy": "Test all error scenarios, verify messages are clear, application doesn't crash, errors are logged, user can recover from errors.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Wrap workbook detection in try/except",
+              "description": "Handle FileNotFoundError, show error dialog, exit gracefully if workbook not found"
+            },
+            {
+              "id": 2,
+              "title": "Wrap JSON operations in try/except",
+              "description": "Handle JSONDecodeError (corruption), IOError (permissions), show error, attempt recovery"
+            },
+            {
+              "id": 3,
+              "title": "Wrap export operations in try/except",
+              "description": "Handle PermissionError (file locked), IOError (disk full), show error, don't mark pallet complete"
+            },
+            {
+              "id": 4,
+              "title": "Create error logging",
+              "description": "Log all errors to file (similar to existing logging), include traceback for debugging"
+            },
+            {
+              "id": 5,
+              "title": "Create user-friendly error messages",
+              "description": "Convert technical errors to actionable messages (e.g., 'Close Excel and try again')"
+            },
+            {
+              "id": 6,
+              "title": "Implement error recovery strategies",
+              "description": "For JSON corruption: backup corrupted file, start fresh. For export failure: allow retry without data loss"
+            }
+          ]
+        },
+        {
+          "id": "15",
+          "title": "Create launcher scripts for Pallet Builder",
+          "description": "Create RUN PALLET BUILDER.bat (Windows) and RUN PALLET BUILDER.command (macOS) scripts that launch the GUI application. Handle Python not found errors. Set execute permissions on macOS script. Make scripts user-friendly for double-click execution.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [
+            "4"
+          ],
+          "details": "Create simple launcher scripts similar to existing RUN IMPORT scripts. Launch pallet_builder_gui.py. Handle Python path and errors gracefully. Test double-click execution.",
+          "testStrategy": "Test double-click execution on Windows/macOS, Python not found handled, GUI launches correctly, scripts are user-friendly.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create RUN PALLET BUILDER.bat for Windows",
+              "description": "Change to script directory, run python app/pallet_builder_gui.py, pause on error"
+            },
+            {
+              "id": 2,
+              "title": "Add Python check to Windows script",
+              "description": "Check if python command exists, show error if not found"
+            },
+            {
+              "id": 3,
+              "title": "Create RUN PALLET BUILDER.command for macOS",
+              "description": "Add shebang #!/bin/bash, change to script directory, run python3 app/pallet_builder_gui.py"
+            },
+            {
+              "id": 4,
+              "title": "Set execute permissions on macOS script",
+              "description": "Use chmod +x or note in instructions"
+            },
+            {
+              "id": 5,
+              "title": "Add Python check to macOS script",
+              "description": "Check if python3 exists, show error message if not found"
+            },
+            {
+              "id": 6,
+              "title": "Test double-click execution",
+              "description": "Verify scripts work when double-clicked on both platforms"
+            }
+          ]
+        },
+        {
+          "id": "16",
+          "title": "Add operator documentation for Pallet Builder",
+          "description": "Create PALLET BUILDER INSTRUCTIONS.txt with clear instructions: how to launch, how to scan barcodes, what to do when pallet is full, how to use history, troubleshooting. Keep it simple and focused on operator workflow. Include screenshots or ASCII diagrams if helpful.",
+          "status": "done",
+          "priority": "low",
+          "dependencies": [
+            "15"
+          ],
+          "details": "Write clear, simple documentation for operators. Focus on daily workflow. Include troubleshooting common issues. Make it accessible and easy to understand.",
+          "testStrategy": "Verify documentation is clear, complete, covers all workflows, troubleshooting is helpful.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Create PALLET BUILDER INSTRUCTIONS.txt file",
+              "description": "Write clear, simple instructions for operators"
+            },
+            {
+              "id": 2,
+              "title": "Document launch process",
+              "description": "Explain how to double-click launcher script, what to expect"
+            },
+            {
+              "id": 3,
+              "title": "Document scanning workflow",
+              "description": "Step-by-step: scan barcode, see it appear in list, what to do if error"
+            },
+            {
+              "id": 4,
+              "title": "Document pallet full process",
+              "description": "Explain what happens when 25 slots filled, how to export, how to start new pallet"
+            },
+            {
+              "id": 5,
+              "title": "Document history feature",
+              "description": "How to view old pallets, how to print old pallets"
+            },
+            {
+              "id": 6,
+              "title": "Add troubleshooting section",
+              "description": "Common errors and solutions: workbook not found, SerialNo not found, export fails"
+            }
+          ]
+        }
+      ]
+    },
+    "feature-2.0": {
+      "metadata": {
+        "name": "feature-2.0",
+        "description": "Pallet Manager 2.0 implementation driven from PRD",
+        "created": "2026-03-03"
+      },
+      "tasks": [
+        {
+          "id": "1",
+          "title": "Draft Pallet Manager 2.0 PRD document",
+          "description": "Create a detailed Product Requirements Document for Pallet Manager 2.0 capturing goals, non-goals, users, scope, architecture, data model, APIs, UI/UX, migration strategy, and success metrics.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Author docs/PRD_PALLET_MANAGER_2_0.md based on 1.1 lessons learned and new 2.0 objectives. Ensure the document clearly describes intranet/offline-capable architecture, core entities, endpoint groups, and operational KPIs so that engineering and operations share the same expectations.",
+          "testStrategy": "Verify PRD lives at docs/PRD_PALLET_MANAGER_2_0.md, is complete across all major sections, and is understandable to both technical and non-technical stakeholders."
+        },
+        {
+          "id": "2",
+          "title": "Define 2.0 technical direction and architecture",
+          "description": "Lock in the 2.0 stack: Tauri + React desktop app, FastAPI backend, PostgreSQL, MinIO object storage, background job strategy, and intranet deployment modes.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "1"
+          ],
+          "details": "Confirm that the product will ship as a Tauri-wrapped React desktop client talking to a FastAPI service backed by PostgreSQL and MinIO, with support for dedicated intranet server, packout-hosted fallback, and offline-tolerant local deployment. Capture this direction in PRD Section 8 and supporting diagrams in the TDD.",
+          "testStrategy": "Review PRD and TDD to ensure the chosen technologies, deployment modes, and data ownership model are explicitly documented and agreed."
+        },
+        {
+          "id": "3",
+          "title": "Author Pallet Manager 2.0 Technical Design Document (TDD)",
+          "description": "Create a TDD that translates the PRD into concrete module boundaries, APIs, data flows, and deployment details.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "1",
+            "2"
+          ],
+          "details": "Author docs/TDD_PALLET_MANAGER_2_0.md to cover high-level component diagrams, service responsibilities, data model mapping from legacy JSON to PostgreSQL, API contracts, background processing model, and error-handling patterns. Ensure the design stays aligned with the PRD but is specific enough to guide implementation.",
+          "testStrategy": "Review TDD for coverage of all PRD functional areas (auth, pallet lifecycle, search, simulator import, exports, audit) and verify there are no obvious gaps or contradictions."
+        },
+        {
+          "id": "4",
+          "title": "Scaffold backend FastAPI project and database tooling",
+          "description": "Create the backend service skeleton with FastAPI, configuration management, routing layout, Alembic migrations, and initial SQL schema file.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "3"
+          ],
+          "details": "Set up backend/ with a FastAPI app, config loading, routing modules, and Alembic migration environment. Add backend/alembic/versions/20260303_0001_initial_schema.py and backend/schema_v1.sql as the first schema baseline. Ensure Dockerfile and tests are present so the service can be started in isolation.",
+          "testStrategy": "Run backend unit tests and start the FastAPI app locally. Confirm Alembic can create and upgrade the schema from an empty database using the initial migration."
+        },
+        {
+          "id": "5",
+          "title": "Scaffold React + Tauri frontend project",
+          "description": "Initialize the Tauri + React/Vite desktop client with starter UI and project structure that matches PRD screens.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "3"
+          ],
+          "details": "Create frontend/ with a Vite-based React app wired into Tauri, including basic routing, layout shell, and placeholder screens for Login, Dashboard, Pallet Builder, History Explorer, Import Center, Export Library, and Admin/Settings. Ensure dev scripts work on the target OS.",
+          "testStrategy": "Run the Tauri dev build, confirm the app window opens and navigation between placeholder screens works without errors."
+        },
+        {
+          "id": "6",
+          "title": "Create intranet Docker stack for API, DB, and MinIO",
+          "description": "Provide a docker-compose configuration for the intranet deployment stack including API, PostgreSQL, MinIO, and optional worker.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "4"
+          ],
+          "details": "Add docker-compose.intranet.yml with services for FastAPI, PostgreSQL, MinIO, and any background worker. Configure volumes for DB and object storage and expose ports suitable for intranet use. Resolve port conflicts (e.g., move Postgres host port to 5433) and ensure services can be brought up with a single command.",
+          "testStrategy": "Run docker-compose using the intranet file and verify that API, Postgres, and MinIO are all reachable and healthy from the local machine."
+        },
+        {
+          "id": "7",
+          "title": "Implement initial migration tooling and validate legacy import",
+          "description": "Build Python scripts to migrate existing legacy JSON/CSV data into PostgreSQL and reconcile results against current 1.1 records.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "4",
+            "6"
+          ],
+          "details": "Implement backend/scripts/migrate_legacy_data.py, backend/scripts/reconcile_migration.py, and backend/scripts/bootstrap_local_stack.sh to bootstrap the stack, run migrations, and compare counts and sample records. Use these tools to run a real migration and reconcile pallets, pallet_items, customers, and exports.",
+          "testStrategy": "Run the migration end-to-end and verify that counts match expectations (e.g., pallets 4, pallet_items 15, customers 21, exports 4) and that reconciliation surfaces no critical discrepancies."
+        },
+        {
+          "id": "8",
+          "title": "Establish 1.1 and 2.0 git branching model",
+          "description": "Set up git branches main, release/1.1-fallback, and develop/2.0 and document the branching strategy for ongoing work.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [],
+          "details": "Create and push the main, release/1.1-fallback, and develop/2.0 branches to GitHub, and add docs/BRANCHING_STRATEGY.md describing how 1.1 bugfixes and 2.0 features should flow through these branches.",
+          "testStrategy": "Confirm all three branches exist on origin and that the branching strategy document accurately reflects the intended workflow."
+        },
+        {
+          "id": "9",
+          "title": "Finalize and approve 2.0 PRD scope",
+          "description": "Review the PRD with stakeholders, lock scope for 2.0, and track any out-of-scope items for future versions.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "1",
+            "2",
+            "3"
+          ],
+          "details": "Walk through docs/PRD_PALLET_MANAGER_2_0.md with operations, purchasing, and IT to confirm goals, non-goals, and constraints. Capture sign-off, explicitly document open questions and decisions, and ensure scope aligns with realistic timeline and resources.",
+          "testStrategy": "Hold a review session and record decisions; verify PRD is updated with final scope, open questions are clearly called out, and stakeholders acknowledge acceptance."
+        },
+        {
+          "id": "10",
+          "title": "Finalize v1 data model and indexing strategy",
+          "description": "Refine the PostgreSQL schema and indexes for users, roles, customers, pallets, pallet_items, sim_import_batches, sim_panels, exports, and audit_events based on PRD Section 9.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "4",
+            "7"
+          ],
+          "details": "Iterate on backend/schema_v1.sql and Alembic migrations to ensure constraints, relationships, soft-delete behavior, and indexing (including partial/trigram indexes where useful) satisfy 2.0 search, reporting, and traceability requirements.",
+          "testStrategy": "Run migrations against a fresh database and validate schema against PRD requirements. Use representative queries for search and history endpoints to confirm performance and correctness.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Inventory core queries and reports",
+              "description": "List concrete queries from PRD/backlog for search, history, reporting, and audit so indexes and schema can be designed around real workloads."
+            },
+            {
+              "id": 2,
+              "title": "Refine logical schema and relationships",
+              "description": "Update the logical ERD/schema doc for users, customers, pallets, pallet_items, sim_import_batches, sim_panels, exports, and audit_events."
+            },
+            {
+              "id": 3,
+              "title": "Design indexing strategy",
+              "description": "Choose b-tree, partial, and trigram indexes per entity and query pattern to satisfy performance targets."
+            },
+            {
+              "id": 4,
+              "title": "Apply schema in Alembic and schema_v1.sql",
+              "description": "Update Alembic migrations and schema_v1.sql to match the refined model, including constraints and indexes."
+            },
+            {
+              "id": 5,
+              "title": "Run performance spike on realistic data",
+              "description": "Seed the database with a representative dataset and benchmark core queries, adjusting indexes as needed."
+            },
+            {
+              "id": 6,
+              "title": "Document data model and indexes",
+              "description": "Add a short data model and index reference section to the TDD for future developers."
+            }
+          ]
+        },
+        {
+          "id": "11",
+          "title": "Implement core authentication",
+          "description": "Build FastAPI auth endpoints and middleware to support login, session/refresh, and logout for intranet users.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "10"
+          ],
+          "details": "Implement /auth/* endpoints using secure password hashing (bcrypt/Argon2) and session or token management appropriate for Tauri clients. All authenticated users may perform application actions; there is no role-based permission separation. Ensure audit events are emitted for login and logout to support traceability.",
+          "testStrategy": "Write API tests that cover login, invalid credentials, and session expiry. Verify that authenticated users can access protected endpoints and unauthenticated requests are rejected.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Choose token/session model for Tauri",
+              "description": "Decide between cookie-based sessions and JWTs for the intranet Tauri client, documenting tradeoffs."
+            },
+            {
+              "id": 2,
+              "title": "Implement user auth models and repositories",
+              "description": "Ensure user persistence and password hash storage support the chosen auth approach."
+            },
+            {
+              "id": 3,
+              "title": "Implement /auth/login and /auth/me endpoints",
+              "description": "Handle credential verification, token or session creation, and return current user info for the client."
+            },
+            {
+              "id": 4,
+              "title": "Implement refresh and logout behavior",
+              "description": "Add token refresh (if used) and logout endpoints or flows to clean up sessions on demand."
+            },
+            {
+              "id": 5,
+              "title": "Wire audit logging for auth events",
+              "description": "Emit audit_events for login success/failure and logout for traceability."
+            },
+            {
+              "id": 6,
+              "title": "Add auth test coverage",
+              "description": "Create tests for valid login, invalid credentials, expired sessions, and access to protected endpoints."
+            }
+          ]
+        },
+        {
+          "id": "12",
+          "title": "Implement pallet lifecycle APIs",
+          "description": "Create FastAPI endpoints for creating pallets, adding/removing serials, enforcing capacity templates, completing/resetting/deleting pallets, and retrieving pallet details and history.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "10",
+            "11"
+          ],
+          "details": "Implement /pallets/* endpoints following PRD Sections 6.2 and 6.4, enforcing capacity rules per template type, tracking status changes, and emitting audit events. Ensure pallet state transitions are validated and idempotent where appropriate.",
+          "testStrategy": "Write tests that exercise full pallet lifecycle flows, including edge cases like duplicate serials, capacity limits, resets, and soft deletes with audit retention.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define pallet state machine",
+              "description": "Document pallet states and legal transitions in the TDD to guide implementation."
+            },
+            {
+              "id": 2,
+              "title": "Implement pallet create and update endpoints",
+              "description": "Add /pallets/create and update endpoints with schema validation and error handling."
+            },
+            {
+              "id": 3,
+              "title": "Implement add/remove serial operations",
+              "description": "Support adding and removing serials with capacity and duplicate checks using pallet_items."
+            },
+            {
+              "id": 4,
+              "title": "Implement complete/reset/delete flows",
+              "description": "Handle completion, reset, and soft delete operations enforcing the state machine rules."
+            },
+            {
+              "id": 5,
+              "title": "Emit audit events for lifecycle changes",
+              "description": "Write pallet-related audit_events for key lifecycle actions with old/new state details."
+            },
+            {
+              "id": 6,
+              "title": "Add lifecycle test coverage",
+              "description": "Create tests for valid and invalid transitions, duplicates, and capacity enforcement."
+            }
+          ]
+        },
+        {
+          "id": "13",
+          "title": "Implement barcode and history search APIs",
+          "description": "Expose endpoints for barcode/serial search and pallet history filtering with pagination, sorting, and combined filters.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "10",
+            "12"
+          ],
+          "details": "Implement /barcodes/search and pallet history endpoints that support filtering by serial, date range, status, customer, operator, pallet number, and presence of specific serials. Leverage appropriate indexes to meet PRD performance targets.",
+          "testStrategy": "Create tests using realistic datasets that verify correct filtering, pagination, and performance under expected load.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Design search and history API contracts",
+              "description": "Specify request/response models for barcode search and pallet history endpoints."
+            },
+            {
+              "id": 2,
+              "title": "Implement barcode search endpoint",
+              "description": "Query pallet_items and sim_panels for exact and partial matches using appropriate indexes."
+            },
+            {
+              "id": 3,
+              "title": "Implement pallet history filter endpoint",
+              "description": "Build history queries with filters for date range, status, customer, operator, and pallet number."
+            },
+            {
+              "id": 4,
+              "title": "Add pagination and sorting layer",
+              "description": "Provide a consistent pagination and sorting abstraction that search and history endpoints share."
+            },
+            {
+              "id": 5,
+              "title": "Benchmark and tune search performance",
+              "description": "Run load tests against search and history endpoints and refine indexes or queries as needed."
+            },
+            {
+              "id": 6,
+              "title": "Add search API test coverage",
+              "description": "Write tests that verify filter combinations, ordering, and pagination semantics."
+            }
+          ]
+        },
+        {
+          "id": "14",
+          "title": "Implement simulator import and background processing flows",
+          "description": "Build endpoints and background jobs for uploading simulator files, validating schemas, processing records into sim_import_batches and sim_panels, and surfacing import diagnostics.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "10"
+          ],
+          "details": "Implement /simulator/imports/* endpoints to upload files in the existing operational format, validate headers, queue background processing, and record both normalized records and source file metadata. Integrate optional MinIO storage for raw files where required.",
+          "testStrategy": "Test imports with valid and invalid simulator files, verify error diagnostics, ensure idempotency protections, and confirm processed records appear correctly in the database.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define import batch lifecycle",
+              "description": "Specify statuses and transitions for sim_import_batches and how they are surfaced to the UI."
+            },
+            {
+              "id": 2,
+              "title": "Implement upload endpoint and batch creation",
+              "description": "Create an endpoint that accepts simulator files, stores them, and creates a pending batch row."
+            },
+            {
+              "id": 3,
+              "title": "Implement simulator parser adapter",
+              "description": "Parse the existing simulator format into sim_panels with row-level error collection."
+            },
+            {
+              "id": 4,
+              "title": "Wire background processing worker",
+              "description": "Choose and configure a background job mechanism to process imports asynchronously."
+            },
+            {
+              "id": 5,
+              "title": "Store raw uploads in MinIO",
+              "description": "Persist original files to MinIO with object keys and checksums linked to the batch."
+            },
+            {
+              "id": 6,
+              "title": "Implement import monitoring endpoints",
+              "description": "Expose batch status and error summaries for the UI to poll or subscribe to."
+            }
+          ]
+        },
+        {
+          "id": "15",
+          "title": "Implement export generation, storage, and retrieval APIs",
+          "description": "Create endpoints to generate pallet export PDFs, store them in MinIO with metadata in the exports table, and provide signed URL download flows.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "10",
+            "12"
+          ],
+          "details": "Implement /exports/* endpoints that generate export artifacts, write them to MinIO with checksum, size, template type, and timestamps, and link them to pallets. Ensure signed URLs are used for retrieval and that audit events capture export and download actions.",
+          "testStrategy": "Verify exports can be created and downloaded end-to-end, with correct metadata in the database and proper authorization checks.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define export template and metadata model",
+              "description": "Decide how export templates and their versions are modeled and recorded in the database."
+            },
+            {
+              "id": 2,
+              "title": "Implement export generation service",
+              "description": "Generate PDFs from pallet data, reusing or evolving existing 1.1 export logic."
+            },
+            {
+              "id": 3,
+              "title": "Upload exports to MinIO and persist metadata",
+              "description": "Store export PDFs in MinIO and create exports rows with checksum, size, and object key."
+            },
+            {
+              "id": 4,
+              "title": "Implement export list and download endpoints",
+              "description": "Add endpoints for querying exports and returning signed download URLs."
+            },
+            {
+              "id": 5,
+              "title": "Add audit logging for exports",
+              "description": "Emit audit events when exports are created and when users download them."
+            },
+            {
+              "id": 6,
+              "title": "Add export API test coverage",
+              "description": "Test export creation, listing, and download flows including error cases."
+            }
+          ]
+        },
+        {
+          "id": "16",
+          "title": "Build core 2.0 UI flows in Tauri + React",
+          "description": "Implement the main UI screens and navigation shell: Login, Dashboard, Live Pallet Builder, Pallet History Explorer, Simulator Import Center, Export Library, and Admin/Settings.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "5",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15"
+          ],
+          "details": "Replace placeholder screens in the Tauri client with functional views wired to the API. Implement keyboard-first scan flow for the pallet builder, search-centric history explorer, import monitoring views, and export browsing and download UI, following the PRD UX and accessibility guidelines.",
+          "testStrategy": "Perform manual UX walkthroughs of each core flow and add UI tests where practical to confirm that users can complete daily operations without backend errors.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Implement design system and layout shell",
+              "description": "Create theme tokens, typography, layout shell, navigation, and global notification components."
+            },
+            {
+              "id": 2,
+              "title": "Build auth flow and route guards",
+              "description": "Implement login screen, auth context, route guards, and token refresh handling in the Tauri app."
+            },
+            {
+              "id": 3,
+              "title": "Build Live Pallet Builder UI",
+              "description": "Create the pallet build screen with keyboard-first scanning, capacity feedback, and completion UX."
+            },
+            {
+              "id": 4,
+              "title": "Build Pallet History Explorer UI",
+              "description": "Implement server-driven table, filters, and details pane for pallet history exploration."
+            },
+            {
+              "id": 5,
+              "title": "Build Import Center and Export Library UIs",
+              "description": "Create screens for import upload/progress and export browsing/download, wired to backend APIs."
+            },
+            {
+              "id": 6,
+              "title": "Build Admin/Settings UI",
+              "description": "Implement settings views for templates and system health suitable for intranet use."
+            }
+          ]
+        },
+        {
+          "id": "17",
+          "title": "Implement audit logging, monitoring, and backup routines",
+          "description": "Ensure all critical actions are logged, backups are configured for Postgres and MinIO, and basic health/monitoring endpoints are in place.",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [
+            "10",
+            "11",
+            "12",
+            "15"
+          ],
+          "details": "Implement audit_events recording for key flows, configure scheduled backups for Postgres and MinIO according to PRD Section 14, and expose /health/* endpoints with structured logs to support uptime and incident response.",
+          "testStrategy": "Simulate representative operations and verify audit trails exist, run backup and restore drills in a non-production environment, and confirm health endpoints behave correctly under normal and degraded conditions.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define audit event schema and taxonomy",
+              "description": "Specify event types, payload fields, and correlation IDs for audit_events."
+            },
+            {
+              "id": 2,
+              "title": "Implement audit hooks across key flows",
+              "description": "Add audit logging to auth, pallet lifecycle, imports, and exports."
+            },
+            {
+              "id": 3,
+              "title": "Implement health and monitoring endpoints",
+              "description": "Expose /health/* and configure structured logging to support monitoring."
+            },
+            {
+              "id": 4,
+              "title": "Design backup and restore strategy",
+              "description": "Define backup cadence, retention, and storage for Postgres and MinIO."
+            },
+            {
+              "id": 5,
+              "title": "Implement backup scripts and scheduling",
+              "description": "Create scripts or jobs for regular Postgres and MinIO backups in intranet environments."
+            },
+            {
+              "id": 6,
+              "title": "Run restore drill and document runbook",
+              "description": "Perform a restore into a test environment and document the steps and outcomes."
+            }
+          ]
+        },
+        {
+          "id": "18",
+          "title": "Execute 2.0 stabilization, UAT, and cutover",
+          "description": "Run stabilization, performance tuning, UAT, and the migration cutover plan from legacy 1.1 to 2.0.",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17"
+          ],
+          "details": "Follow the PRD release plan phases to stabilize the system, run user acceptance testing with packout and purchasing, execute dual-write and DB-first phases, validate migrated data, and finalize rollback plans. Confirm all acceptance criteria in the PRD are met before declaring 2.0 live.",
+          "testStrategy": "Track UAT sessions, performance metrics, and incident reports during a trial window; verify that success criteria in PRD Section 18 are satisfied and that legacy workflows can be fully retired.",
+          "subtasks": [
+            {
+              "id": 1,
+              "title": "Define stabilization and readiness criteria",
+              "description": "Specify performance, reliability, and bug thresholds required before cutover."
+            },
+            {
+              "id": 2,
+              "title": "Implement end-to-end test suite for critical flows",
+              "description": "Create API and UI tests for login, pallet build, import, export, and search."
+            },
+            {
+              "id": 3,
+              "title": "Plan and run UAT sessions",
+              "description": "Script UAT scenarios with packout and purchasing and track issues and sign-off."
+            },
+            {
+              "id": 4,
+              "title": "Rehearse migration and cutover steps",
+              "description": "Perform dry-run of migration, dual-write, and rollback steps in a non-production environment."
+            },
+            {
+              "id": 5,
+              "title": "Execute production cutover",
+              "description": "Deploy 2.0, migrate data, switch clients, and monitor for issues over the acceptance window."
+            },
+            {
+              "id": 6,
+              "title": "Capture post-cutover lessons and 2.x backlog",
+              "description": "Record lessons learned and seed follow-on improvement tasks for future versions."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
