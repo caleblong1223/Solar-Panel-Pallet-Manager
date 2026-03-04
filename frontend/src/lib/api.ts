@@ -1,6 +1,7 @@
 import { loadRuntimeSettings } from "./runtimeConfig";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+const DEFAULT_REQUEST_TIMEOUT_MS = 4000;
 
 export class ApiError extends Error {
   status: number;
@@ -22,7 +23,8 @@ export async function apiRequest<TResponse>(
   method: HttpMethod,
   token?: string,
   body?: unknown,
-  extraHeaders?: Record<string, string>
+  extraHeaders?: Record<string, string>,
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<TResponse> {
   const { apiBaseUrl } = loadRuntimeSettings();
   const url = path.startsWith("http://") || path.startsWith("https://") ? path : `${apiBaseUrl}${path}`;
@@ -44,11 +46,25 @@ export async function apiRequest<TResponse>(
     payload = JSON.stringify(body);
   }
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: payload,
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: payload,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError(`Request timed out after ${timeoutMs}ms`, 0, method, path);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const text = await response.text();

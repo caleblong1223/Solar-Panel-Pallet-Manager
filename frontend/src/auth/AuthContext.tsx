@@ -23,19 +23,32 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function getFallbackOfflineUser(): User {
+  return {
+    id: -1,
+    username: "offline_station",
+    email: "offline@local",
+    is_active: true,
+    roles: [],
+  };
+}
+
+function parseCachedUser(): User | null {
+  const cachedRaw = localStorage.getItem(CACHED_USER_KEY);
+  if (!cachedRaw) {
+    return null;
+  }
+  try {
+    return JSON.parse(cachedRaw) as User;
+  } catch {
+    localStorage.removeItem(CACHED_USER_KEY);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(() => localStorage.getItem(ACCESS_TOKEN_KEY));
-  const [user, setUser] = useState<User | null>(() => {
-    const raw = localStorage.getItem(CACHED_USER_KEY);
-    if (!raw) {
-      return null;
-    }
-    try {
-      return JSON.parse(raw) as User;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState<User | null>(() => parseCachedUser());
   const [sessionMode, setSessionMode] = useState<SessionMode>("anonymous");
   const [isInitializing, setIsInitializing] = useState(true);
   const [hasTriedAutoLogin, setHasTriedAutoLogin] = useState(false);
@@ -46,6 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     setUser(null);
     setSessionMode("anonymous");
+  }, []);
+
+  const enableOfflineSession = useCallback(() => {
+    const cached = parseCachedUser();
+    const offlineUser = cached ?? getFallbackOfflineUser();
+    setUser(offlineUser);
+    setSessionMode("offline");
   }, []);
 
   const refreshSession = useCallback(async (token: string) => {
@@ -84,19 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!didRefresh) {
           setAccessToken(null);
           localStorage.removeItem(ACCESS_TOKEN_KEY);
-          const cachedRaw = localStorage.getItem(CACHED_USER_KEY);
-          if (cachedRaw) {
-            try {
-              setUser(JSON.parse(cachedRaw) as User);
-              setSessionMode("offline");
-            } catch {
-              localStorage.removeItem(CACHED_USER_KEY);
-              setUser(null);
-              setSessionMode("anonymous");
-            }
-          } else {
-            setSessionMode("anonymous");
-          }
+          enableOfflineSession();
         }
         if (!cancelled) {
           setIsInitializing(false);
@@ -110,21 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const result = await apiLogin(SHARED_USERNAME, SHARED_PASSWORD);
           localStorage.setItem(ACCESS_TOKEN_KEY, result.access_token);
           setAccessToken(result.access_token);
-          await refreshSession(result.access_token);
-        } catch {
-          const cachedRaw = localStorage.getItem(CACHED_USER_KEY);
-          if (cachedRaw) {
-            try {
-              setUser(JSON.parse(cachedRaw) as User);
-              setSessionMode("offline");
-            } catch {
-              localStorage.removeItem(CACHED_USER_KEY);
-              setUser(null);
-              setSessionMode("anonymous");
-            }
-          } else {
-            setSessionMode("anonymous");
+          const didRefresh = await refreshSession(result.access_token);
+          if (!didRefresh) {
+            enableOfflineSession();
           }
+        } catch {
+          enableOfflineSession();
         } finally {
           if (!cancelled) {
             setHasTriedAutoLogin(true);
@@ -144,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, hasTriedAutoLogin, refreshSession]);
+  }, [accessToken, hasTriedAutoLogin, enableOfflineSession, refreshSession]);
 
   useEffect(() => {
     if (!accessToken) {
