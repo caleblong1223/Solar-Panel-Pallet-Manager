@@ -2,7 +2,7 @@
 ; Creates a professional installer wizard
 
 !define APP_NAME "Pallet Manager"
-!define APP_VERSION "1.0.0"
+!define APP_VERSION "2.0.0"
 !define APP_PUBLISHER "Crossroads Solar"
 !define APP_EXE "Pallet Manager.exe"
 !define APP_EXE_SOURCE "dist\Pallet Manager.exe"

@@ -4,13 +4,13 @@ Update this file when releasing new versions
 """
 
 # Application version
-VERSION = "1.1.0"
-VERSION_MAJOR = 1
-VERSION_MINOR = 1
+VERSION = "2.0.0"
+VERSION_MAJOR = 2
+VERSION_MINOR = 0
 VERSION_PATCH = 0
 
 # Build information
-BUILD_DATE = "2026-01-06"  # Update when building new version
+BUILD_DATE = "2026-03-04"  # Update when building new version
 BUILD_NUMBER = None  # Optional: Can be set during CI/CD
 
 # Version string for display
