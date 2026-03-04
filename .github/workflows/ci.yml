@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - master
+      - develop/2.0
 
 jobs:
   backend:
@@ -27,7 +28,10 @@ jobs:
       - name: Run backend tests
         env:
           DATABASE_URL: sqlite+pysqlite:///./backend/test.db
-        run: pytest -q backend/tests
+          JWT_SECRET: ci-test-secret
+          MINIO_ACCESS_KEY: ci-minio-access
+          MINIO_SECRET_KEY: ci-minio-secret
+        run: python -m pytest -q backend/tests
 
   frontend:
     runs-on: ubuntu-latest
@@ -47,3 +51,35 @@ jobs:
       - name: Build frontend
         run: npm run build
         working-directory: frontend
+
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: frontend
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Run frontend e2e tests
+        run: npm run test:e2e
+        working-directory: frontend
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: |
+            frontend/test-results
+            frontend/playwright-report
