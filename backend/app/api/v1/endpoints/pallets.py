@@ -318,6 +318,8 @@ def add_pallet_item(
             added_by=current_user.id,
         )
     )
+    db.flush()
+    db.expire(pallet, ["items"])
     _record_audit(
         db,
         actor_user_id=current_user.id,
@@ -327,7 +329,6 @@ def add_pallet_item(
         outcome="success",
         metadata_json={"serial": serial, "slot_index": slot_index},
     )
-    pallet = _get_pallet_or_404(db, pallet_id)
     response = _to_pallet_response(pallet)
     _record_client_operation_response(
         db,
@@ -365,6 +366,8 @@ def remove_pallet_item(
     serial = item.serial
     slot_index = item.slot_index
     db.delete(item)
+    db.flush()
+    db.expire(pallet, ["items"])
     _record_audit(
         db,
         actor_user_id=current_user.id,
@@ -374,7 +377,6 @@ def remove_pallet_item(
         outcome="success",
         metadata_json={"serial": serial, "slot_index": slot_index, "item_id": item_id},
     )
-    pallet = _get_pallet_or_404(db, pallet_id)
     response = _to_pallet_response(pallet)
     _record_client_operation_response(
         db,

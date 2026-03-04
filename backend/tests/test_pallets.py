@@ -114,7 +114,7 @@ def test_reset_and_delete_allowed_for_all_roles() -> None:
 def test_conflict_responses_include_error_code_payload() -> None:
     user = DummyUser(user_id=301, roles=["packout_operator"])
     with _make_test_client(user) as client:
-        create_response = client.post("/api/v1/pallets", json={"max_panels": 1})
+        create_response = client.post("/api/v1/pallets", json={"max_panels": 2})
         assert create_response.status_code == 201
         pallet_id = create_response.json()["id"]
 
@@ -127,7 +127,10 @@ def test_conflict_responses_include_error_code_payload() -> None:
         assert duplicate_payload["detail"]["error_code"] == "SERIAL_ALREADY_ON_PALLET"
         assert "message" in duplicate_payload["detail"]
 
-        over_capacity = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER-101"})
+        second_add = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER-101"})
+        assert second_add.status_code == 200
+
+        over_capacity = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER-102"})
         assert over_capacity.status_code == 409
         over_capacity_payload = over_capacity.json()
         assert over_capacity_payload["detail"]["error_code"] == "PALLET_AT_CAPACITY"

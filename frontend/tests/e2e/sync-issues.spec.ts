@@ -57,7 +57,7 @@ test("discard removes operation from sync issues list", async ({ page }) => {
   await seedOfflineSessionAndOutbox(page);
   await page.goto("/sync-issues");
 
-  const row = page.locator("li", { hasText: "op-needs-review-1" });
+  const row = page.locator("li", { hasText: "op-needs" });
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "Discard" }).click();
   await expect(row).toHaveCount(0);
