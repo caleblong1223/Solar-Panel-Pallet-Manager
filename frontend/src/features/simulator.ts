@@ -1,5 +1,5 @@
-import { API_BASE_URL } from "../lib/api";
 import { apiRequest } from "../lib/api";
+import { loadRuntimeSettings } from "../lib/runtimeConfig";
 
 export type SimImportBatch = {
   id: number;
@@ -17,10 +17,11 @@ export type SimImportBatch = {
 };
 
 export async function uploadSimulatorFile(token: string, file: File) {
+  const { apiBaseUrl } = loadRuntimeSettings();
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${API_BASE_URL}/simulator/imports`, {
+  const response = await fetch(`${apiBaseUrl}/simulator/imports`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

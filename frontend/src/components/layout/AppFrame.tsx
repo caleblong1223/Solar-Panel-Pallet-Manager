@@ -13,6 +13,7 @@ const navItems = [
   { to: "/builder", label: "Builder" },
   { to: "/history", label: "History" },
   { to: "/imports-exports", label: "Imports/Exports" },
+  { to: "/settings", label: "Settings" },
 ];
 
 export default function AppFrame({ title, children }: Props) {

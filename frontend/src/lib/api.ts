@@ -1,7 +1,4 @@
-const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
-const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-
-export const API_BASE_URL = rawApiBaseUrl ? rawApiBaseUrl.replace(/\/+$/, "") : DEFAULT_API_BASE_URL;
+import { loadRuntimeSettings } from "./runtimeConfig";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -11,7 +8,8 @@ export async function apiRequest<TResponse>(
   token?: string,
   body?: unknown
 ): Promise<TResponse> {
-  const url = path.startsWith("http://") || path.startsWith("https://") ? path : `${API_BASE_URL}${path}`;
+  const { apiBaseUrl } = loadRuntimeSettings();
+  const url = path.startsWith("http://") || path.startsWith("https://") ? path : `${apiBaseUrl}${path}`;
 
   const headers: Record<string, string> = {
     Accept: "application/json",

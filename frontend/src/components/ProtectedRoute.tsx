@@ -1,20 +1,32 @@
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 export default function ProtectedRoute() {
-  const { isAuthenticated, isInitializing } = useAuth();
+  const { canAccessApp, isInitializing, isOfflineSession } = useAuth();
 
   if (isInitializing) {
     return <main className="auth-loading">Loading session...</main>;
   }
 
-  if (!isAuthenticated) {
+  if (!canAccessApp) {
     return (
       <main className="auth-loading">
-        Unable to initialize session. Please check connection to the server.
+        <p>Unable to initialize session. Configure backend settings and retry.</p>
+        <Link className="inline-link" to="/settings">
+          Open Settings
+        </Link>
       </main>
     );
   }
 
-  return <Outlet />;
+  return (
+    <>
+      {isOfflineSession ? (
+        <div className="status-banner status-banner--warning">
+          Offline mode: changes will sync when the server is reachable.
+        </div>
+      ) : null}
+      <Outlet />
+    </>
+  );
 }

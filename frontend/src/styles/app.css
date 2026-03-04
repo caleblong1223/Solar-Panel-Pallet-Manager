@@ -31,6 +31,27 @@ h1 {
   padding: var(--space-5);
 }
 
+.inline-link {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.inline-link:hover {
+  text-decoration: underline;
+}
+
+.status-banner {
+  margin: var(--space-3) var(--space-6) 0;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+}
+
+.status-banner--warning {
+  background: color-mix(in srgb, var(--color-warning) 20%, #fff);
+}
+
 .auth-card {
   width: min(420px, 100%);
   background: color-mix(in srgb, var(--color-surface) 94%, transparent);
@@ -244,6 +265,39 @@ h1 {
 .subhead {
   margin: var(--space-4) 0 var(--space-2);
   font-size: 1rem;
+}
+
+.settings-page {
+  min-height: 100vh;
+  padding: var(--space-5);
+}
+
+.settings-wrap {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.settings-status {
+  margin-top: var(--space-3);
+}
+
+.settings-status--success {
+  color: var(--color-success);
+}
+
+.settings-status--error {
+  color: var(--color-danger);
+}
+
+.settings-status--warning {
+  color: var(--color-warning);
 }
 
 .flat-list {

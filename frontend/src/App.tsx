@@ -4,7 +4,7 @@ import AppHomePage from "./pages/AppHomePage";
 import HistoryExplorerPage from "./pages/HistoryExplorerPage";
 import LiveBuilderPage from "./pages/LiveBuilderPage";
 import ImportExportPage from "./pages/ImportExportPage";
-import SectionPlaceholderPage from "./pages/SectionPlaceholderPage";
+import SettingsPage from "./pages/SettingsPage";
 
 export default function App() {
   return (
@@ -15,6 +15,7 @@ export default function App() {
         <Route path="/history" element={<HistoryExplorerPage />} />
         <Route path="/imports-exports" element={<ImportExportPage />} />
       </Route>
+      <Route path="/settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
