@@ -51,12 +51,8 @@ Section "Main Application" SecMain
     ; Set output path
     SetOutPath "$INSTDIR"
 
-    ; Check if exe exists in dist folder
-    IfFileExists "${APP_EXE_SOURCE}" 0 +3
-        File "${APP_EXE_SOURCE}"
-        Goto +2
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Error: ${APP_EXE_SOURCE} not found. Please run scripts\\build_windows.bat first."
-    Abort
+    ; EXE is embedded at installer build-time.
+    File "${APP_EXE_SOURCE}"
 
     ; Create application directory structure
     CreateDirectory "$INSTDIR\data"
