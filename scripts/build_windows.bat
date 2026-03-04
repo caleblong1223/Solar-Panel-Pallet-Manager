@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 REM Deterministic Windows EXE build script.
 REM - Finds Python
 REM - Installs all compile dependencies
@@ -77,21 +77,35 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-echo [3/5] Verifying required imports...
+echo [3/6] Verifying required imports...
 %PYTHON_CMD% -c "import PyInstaller, reportlab, jinja2, PIL, win32com, PyPDF2, openpyxl, pandas, yaml, dateutil; print('Dependency verification passed')"
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Import verification failed.
     exit /b 1
 )
 
+echo [4/6] Verifying Excel template files...
+for %%F in ("data\EXCEL\26.xlsx" "data\EXCEL\30.xlsx" "data\EXCEL\35.xlsx") do (
+    if not exist "%%~fF" (
+        echo ERROR: Missing required template file: %%~fF
+        exit /b 1
+    )
+)
+echo Template fingerprints used for this build:
+for %%F in ("data\EXCEL\26.xlsx" "data\EXCEL\30.xlsx" "data\EXCEL\35.xlsx") do (
+    for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA256 '%%~fF').Hash"`) do set "FILE_HASH=%%H"
+    echo   %%~nxF  [%%~zF bytes]  SHA256=!FILE_HASH!
+)
+echo.
+
 if "%DEPS_ONLY%"=="1" (
-    echo [4/5] --deps-only selected. Dependency setup completed.
+    echo [5/6] --deps-only selected. Dependency setup completed.
     echo You can now run: scripts\build_windows.bat
     exit /b 0
 )
 
 if "%SKIP_SUMATRA%"=="0" (
-    echo [4/5] Optional SumatraPDF bundle check...
+    echo [5/6] Optional SumatraPDF bundle check...
     if not exist "external_tools\SumatraPDF\SumatraPDF.exe" (
         if exist "scripts\download_sumatrapdf.py" (
             echo SumatraPDF not found. Attempting automatic download ^(non-fatal^)...
@@ -115,11 +129,11 @@ if not exist "pallet_builder.spec" (
 )
 
 if "%SKIP_CLEAN%"=="0" (
-    echo [5/5] Cleaning prior build outputs...
+    echo [6/6] Cleaning prior build outputs...
     if exist "build" rmdir /s /q "build"
     if exist "dist" rmdir /s /q "dist"
 ) else (
-    echo [5/5] Skipping clean step.
+    echo [6/6] Skipping clean step.
 )
 
 echo Building EXE from pallet_builder.spec...

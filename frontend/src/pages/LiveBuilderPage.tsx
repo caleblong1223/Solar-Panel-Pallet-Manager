@@ -1,63 +1,34 @@
-﻿import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import AppFrame from "../components/layout/AppFrame";
 import { useToast } from "../components/notifications/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
-import { listOutboxOperations } from "../sync/outbox";
 import {
-  repoAddPalletItem,
-  repoCompletePallet,
-  repoCreatePallet,
-  repoGetPallet,
-  repoListPallets,
-  repoRemovePalletItem,
-} from "../features/palletRepo";
-import { createExport, type Pallet } from "../features/pallets";
-import { listCustomers, type Customer } from "../features/customers";
+  addPalletItem,
+  completePallet,
+  createPallet,
+  getPallet,
+  listPallets,
+  removePalletItem,
+  type Pallet,
+} from "../features/pallets";
 
-const PANEL_CAPACITY_OPTIONS = [25, 26, 30, 35] as const;
-const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"] as const;
-const LAST_EXPORT_TEMPLATE_KEY = "pm2_last_export_template";
-const CACHED_CUSTOMERS_KEY = "pm2_cached_customers";
-
-function loadLastExportTemplate(): (typeof TEMPLATE_OPTIONS)[number] {
-  const raw = localStorage.getItem(LAST_EXPORT_TEMPLATE_KEY);
-  if (!raw) {
-    return "200WT";
-  }
-  return (TEMPLATE_OPTIONS.find((item) => item === raw) ?? "200WT") as (typeof TEMPLATE_OPTIONS)[number];
-}
-
-function loadCachedCustomers(): Customer[] {
-  const raw = localStorage.getItem(CACHED_CUSTOMERS_KEY);
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw) as Customer[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
+const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 
 export default function LiveBuilderPage() {
   const { token } = useAuth();
   const { notify } = useToast();
 
-  const [customers, setCustomers] = useState<Customer[]>(() => loadCachedCustomers());
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-
+  const [activePallets, setActivePallets] = useState<Pallet[]>([]);
+  const [selectedPalletId, setSelectedPalletId] = useState<number | null>(null);
   const [current, setCurrent] = useState<Pallet | null>(null);
   const [serial, setSerial] = useState("");
   const [isBusy, setIsBusy] = useState(false);
-  const [queuedOpsCount, setQueuedOpsCount] = useState(0);
-  const [activePalletCount, setActivePalletCount] = useState(0);
 
-  const [newMaxPanels, setNewMaxPanels] = useState<number>(25);
-  const [exportTemplate, setExportTemplate] = useState<(typeof TEMPLATE_OPTIONS)[number]>(loadLastExportTemplate);
+  const [newMaxPanels, setNewMaxPanels] = useState("25");
+  const [newTemplate, setNewTemplate] = useState(TEMPLATE_OPTIONS[0]);
 
   const serialInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -68,51 +39,19 @@ export default function LiveBuilderPage() {
     return current.max_panels - current.item_count;
   }, [current]);
 
-  const activeCustomer = useMemo(() => {
-    if (!current || !current.customer_id) {
-      return null;
-    }
-    return customers.find((customer) => customer.id === current.customer_id) ?? null;
-  }, [current, customers]);
-
-  const selectedCustomer = useMemo(() => {
-    if (!selectedCustomerId) {
-      return null;
-    }
-    return customers.find((customer) => customer.id === selectedCustomerId) ?? null;
-  }, [customers, selectedCustomerId]);
-
-  const refreshCustomers = async () => {
+  const refreshActivePallets = async () => {
     if (!token) {
       return;
     }
-    try {
-      const response = await listCustomers(token, true);
-      setCustomers(response.customers);
-      localStorage.setItem(CACHED_CUSTOMERS_KEY, JSON.stringify(response.customers));
-      if (selectedCustomerId === null && response.customers.length > 0) {
-        setSelectedCustomerId(response.customers[0].id);
-      }
-    } catch {
-      const cached = loadCachedCustomers();
-      setCustomers(cached);
-      if (selectedCustomerId === null && cached.length > 0) {
-        setSelectedCustomerId(cached[0].id);
-      }
-    }
-  };
+    const response = await listPallets(token, "active");
+    setActivePallets(response.pallets);
 
-  const refreshActivePallets = async () => {
-    const response = await repoListPallets(token, "active");
-    const pallets = response.pallets.slice().sort((a, b) => b.pallet_number - a.pallet_number);
-    setActivePalletCount(pallets.length);
-    setQueuedOpsCount(listOutboxOperations().length);
-
-    const currentStillActive = current ? pallets.find((pallet) => pallet.id === current.id) : null;
-    const nextSelected = currentStillActive?.id ?? pallets[0]?.id ?? null;
+    const selectedStillActive = response.pallets.find((pallet) => pallet.id === selectedPalletId);
+    const nextSelected = selectedStillActive?.id ?? response.pallets[0]?.id ?? null;
+    setSelectedPalletId(nextSelected);
 
     if (nextSelected) {
-      const full = await repoGetPallet(token, nextSelected);
+      const full = await getPallet(token, nextSelected);
       setCurrent(full);
     } else {
       setCurrent(null);
@@ -120,28 +59,39 @@ export default function LiveBuilderPage() {
   };
 
   useEffect(() => {
-    void refreshCustomers();
     void refreshActivePallets();
   }, [token]);
 
+  useEffect(() => {
+    if (!token || !selectedPalletId) {
+      return;
+    }
+
+    void getPallet(token, selectedPalletId).then(setCurrent).catch(() => {
+      notify("Failed to load pallet", "error");
+    });
+  }, [selectedPalletId, token, notify]);
+
   const handleCreatePallet = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedCustomerId) {
-      notify("Select a customer first", "warning");
+    if (!token) {
+      return;
+    }
+
+    const parsed = Number.parseInt(newMaxPanels, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      notify("Max panels must be a positive number", "error");
       return;
     }
 
     setIsBusy(true);
     try {
-      const created = await repoCreatePallet(token, {
-        max_panels: newMaxPanels,
-        customer_id: selectedCustomerId,
-      });
+      const created = await createPallet(token, { max_panels: parsed, template_type: newTemplate });
       notify(`Created pallet #${created.pallet_number}`, "success");
       await refreshActivePallets();
+      setSelectedPalletId(created.id);
       setCurrent(created);
       setSerial("");
-      setQueuedOpsCount(listOutboxOperations().length);
       serialInputRef.current?.focus();
     } catch {
       notify("Failed to create pallet", "error");
@@ -152,18 +102,17 @@ export default function LiveBuilderPage() {
 
   const handleAddSerial = async (event: FormEvent) => {
     event.preventDefault();
-    if (!current) {
-      notify("Create an active pallet first", "warning");
+    if (!token || !current) {
+      notify("Select or create an active pallet first", "warning");
       return;
     }
 
     setIsBusy(true);
     try {
-      const updated = await repoAddPalletItem(token, current.id, serial);
+      const updated = await addPalletItem(token, current.id, serial);
       setCurrent(updated);
       setSerial("");
       notify("Serial added", "success");
-      setQueuedOpsCount(listOutboxOperations().length);
       serialInputRef.current?.focus();
     } catch {
       notify("Failed to add serial", "error");
@@ -173,16 +122,15 @@ export default function LiveBuilderPage() {
   };
 
   const handleRemoveItem = async (itemId: number) => {
-    if (!current) {
+    if (!token || !current) {
       return;
     }
 
     setIsBusy(true);
     try {
-      const updated = await repoRemovePalletItem(token, current.id, itemId);
+      const updated = await removePalletItem(token, current.id, itemId);
       setCurrent(updated);
       notify("Serial removed", "success");
-      setQueuedOpsCount(listOutboxOperations().length);
     } catch {
       notify("Failed to remove serial", "error");
     } finally {
@@ -190,30 +138,18 @@ export default function LiveBuilderPage() {
     }
   };
 
-  const handleCompleteAndExport = async () => {
-    if (!current) {
+  const handleComplete = async () => {
+    if (!token || !current) {
       return;
     }
 
     setIsBusy(true);
     try {
-      const updated = await repoCompletePallet(token, current.id);
-      localStorage.setItem(LAST_EXPORT_TEMPLATE_KEY, exportTemplate);
-
-      if (token) {
-        const createdExport = await createExport(token, { pallet_id: updated.id, template_type: exportTemplate });
-        notify(
-          `Pallet #${updated.pallet_number} completed and export #${createdExport.id} created (${exportTemplate})`,
-          "success"
-        );
-      } else {
-        notify("Pallet completed offline. Export will require backend connection.", "warning");
-      }
-
+      const updated = await completePallet(token, current.id);
+      notify(`Pallet #${updated.pallet_number} completed`, "success");
       await refreshActivePallets();
-      setQueuedOpsCount(listOutboxOperations().length);
     } catch {
-      notify("Failed to complete/export pallet", "error");
+      notify("Failed to complete pallet", "error");
     } finally {
       setIsBusy(false);
     }
@@ -223,16 +159,32 @@ export default function LiveBuilderPage() {
     <AppFrame title="Live Builder">
       <section className="builder-grid">
         <Card title="Active pallet">
+          <label className="ui-input-label">
+            <span>Choose active pallet</span>
+            <select
+              className="ui-select"
+              value={selectedPalletId ?? ""}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSelectedPalletId(value ? Number(value) : null);
+              }}
+            >
+              <option value="">None</option>
+              {activePallets.map((pallet) => (
+                <option key={pallet.id} value={pallet.id}>
+                  #{pallet.pallet_number} ({pallet.item_count}/{pallet.max_panels})
+                </option>
+              ))}
+            </select>
+          </label>
+
           {current ? (
             <div className="builder-meta">
-              <p>
-                <strong>Pallet:</strong> #{current.pallet_number}
-              </p>
               <p>
                 <strong>Status:</strong> {current.status}
               </p>
               <p>
-                <strong>Customer:</strong> {activeCustomer?.display_name ?? current.customer_id ?? "-"}
+                <strong>Template:</strong> {current.template_type ?? "-"}
               </p>
               <p>
                 <strong>Capacity:</strong> {current.item_count}/{current.max_panels}
@@ -240,66 +192,32 @@ export default function LiveBuilderPage() {
               <p>
                 <strong>Remaining:</strong> {remaining}
               </p>
-              <p>
-                <strong>Queued Ops:</strong> {queuedOpsCount}
-              </p>
-              {activePalletCount > 1 ? (
-                <p>
-                  <strong>Active Pallets:</strong> {activePalletCount} (using most recent)
-                </p>
-              ) : null}
             </div>
           ) : (
-            <p>No active pallet. Create one to start scanning.</p>
+            <p>No active pallet selected.</p>
           )}
         </Card>
 
         <Card title="Create pallet">
           <form className="builder-form" onSubmit={handleCreatePallet}>
+            <TextInput
+              label="Max panels"
+              inputMode="numeric"
+              value={newMaxPanels}
+              onChange={(event) => setNewMaxPanels(event.target.value)}
+              required
+            />
+
             <label className="ui-input-label">
-              <span>Customer</span>
-              <select
-                className="ui-select"
-                value={selectedCustomerId ?? ""}
-                onChange={(event) => setSelectedCustomerId(event.target.value ? Number(event.target.value) : null)}
-              >
-                <option value="">Select customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.display_name}
+              <span>Template</span>
+              <select className="ui-select" value={newTemplate} onChange={(event) => setNewTemplate(event.target.value)}>
+                {TEMPLATE_OPTIONS.map((template) => (
+                  <option key={template} value={template}>
+                    {template}
                   </option>
                 ))}
               </select>
             </label>
-
-            <label className="ui-input-label">
-              <span>Panel count</span>
-              <select
-                className="ui-select"
-                value={newMaxPanels}
-                onChange={(event) => setNewMaxPanels(Number(event.target.value))}
-              >
-                {PANEL_CAPACITY_OPTIONS.map((count) => (
-                  <option key={count} value={count}>
-                    {count}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedCustomer ? (
-              <div className="builder-meta">
-                <p>
-                  <strong>Contact:</strong> {selectedCustomer.contact_name ?? "-"}
-                </p>
-                <p>
-                  <strong>Business:</strong> {selectedCustomer.business_name ?? "-"}
-                </p>
-                <p>
-                  <strong>Email:</strong> {selectedCustomer.email ?? "-"}
-                </p>
-              </div>
-            ) : null}
 
             <Button disabled={isBusy} type="submit">
               Create Active Pallet
@@ -325,24 +243,10 @@ export default function LiveBuilderPage() {
           </form>
         </Card>
 
-        <Card title="Complete + export pallet">
-          <p>Select panel type at export time (1.1 behavior).</p>
-          <label className="ui-input-label">
-            <span>Panel type</span>
-            <select
-              className="ui-select"
-              value={exportTemplate}
-              onChange={(event) => setExportTemplate(event.target.value as (typeof TEMPLATE_OPTIONS)[number])}
-            >
-              {TEMPLATE_OPTIONS.map((template) => (
-                <option key={template} value={template}>
-                  {template}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button disabled={isBusy || !current || remaining !== 0} onClick={handleCompleteAndExport}>
-            Complete + Export Current Pallet
+        <Card title="Complete pallet">
+          <p>Completion is enabled only when pallet is full.</p>
+          <Button disabled={isBusy || !current || remaining !== 0} onClick={handleComplete}>
+            Complete Current Pallet
           </Button>
         </Card>
       </section>

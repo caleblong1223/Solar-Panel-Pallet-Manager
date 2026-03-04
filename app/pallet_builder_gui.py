@@ -1348,8 +1348,6 @@ class PalletBuilderGUI:
             else:
                 project_root = get_base_dir()
 
-            excel_dir = project_root / "EXCEL"
-
             if self.max_panels in (25, 26):
                 filename = "26.xlsx"
             elif self.max_panels == 30:
@@ -1359,8 +1357,15 @@ class PalletBuilderGUI:
             else:
                 return None
 
-            template_path = excel_dir / filename
-            return template_path if template_path.exists() else None
+            candidates = [
+                project_root / "data" / "EXCEL" / filename,
+                get_resource_path(f"data/EXCEL/{filename}"),
+                project_root / "EXCEL" / filename,
+            ]
+            for template_path in candidates:
+                if template_path and template_path.exists():
+                    return template_path
+            return None
         except Exception:
             return None
     
@@ -4039,4 +4044,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

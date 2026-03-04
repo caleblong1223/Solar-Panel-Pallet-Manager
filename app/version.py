@@ -51,4 +51,3 @@ def compare_versions(version1: str, version2: str) -> int:
         return 0
 
 
-

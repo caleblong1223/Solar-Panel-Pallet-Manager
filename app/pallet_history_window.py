@@ -247,7 +247,7 @@ class PalletHistoryWindow:
         
         tk.Label(multi_action_frame, text="Multi-Select:", 
                 font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=5)
-        tk.Button(multi_action_frame, text="Create PDF & Print", 
+        tk.Button(multi_action_frame, text="Create PDF & Open", 
                  command=self.create_pdf_and_print, width=18, 
                  bg="#2196F3", fg="black", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
     
@@ -1132,9 +1132,9 @@ class PalletHistoryWindow:
             # Returns list of PDF paths (one per pallet)
             individual_pdfs = self._excel_to_pdf(file_paths, pdf_path, progress_label)
             
-            # If multiple PDFs, create a merged version for printing
+            # If multiple PDFs, create a merged version to open
             if len(individual_pdfs) > 1:
-                progress_label.config(text="Creating merged PDF for printing...")
+                progress_label.config(text="Creating merged PDF...")
                 progress_label.master.update()
 
                 # Create PRINT folder inside HISTORY
@@ -1161,23 +1161,21 @@ class PalletHistoryWindow:
                     f"  Location: {pdf_path.parent}\n\n"
                     f"✓ Merged print PDF created:\n"
                     f"  {merged_pdf_path.name}\n\n"
-                    f"Opening print dialog for merged PDF...",
+                    f"Opening merged PDF in Microsoft Edge...",
                     parent=self.window
                 )
 
-                # Open print dialog for merged PDF only
-                logger.info("Opening print dialog for merged PDF")
-                self._print_pdf(merged_pdf_path)
+                logger.info("Opening merged PDF")
+                self._open_pdf(merged_pdf_path)
             else:
                 progress_window.destroy()
 
-                # Single PDF - just print it
-                logger.info(f"Opening print dialog for single PDF: {individual_pdfs[0]}")
-                self._print_pdf(individual_pdfs[0])
+                logger.info(f"Opening single PDF: {individual_pdfs[0]}")
+                self._open_pdf(individual_pdfs[0])
             
             logger.end_timer("pdf_export_total")
             logger.log_memory_usage()
-            logger.info("PDF export and print completed successfully")
+            logger.info("PDF export and open completed successfully")
             
         except Exception as e:
             logger.error(f"Failed to create PDF: {e}", exc_info=e)
@@ -1697,7 +1695,34 @@ class PalletHistoryWindow:
                 if pdf_files:
                     shutil.copy(pdf_files[0], output_path)
     
+    def _open_pdf(self, pdf_path: Path):
+        """Open PDF file. On Windows, prefer Microsoft Edge."""
+        try:
+            system = platform.system()
+            if system == 'Windows':
+                edge_paths = [
+                    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                ]
+                edge_path = next((p for p in edge_paths if Path(p).exists()), None)
+                if edge_path:
+                    subprocess.Popen(
+                        [edge_path, str(pdf_path.absolute())],
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                    )
+                else:
+                    os.startfile(str(pdf_path.absolute()))
+            elif system == 'Darwin':
+                subprocess.run(['open', str(pdf_path.absolute())], check=False)
+            else:
+                subprocess.run(['xdg-open', str(pdf_path.absolute())], check=False)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open PDF:\n{e}", parent=self.window)
+
     def _print_pdf(self, pdf_path: Path):
+        """Backward-compatible wrapper. Use _open_pdf for new workflow."""
+        self._open_pdf(pdf_path)
+        return
         """Print PDF file - automatically opens print dialog for the saved PDF"""
         try:
             system = platform.system()
