@@ -5,15 +5,16 @@ import { useToast } from "../components/notifications/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
+import { listOutboxOperations } from "../sync/outbox";
 import {
-  addPalletItem,
-  completePallet,
-  createPallet,
-  getPallet,
-  listPallets,
-  removePalletItem,
-  type Pallet,
-} from "../features/pallets";
+  repoAddPalletItem,
+  repoCompletePallet,
+  repoCreatePallet,
+  repoGetPallet,
+  repoListPallets,
+  repoRemovePalletItem,
+} from "../features/palletRepo";
+import { type Pallet } from "../features/pallets";
 
 const TEMPLATE_OPTIONS = ["450WT", "535WT", "550WT"];
 
@@ -26,6 +27,7 @@ export default function LiveBuilderPage() {
   const [current, setCurrent] = useState<Pallet | null>(null);
   const [serial, setSerial] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const [queuedOpsCount, setQueuedOpsCount] = useState(0);
 
   const [newMaxPanels, setNewMaxPanels] = useState("25");
   const [newTemplate, setNewTemplate] = useState(TEMPLATE_OPTIONS[0]);
@@ -40,18 +42,16 @@ export default function LiveBuilderPage() {
   }, [current]);
 
   const refreshActivePallets = async () => {
-    if (!token) {
-      return;
-    }
-    const response = await listPallets(token, "active");
+    const response = await repoListPallets(token, "active");
     setActivePallets(response.pallets);
+    setQueuedOpsCount(listOutboxOperations().length);
 
     const selectedStillActive = response.pallets.find((pallet) => pallet.id === selectedPalletId);
     const nextSelected = selectedStillActive?.id ?? response.pallets[0]?.id ?? null;
     setSelectedPalletId(nextSelected);
 
     if (nextSelected) {
-      const full = await getPallet(token, nextSelected);
+      const full = await repoGetPallet(token, nextSelected);
       setCurrent(full);
     } else {
       setCurrent(null);
@@ -63,21 +63,17 @@ export default function LiveBuilderPage() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || !selectedPalletId) {
+    if (!selectedPalletId) {
       return;
     }
 
-    void getPallet(token, selectedPalletId).then(setCurrent).catch(() => {
+    void repoGetPallet(token, selectedPalletId).then(setCurrent).catch(() => {
       notify("Failed to load pallet", "error");
     });
   }, [selectedPalletId, token, notify]);
 
   const handleCreatePallet = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token) {
-      return;
-    }
-
     const parsed = Number.parseInt(newMaxPanels, 10);
     if (!Number.isFinite(parsed) || parsed < 1) {
       notify("Max panels must be a positive number", "error");
@@ -86,12 +82,13 @@ export default function LiveBuilderPage() {
 
     setIsBusy(true);
     try {
-      const created = await createPallet(token, { max_panels: parsed, template_type: newTemplate });
+      const created = await repoCreatePallet(token, { max_panels: parsed, template_type: newTemplate });
       notify(`Created pallet #${created.pallet_number}`, "success");
       await refreshActivePallets();
       setSelectedPalletId(created.id);
       setCurrent(created);
       setSerial("");
+      setQueuedOpsCount(listOutboxOperations().length);
       serialInputRef.current?.focus();
     } catch {
       notify("Failed to create pallet", "error");
@@ -102,17 +99,18 @@ export default function LiveBuilderPage() {
 
   const handleAddSerial = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token || !current) {
+    if (!current) {
       notify("Select or create an active pallet first", "warning");
       return;
     }
 
     setIsBusy(true);
     try {
-      const updated = await addPalletItem(token, current.id, serial);
+      const updated = await repoAddPalletItem(token, current.id, serial);
       setCurrent(updated);
       setSerial("");
       notify("Serial added", "success");
+      setQueuedOpsCount(listOutboxOperations().length);
       serialInputRef.current?.focus();
     } catch {
       notify("Failed to add serial", "error");
@@ -122,15 +120,16 @@ export default function LiveBuilderPage() {
   };
 
   const handleRemoveItem = async (itemId: number) => {
-    if (!token || !current) {
+    if (!current) {
       return;
     }
 
     setIsBusy(true);
     try {
-      const updated = await removePalletItem(token, current.id, itemId);
+      const updated = await repoRemovePalletItem(token, current.id, itemId);
       setCurrent(updated);
       notify("Serial removed", "success");
+      setQueuedOpsCount(listOutboxOperations().length);
     } catch {
       notify("Failed to remove serial", "error");
     } finally {
@@ -139,15 +138,16 @@ export default function LiveBuilderPage() {
   };
 
   const handleComplete = async () => {
-    if (!token || !current) {
+    if (!current) {
       return;
     }
 
     setIsBusy(true);
     try {
-      const updated = await completePallet(token, current.id);
+      const updated = await repoCompletePallet(token, current.id);
       notify(`Pallet #${updated.pallet_number} completed`, "success");
       await refreshActivePallets();
+      setQueuedOpsCount(listOutboxOperations().length);
     } catch {
       notify("Failed to complete pallet", "error");
     } finally {
@@ -191,6 +191,9 @@ export default function LiveBuilderPage() {
               </p>
               <p>
                 <strong>Remaining:</strong> {remaining}
+              </p>
+              <p>
+                <strong>Queued Ops:</strong> {queuedOpsCount}
               </p>
             </div>
           ) : (
