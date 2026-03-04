@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
@@ -16,6 +17,7 @@ from app.schemas.export import (
     ExportResponse,
 )
 from app.services.export_generator import generate_export_pdf_bytes
+from app.services.export_workbook import ExportWorkbookError, generate_export_workbook_bytes
 from app.services.object_storage import (
     StorageError,
     generate_export_download_url,
@@ -73,26 +75,39 @@ def create_export(
     if not pallet.items:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot export empty pallet")
 
-    artifact = generate_export_pdf_bytes(pallet, payload.template_type)
-    file_name = f"pallet-{pallet.pallet_number}-export.pdf"
+    xlsx_file_name = f"pallet-{pallet.pallet_number}-export.xlsx"
+    pdf_file_name = f"pallet-{pallet.pallet_number}-export.pdf"
+    try:
+        workbook_artifact = generate_export_workbook_bytes(pallet, payload.template_type)
+    except ExportWorkbookError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    pdf_artifact = generate_export_pdf_bytes(pallet, payload.template_type)
 
     export = Export(
         pallet_id=pallet.id,
         template_type=payload.template_type,
         object_key="pending",
-        file_name=file_name,
+        file_name=pdf_file_name,
         mime_type="application/pdf",
-        size_bytes=len(artifact),
+        size_bytes=len(pdf_artifact),
         created_by=current_user.id,
     )
     db.add(export)
     db.flush()
     try:
+        upload_export_artifact(
+            export_id=export.id,
+            pallet_id=pallet.id,
+            filename=xlsx_file_name,
+            content=workbook_artifact,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
         object_key, checksum = upload_export_artifact(
             export_id=export.id,
             pallet_id=pallet.id,
-            filename=file_name,
-            content=artifact,
+            filename=pdf_file_name,
+            content=pdf_artifact,
+            content_type="application/pdf",
         )
     except StorageError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -107,6 +122,7 @@ def create_export(
 @router.get("/{export_id}/download-url", response_model=ExportDownloadUrlResponse)
 def get_export_download_url(
     export_id: int,
+    format: str = Query(default="pdf", pattern="^(pdf|xlsx)$"),
     expires_in_seconds: int = Query(default=900, ge=60, le=86400),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
@@ -116,12 +132,24 @@ def get_export_download_url(
     if export is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
     try:
-        url = generate_export_download_url(export.object_key, expires_in_seconds=expires_in_seconds)
+        if format == "xlsx":
+            pdf_path = PurePosixPath(export.object_key)
+            base_dir = str(pdf_path.parent)
+            xlsx_name = export.file_name[:-4] + ".xlsx" if export.file_name.lower().endswith(".pdf") else f"{export.file_name}.xlsx"
+            object_key = f"{base_dir}/{xlsx_name}"
+            file_name = xlsx_name
+        else:
+            object_key = export.object_key
+            file_name = export.file_name
+
+        url = generate_export_download_url(object_key, expires_in_seconds=expires_in_seconds)
     except StorageError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return ExportDownloadUrlResponse(
         export_id=export.id,
-        object_key=export.object_key,
+        format=format,
+        file_name=file_name,
+        object_key=object_key,
         download_url=url,
         expires_in_seconds=expires_in_seconds,
     )

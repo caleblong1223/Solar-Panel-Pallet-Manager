@@ -62,11 +62,20 @@ async function replayOperation(token: string, operation: OutboxOperation): Promi
       const localPalletId = Number(operation.payload.local_pallet_id);
       const maxPanels = Number(operation.payload.max_panels);
       const templateTypeRaw = operation.payload.template_type;
+      const customerIdRaw = operation.payload.customer_id;
       const templateType =
         typeof templateTypeRaw === "string" && templateTypeRaw.trim().length > 0 ? templateTypeRaw : undefined;
+      const customerId =
+        typeof customerIdRaw === "number" && Number.isFinite(customerIdRaw)
+          ? customerIdRaw
+          : Number(customerIdRaw);
       const created = await createPallet(
         token,
-        { max_panels: maxPanels, template_type: templateType },
+        {
+          max_panels: maxPanels,
+          template_type: templateType,
+          customer_id: Number.isFinite(customerId) && customerId > 0 ? customerId : undefined,
+        },
         operation.op_id
       );
       repoApplyPalletIdMapping(localPalletId, created);

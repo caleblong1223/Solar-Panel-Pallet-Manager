@@ -19,7 +19,7 @@ import {
 import { enqueueOutboxOperation } from "../sync/outbox";
 import { setPalletIdMapping } from "../sync/idMap";
 
-type CreatePalletPayload = { max_panels: number; template_type?: string };
+type CreatePalletPayload = { max_panels: number; template_type?: string; customer_id?: number };
 
 type ListPalletsResponse = {
   total: number;
@@ -108,7 +108,7 @@ export async function repoCreatePallet(token: string | null, payload: CreatePall
     status: "active",
     template_type: payload.template_type ?? null,
     max_panels: payload.max_panels,
-    customer_id: null,
+    customer_id: payload.customer_id ?? null,
     created_by: null,
     completed_by: null,
     created_at: nowIso(),
@@ -122,6 +122,7 @@ export async function repoCreatePallet(token: string | null, payload: CreatePall
     local_pallet_id: created.id,
     max_panels: payload.max_panels,
     template_type: payload.template_type ?? null,
+    customer_id: payload.customer_id ?? null,
   });
   return created;
 }

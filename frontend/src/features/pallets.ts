@@ -36,7 +36,7 @@ export async function listPallets(token: string, status = "active") {
 
 export async function createPallet(
   token: string,
-  payload: { max_panels: number; template_type?: string },
+  payload: { max_panels: number; template_type?: string; customer_id?: number },
   clientOperationId?: string
 ) {
   return apiRequest<Pallet>(

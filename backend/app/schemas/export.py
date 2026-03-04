@@ -29,6 +29,8 @@ class ExportListResponse(BaseModel):
 
 class ExportDownloadUrlResponse(BaseModel):
     export_id: int
+    format: str
+    file_name: str
     object_key: str
     download_url: str
     expires_in_seconds: int

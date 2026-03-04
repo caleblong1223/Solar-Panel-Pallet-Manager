@@ -47,11 +47,17 @@ def upload_import_source(batch_id: int, filename: str, content: bytes) -> tuple[
     return object_key, checksum
 
 
-def upload_export_artifact(export_id: int, pallet_id: int, filename: str, content: bytes) -> tuple[str, str]:
+def upload_export_artifact(
+    export_id: int,
+    pallet_id: int,
+    filename: str,
+    content: bytes,
+    content_type: str | None = None,
+) -> tuple[str, str]:
     checksum = hashlib.sha256(content).hexdigest()
     now = datetime.now(timezone.utc)
     object_key = f"exports/{now.year:04d}/{now.month:02d}/{pallet_id}/{export_id}/{os.path.basename(filename)}"
-    content_type = "application/pdf"
+    resolved_content_type = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
     client = boto3.client(
         "s3",
@@ -65,7 +71,7 @@ def upload_export_artifact(export_id: int, pallet_id: int, filename: str, conten
             Bucket=settings.minio_bucket_exports,
             Key=object_key,
             Body=content,
-            ContentType=content_type,
+            ContentType=resolved_content_type,
             Metadata={"checksum-sha256": checksum},
         )
     except (BotoCoreError, ClientError) as exc:
