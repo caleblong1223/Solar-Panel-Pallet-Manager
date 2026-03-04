@@ -109,3 +109,46 @@ def test_reset_and_delete_allowed_for_all_roles() -> None:
 
             get_deleted = client.get(f"/api/v1/pallets/{pallet_id}")
             assert get_deleted.status_code == 404
+
+
+def test_conflict_responses_include_error_code_payload() -> None:
+    user = DummyUser(user_id=301, roles=["packout_operator"])
+    with _make_test_client(user) as client:
+        create_response = client.post("/api/v1/pallets", json={"max_panels": 1})
+        assert create_response.status_code == 201
+        pallet_id = create_response.json()["id"]
+
+        first_add = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER-100"})
+        assert first_add.status_code == 200
+
+        duplicate = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "ser-100"})
+        assert duplicate.status_code == 409
+        duplicate_payload = duplicate.json()
+        assert duplicate_payload["detail"]["error_code"] == "SERIAL_ALREADY_ON_PALLET"
+        assert "message" in duplicate_payload["detail"]
+
+        over_capacity = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER-101"})
+        assert over_capacity.status_code == 409
+        over_capacity_payload = over_capacity.json()
+        assert over_capacity_payload["detail"]["error_code"] == "PALLET_AT_CAPACITY"
+
+        missing = client.get("/api/v1/pallets/99999")
+        assert missing.status_code == 404
+        missing_payload = missing.json()
+        assert missing_payload["detail"]["error_code"] == "PALLET_NOT_FOUND"
+
+
+def test_idempotency_header_returns_same_create_response() -> None:
+    user = DummyUser(user_id=302, roles=["packout_operator"])
+    with _make_test_client(user) as client:
+        headers = {"X-Client-Operation-Id": "create-op-123"}
+        first = client.post("/api/v1/pallets", json={"max_panels": 3, "template_type": "450WT"}, headers=headers)
+        second = client.post("/api/v1/pallets", json={"max_panels": 3, "template_type": "450WT"}, headers=headers)
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert first.json()["id"] == second.json()["id"]
+
+        listed = client.get("/api/v1/pallets?status=active&limit=50&offset=0")
+        assert listed.status_code == 200
+        assert listed.json()["total"] == 1
