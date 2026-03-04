@@ -9,6 +9,8 @@ import { getExportDownloadUrl, listExportsByPallet, type ExportRecord } from "..
 import { getImportBatch, uploadSimulatorFile, type SimImportBatch } from "../features/simulator";
 import { createExport } from "../features/pallets";
 
+const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"] as const;
+
 export default function ImportExportPage() {
   const { token } = useAuth();
   const { notify } = useToast();
@@ -18,7 +20,7 @@ export default function ImportExportPage() {
   const [batchLookupId, setBatchLookupId] = useState("");
 
   const [createPalletId, setCreatePalletId] = useState("");
-  const [createTemplate, setCreateTemplate] = useState("450WT");
+  const [createTemplate, setCreateTemplate] = useState<(typeof TEMPLATE_OPTIONS)[number]>("450WT");
 
   const [exportPalletFilter, setExportPalletFilter] = useState("");
   const [exportRows, setExportRows] = useState<ExportRecord[]>([]);
@@ -188,10 +190,16 @@ export default function ImportExportPage() {
             />
             <label className="ui-input-label">
               <span>Template</span>
-              <select className="ui-select" value={createTemplate} onChange={(event) => setCreateTemplate(event.target.value)}>
-                <option value="450WT">450WT</option>
-                <option value="535WT">535WT</option>
-                <option value="550WT">550WT</option>
+              <select
+                className="ui-select"
+                value={createTemplate}
+                onChange={(event) => setCreateTemplate(event.target.value as (typeof TEMPLATE_OPTIONS)[number])}
+              >
+                {TEMPLATE_OPTIONS.map((template) => (
+                  <option key={template} value={template}>
+                    {template}
+                  </option>
+                ))}
               </select>
             </label>
             <Button type="submit" disabled={isBusy}>

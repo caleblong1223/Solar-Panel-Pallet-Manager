@@ -16,21 +16,21 @@ import {
 } from "../features/palletRepo";
 import { type Pallet } from "../features/pallets";
 
-const TEMPLATE_OPTIONS = ["450WT", "535WT", "550WT"];
+const PANEL_CAPACITY_OPTIONS = [25, 26, 30, 35] as const;
+const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"] as const;
 
 export default function LiveBuilderPage() {
   const { token } = useAuth();
   const { notify } = useToast();
 
-  const [activePallets, setActivePallets] = useState<Pallet[]>([]);
-  const [selectedPalletId, setSelectedPalletId] = useState<number | null>(null);
   const [current, setCurrent] = useState<Pallet | null>(null);
   const [serial, setSerial] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [queuedOpsCount, setQueuedOpsCount] = useState(0);
+  const [activePalletCount, setActivePalletCount] = useState(0);
 
-  const [newMaxPanels, setNewMaxPanels] = useState("25");
-  const [newTemplate, setNewTemplate] = useState(TEMPLATE_OPTIONS[0]);
+  const [newMaxPanels, setNewMaxPanels] = useState<number>(25);
+  const [newTemplate, setNewTemplate] = useState<(typeof TEMPLATE_OPTIONS)[number]>(TEMPLATE_OPTIONS[0]);
 
   const serialInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -43,12 +43,12 @@ export default function LiveBuilderPage() {
 
   const refreshActivePallets = async () => {
     const response = await repoListPallets(token, "active");
-    setActivePallets(response.pallets);
+    const pallets = response.pallets.slice().sort((a, b) => b.pallet_number - a.pallet_number);
+    setActivePalletCount(pallets.length);
     setQueuedOpsCount(listOutboxOperations().length);
 
-    const selectedStillActive = response.pallets.find((pallet) => pallet.id === selectedPalletId);
-    const nextSelected = selectedStillActive?.id ?? response.pallets[0]?.id ?? null;
-    setSelectedPalletId(nextSelected);
+    const currentStillActive = current ? pallets.find((pallet) => pallet.id === current.id) : null;
+    const nextSelected = currentStillActive?.id ?? pallets[0]?.id ?? null;
 
     if (nextSelected) {
       const full = await repoGetPallet(token, nextSelected);
@@ -62,30 +62,14 @@ export default function LiveBuilderPage() {
     void refreshActivePallets();
   }, [token]);
 
-  useEffect(() => {
-    if (!selectedPalletId) {
-      return;
-    }
-
-    void repoGetPallet(token, selectedPalletId).then(setCurrent).catch(() => {
-      notify("Failed to load pallet", "error");
-    });
-  }, [selectedPalletId, token, notify]);
-
   const handleCreatePallet = async (event: FormEvent) => {
     event.preventDefault();
-    const parsed = Number.parseInt(newMaxPanels, 10);
-    if (!Number.isFinite(parsed) || parsed < 1) {
-      notify("Max panels must be a positive number", "error");
-      return;
-    }
 
     setIsBusy(true);
     try {
-      const created = await repoCreatePallet(token, { max_panels: parsed, template_type: newTemplate });
+      const created = await repoCreatePallet(token, { max_panels: newMaxPanels, template_type: newTemplate });
       notify(`Created pallet #${created.pallet_number}`, "success");
       await refreshActivePallets();
-      setSelectedPalletId(created.id);
       setCurrent(created);
       setSerial("");
       setQueuedOpsCount(listOutboxOperations().length);
@@ -100,7 +84,7 @@ export default function LiveBuilderPage() {
   const handleAddSerial = async (event: FormEvent) => {
     event.preventDefault();
     if (!current) {
-      notify("Select or create an active pallet first", "warning");
+      notify("Create an active pallet first", "warning");
       return;
     }
 
@@ -159,27 +143,11 @@ export default function LiveBuilderPage() {
     <AppFrame title="Live Builder">
       <section className="builder-grid">
         <Card title="Active pallet">
-          <label className="ui-input-label">
-            <span>Choose active pallet</span>
-            <select
-              className="ui-select"
-              value={selectedPalletId ?? ""}
-              onChange={(event) => {
-                const value = event.target.value;
-                setSelectedPalletId(value ? Number(value) : null);
-              }}
-            >
-              <option value="">None</option>
-              {activePallets.map((pallet) => (
-                <option key={pallet.id} value={pallet.id}>
-                  #{pallet.pallet_number} ({pallet.item_count}/{pallet.max_panels})
-                </option>
-              ))}
-            </select>
-          </label>
-
           {current ? (
             <div className="builder-meta">
+              <p>
+                <strong>Pallet:</strong> #{current.pallet_number}
+              </p>
               <p>
                 <strong>Status:</strong> {current.status}
               </p>
@@ -195,25 +163,41 @@ export default function LiveBuilderPage() {
               <p>
                 <strong>Queued Ops:</strong> {queuedOpsCount}
               </p>
+              {activePalletCount > 1 ? (
+                <p>
+                  <strong>Active Pallets:</strong> {activePalletCount} (using most recent)
+                </p>
+              ) : null}
             </div>
           ) : (
-            <p>No active pallet selected.</p>
+            <p>No active pallet. Create one to start scanning.</p>
           )}
         </Card>
 
         <Card title="Create pallet">
           <form className="builder-form" onSubmit={handleCreatePallet}>
-            <TextInput
-              label="Max panels"
-              inputMode="numeric"
-              value={newMaxPanels}
-              onChange={(event) => setNewMaxPanels(event.target.value)}
-              required
-            />
+            <label className="ui-input-label">
+              <span>Panel count</span>
+              <select
+                className="ui-select"
+                value={newMaxPanels}
+                onChange={(event) => setNewMaxPanels(Number(event.target.value))}
+              >
+                {PANEL_CAPACITY_OPTIONS.map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label className="ui-input-label">
               <span>Template</span>
-              <select className="ui-select" value={newTemplate} onChange={(event) => setNewTemplate(event.target.value)}>
+              <select
+                className="ui-select"
+                value={newTemplate}
+                onChange={(event) => setNewTemplate(event.target.value as (typeof TEMPLATE_OPTIONS)[number])}
+              >
                 {TEMPLATE_OPTIONS.map((template) => (
                   <option key={template} value={template}>
                     {template}
