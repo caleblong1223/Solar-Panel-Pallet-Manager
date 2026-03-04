@@ -34,24 +34,62 @@ export async function listPallets(token: string, status = "active") {
   return apiRequest<PalletListResponse>(`/pallets?${query}`, "GET", token);
 }
 
-export async function createPallet(token: string, payload: { max_panels: number; template_type?: string }) {
-  return apiRequest<Pallet>("/pallets", "POST", token, payload);
+export async function createPallet(
+  token: string,
+  payload: { max_panels: number; template_type?: string },
+  clientOperationId?: string
+) {
+  return apiRequest<Pallet>(
+    "/pallets",
+    "POST",
+    token,
+    payload,
+    clientOperationId ? { "X-Client-Operation-Id": clientOperationId } : undefined
+  );
 }
 
 export async function createExport(token: string, payload: { pallet_id: number; template_type: string }) {
   return apiRequest<{ id: number }>("/exports", "POST", token, payload);
 }
 
-export async function addPalletItem(token: string, palletId: number, serial: string) {
-  return apiRequest<Pallet>(`/pallets/${palletId}/items`, "POST", token, { serial });
+export async function addPalletItem(
+  token: string,
+  palletId: number,
+  serial: string,
+  clientOperationId?: string
+) {
+  return apiRequest<Pallet>(
+    `/pallets/${palletId}/items`,
+    "POST",
+    token,
+    { serial },
+    clientOperationId ? { "X-Client-Operation-Id": clientOperationId } : undefined
+  );
 }
 
-export async function removePalletItem(token: string, palletId: number, itemId: number) {
-  return apiRequest<Pallet>(`/pallets/${palletId}/items/${itemId}`, "DELETE", token);
+export async function removePalletItem(
+  token: string,
+  palletId: number,
+  itemId: number,
+  clientOperationId?: string
+) {
+  return apiRequest<Pallet>(
+    `/pallets/${palletId}/items/${itemId}`,
+    "DELETE",
+    token,
+    undefined,
+    clientOperationId ? { "X-Client-Operation-Id": clientOperationId } : undefined
+  );
 }
 
-export async function completePallet(token: string, palletId: number) {
-  return apiRequest<Pallet>(`/pallets/${palletId}/complete`, "POST", token);
+export async function completePallet(token: string, palletId: number, clientOperationId?: string) {
+  return apiRequest<Pallet>(
+    `/pallets/${palletId}/complete`,
+    "POST",
+    token,
+    undefined,
+    clientOperationId ? { "X-Client-Operation-Id": clientOperationId } : undefined
+  );
 }
 
 export async function getPallet(token: string, palletId: number) {

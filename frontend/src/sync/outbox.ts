@@ -9,6 +9,9 @@ export type OutboxOperation = {
   op_type: OutboxOperationType;
   payload: Record<string, unknown>;
   created_at: string;
+  attempt_count: number;
+  last_error: string | null;
+  next_retry_at: string | null;
 };
 
 const OUTBOX_KEY = "pm2_sync_outbox";
@@ -38,6 +41,9 @@ export function enqueueOutboxOperation(
     op_type,
     payload,
     created_at: new Date().toISOString(),
+    attempt_count: 0,
+    last_error: null,
+    next_retry_at: null,
   };
   const existing = listOutboxOperations();
   const next = [...existing, operation];
@@ -45,7 +51,18 @@ export function enqueueOutboxOperation(
   return operation;
 }
 
+export function removeOutboxOperation(opId: string): void {
+  const next = listOutboxOperations().filter((operation) => operation.op_id !== opId);
+  localStorage.setItem(OUTBOX_KEY, JSON.stringify(next));
+}
+
+export function updateOutboxOperation(opId: string, patch: Partial<OutboxOperation>): void {
+  const next = listOutboxOperations().map((operation) =>
+    operation.op_id === opId ? { ...operation, ...patch } : operation
+  );
+  localStorage.setItem(OUTBOX_KEY, JSON.stringify(next));
+}
+
 export function clearOutbox(): void {
   localStorage.removeItem(OUTBOX_KEY);
 }
-

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.deps import require_roles
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.session import get_db
-from app.models.pallet import AuditEvent, Customer, Pallet, PalletItem
+from app.models.pallet import AuditEvent, ClientOperation, Customer, Pallet, PalletItem
 from app.models.user import User
 from app.schemas.pallet import (
     AuditEventResponse,
@@ -32,6 +32,34 @@ def _normalize_serial(serial: str) -> str:
     if not normalized:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Serial cannot be empty")
     return normalized
+
+
+def _read_client_operation_response(db: Session, operation_id: str | None) -> dict | None:
+    if not operation_id:
+        return None
+    row = db.query(ClientOperation).filter(ClientOperation.operation_id == operation_id).first()
+    return row.response_json if row is not None else None
+
+
+def _record_client_operation_response(
+    db: Session,
+    *,
+    operation_id: str | None,
+    operation_type: str,
+    response_json: dict | None,
+) -> None:
+    if not operation_id:
+        return
+    existing = db.query(ClientOperation.id).filter(ClientOperation.operation_id == operation_id).first()
+    if existing is not None:
+        return
+    db.add(
+        ClientOperation(
+            operation_id=operation_id,
+            operation_type=operation_type,
+            response_json=response_json,
+        )
+    )
 
 
 def _record_audit(
@@ -119,7 +147,12 @@ def create_pallet(
     payload: PalletCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("admin", "packout_operator")),
+    x_client_operation_id: str | None = Header(default=None),
 ) -> PalletResponse:
+    replayed = _read_client_operation_response(db, x_client_operation_id)
+    if replayed is not None:
+        return PalletResponse.model_validate(replayed)
+
     if payload.customer_id is not None:
         customer_exists = db.query(Customer.id).filter(Customer.id == payload.customer_id).first()
         if customer_exists is None:
@@ -146,9 +179,15 @@ def create_pallet(
         outcome="success",
         metadata_json={"pallet_number": pallet.pallet_number},
     )
+    response = _to_pallet_response(pallet)
+    _record_client_operation_response(
+        db,
+        operation_id=x_client_operation_id,
+        operation_type="pallet.create",
+        response_json=response.model_dump(mode="json"),
+    )
     db.commit()
-    db.refresh(pallet)
-    return _to_pallet_response(pallet)
+    return response
 
 
 @router.get("/{pallet_id}", response_model=PalletResponse)
@@ -215,7 +254,12 @@ def add_pallet_item(
     payload: PalletItemCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("admin", "packout_operator")),
+    x_client_operation_id: str | None = Header(default=None),
 ) -> PalletResponse:
+    replayed = _read_client_operation_response(db, x_client_operation_id)
+    if replayed is not None:
+        return PalletResponse.model_validate(replayed)
+
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot add serials to non-active pallet")
@@ -267,9 +311,16 @@ def add_pallet_item(
         outcome="success",
         metadata_json={"serial": serial, "slot_index": slot_index},
     )
-    db.commit()
     pallet = _get_pallet_or_404(db, pallet_id)
-    return _to_pallet_response(pallet)
+    response = _to_pallet_response(pallet)
+    _record_client_operation_response(
+        db,
+        operation_id=x_client_operation_id,
+        operation_type="pallet.item_add",
+        response_json=response.model_dump(mode="json"),
+    )
+    db.commit()
+    return response
 
 
 @router.delete("/{pallet_id}/items/{item_id}", response_model=PalletResponse)
@@ -278,7 +329,12 @@ def remove_pallet_item(
     item_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("admin", "packout_operator")),
+    x_client_operation_id: str | None = Header(default=None),
 ) -> PalletResponse:
+    replayed = _read_client_operation_response(db, x_client_operation_id)
+    if replayed is not None:
+        return PalletResponse.model_validate(replayed)
+
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
         raise HTTPException(
@@ -305,9 +361,16 @@ def remove_pallet_item(
         outcome="success",
         metadata_json={"serial": serial, "slot_index": slot_index, "item_id": item_id},
     )
-    db.commit()
     pallet = _get_pallet_or_404(db, pallet_id)
-    return _to_pallet_response(pallet)
+    response = _to_pallet_response(pallet)
+    _record_client_operation_response(
+        db,
+        operation_id=x_client_operation_id,
+        operation_type="pallet.item_remove",
+        response_json=response.model_dump(mode="json"),
+    )
+    db.commit()
+    return response
 
 
 @router.post("/{pallet_id}/complete", response_model=PalletResponse)
@@ -315,7 +378,12 @@ def complete_pallet(
     pallet_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("admin", "packout_operator")),
+    x_client_operation_id: str | None = Header(default=None),
 ) -> PalletResponse:
+    replayed = _read_client_operation_response(db, x_client_operation_id)
+    if replayed is not None:
+        return PalletResponse.model_validate(replayed)
+
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only active pallets can be completed")
@@ -336,9 +404,15 @@ def complete_pallet(
         outcome="success",
         metadata_json={"item_count": len(pallet.items)},
     )
+    response = _to_pallet_response(pallet)
+    _record_client_operation_response(
+        db,
+        operation_id=x_client_operation_id,
+        operation_type="pallet.complete",
+        response_json=response.model_dump(mode="json"),
+    )
     db.commit()
-    db.refresh(pallet)
-    return _to_pallet_response(pallet)
+    return response
 
 
 @router.post("/{pallet_id}/reset", response_model=PalletResponse)

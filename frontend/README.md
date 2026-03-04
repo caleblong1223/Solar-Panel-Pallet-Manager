@@ -26,7 +26,8 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 
 - Builder mutations now use a repository layer with local fallback.
 - Offline mutations are written to a local outbox queue (`localStorage`) for later replay.
-- Current implementation provides queueing + visibility; replay-to-server logic is scaffolded for the next step.
+- A background sync engine now replays queued operations when connectivity is restored.
+- Replays send `X-Client-Operation-Id` so backend can dedupe duplicate mutation attempts.
 
 ## Tauri
 

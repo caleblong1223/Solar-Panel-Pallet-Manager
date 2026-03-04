@@ -6,7 +6,8 @@ export async function apiRequest<TResponse>(
   path: string,
   method: HttpMethod,
   token?: string,
-  body?: unknown
+  body?: unknown,
+  extraHeaders?: Record<string, string>
 ): Promise<TResponse> {
   const { apiBaseUrl } = loadRuntimeSettings();
   const url = path.startsWith("http://") || path.startsWith("https://") ? path : `${apiBaseUrl}${path}`;
@@ -17,6 +18,9 @@ export async function apiRequest<TResponse>(
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
+  }
+  if (extraHeaders) {
+    Object.assign(headers, extraHeaders);
   }
 
   let payload: BodyInit | undefined;

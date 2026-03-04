@@ -47,3 +47,9 @@ export function upsertLocalPallet(nextPallet: Pallet): Pallet {
   return nextPallet;
 }
 
+export function remapLocalPalletId(localPalletId: number, serverPallet: Pallet): void {
+  const pallets = readPallets();
+  const withoutLocal = pallets.filter((pallet) => pallet.id !== localPalletId && pallet.id !== serverPallet.id);
+  withoutLocal.push(serverPallet);
+  writePallets(withoutLocal);
+}

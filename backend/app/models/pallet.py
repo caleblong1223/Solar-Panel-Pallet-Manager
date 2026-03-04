@@ -200,3 +200,17 @@ class AuditEvent(Base):
         nullable=False,
         default=_utc_now,
     )
+
+
+class ClientOperation(Base):
+    __tablename__ = "client_operations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    operation_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    operation_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    response_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utc_now,
+    )

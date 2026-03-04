@@ -12,10 +12,12 @@ import {
   findLocalPalletById,
   getAllLocalPallets,
   listLocalPalletsByStatus,
+  remapLocalPalletId,
   replaceAllLocalPallets,
   upsertLocalPallet,
 } from "./localPalletStore";
 import { enqueueOutboxOperation } from "../sync/outbox";
+import { setPalletIdMapping } from "../sync/idMap";
 
 type CreatePalletPayload = { max_panels: number; template_type?: string };
 
@@ -116,7 +118,11 @@ export async function repoCreatePallet(token: string | null, payload: CreatePall
     items: [],
   };
   upsertLocalPallet(created);
-  enqueueOutboxOperation("pallet.create", payload as Record<string, unknown>);
+  enqueueOutboxOperation("pallet.create", {
+    local_pallet_id: created.id,
+    max_panels: payload.max_panels,
+    template_type: payload.template_type ?? null,
+  });
   return created;
 }
 
@@ -186,13 +192,18 @@ export async function repoRemovePalletItem(token: string | null, palletId: numbe
   if (remainingItems.length === local.items.length) {
     throw new Error("Pallet item not found");
   }
+  const removedItem = local.items.find((item) => item.id === itemId) ?? null;
   const updated: Pallet = {
     ...local,
     item_count: remainingItems.length,
     items: remainingItems,
   };
   upsertLocalPallet(updated);
-  enqueueOutboxOperation("pallet.item_remove", { pallet_id: palletId, item_id: itemId });
+  enqueueOutboxOperation("pallet.item_remove", {
+    pallet_id: palletId,
+    item_id: itemId,
+    serial: removedItem?.serial ?? null,
+  });
   return updated;
 }
 
@@ -225,3 +236,7 @@ export async function repoCompletePallet(token: string | null, palletId: number)
   return updated;
 }
 
+export function repoApplyPalletIdMapping(localPalletId: number, serverPallet: Pallet): void {
+  setPalletIdMapping(localPalletId, serverPallet.id);
+  remapLocalPalletId(localPalletId, serverPallet);
+}

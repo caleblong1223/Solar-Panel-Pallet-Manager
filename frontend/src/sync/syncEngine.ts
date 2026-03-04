@@ -1,21 +1,150 @@
-import { listOutboxOperations } from "./outbox";
+import {
+  listOutboxOperations,
+  removeOutboxOperation,
+  type OutboxOperation,
+  updateOutboxOperation,
+} from "./outbox";
+import { resolvePalletId } from "./idMap";
+import { repoApplyPalletIdMapping } from "../features/palletRepo";
+import {
+  addPalletItem,
+  completePallet,
+  createPallet,
+  getPallet,
+  removePalletItem,
+} from "../features/pallets";
+import { upsertLocalPallet } from "../features/localPalletStore";
 
 let onlineListenerRegistered = false;
+let syncInFlight = false;
 
 export function getPendingSyncCount(): number {
   return listOutboxOperations().length;
 }
 
-// Scaffold for Sprint B/C: this will replay queued local ops to the backend.
+function getAccessToken(): string | null {
+  return localStorage.getItem("pm2_access_token");
+}
+
+function isRetryReady(operation: OutboxOperation): boolean {
+  if (!operation.next_retry_at) {
+    return true;
+  }
+  return new Date(operation.next_retry_at).getTime() <= Date.now();
+}
+
+function calcNextRetry(attemptCount: number): string {
+  const backoffMs = Math.min(60_000, 1_000 * Math.max(1, attemptCount));
+  return new Date(Date.now() + backoffMs).toISOString();
+}
+
+async function replayOperation(token: string, operation: OutboxOperation): Promise<void> {
+  switch (operation.op_type) {
+    case "pallet.create": {
+      const localPalletId = Number(operation.payload.local_pallet_id);
+      const maxPanels = Number(operation.payload.max_panels);
+      const templateTypeRaw = operation.payload.template_type;
+      const templateType =
+        typeof templateTypeRaw === "string" && templateTypeRaw.trim().length > 0 ? templateTypeRaw : undefined;
+      const created = await createPallet(
+        token,
+        { max_panels: maxPanels, template_type: templateType },
+        operation.op_id
+      );
+      repoApplyPalletIdMapping(localPalletId, created);
+      upsertLocalPallet(created);
+      return;
+    }
+    case "pallet.item_add": {
+      const palletId = resolvePalletId(Number(operation.payload.pallet_id));
+      const serial = String(operation.payload.serial ?? "").trim().toUpperCase();
+      if (!serial) {
+        throw new Error("Missing serial for pallet.item_add");
+      }
+      if (palletId <= 0) {
+        throw new Error("Pallet ID not resolved for pallet.item_add");
+      }
+      const updated = await addPalletItem(token, palletId, serial, operation.op_id);
+      upsertLocalPallet(updated);
+      return;
+    }
+    case "pallet.item_remove": {
+      const palletId = resolvePalletId(Number(operation.payload.pallet_id));
+      if (palletId <= 0) {
+        throw new Error("Pallet ID not resolved for pallet.item_remove");
+      }
+      const rawItemId = Number(operation.payload.item_id);
+      let itemId = rawItemId;
+      if (itemId <= 0) {
+        const serial = String(operation.payload.serial ?? "").trim().toUpperCase();
+        if (!serial) {
+          throw new Error("Missing serial fallback for pallet.item_remove");
+        }
+        const pallet = await getPallet(token, palletId);
+        const matched = pallet.items.find((item) => item.serial === serial) ?? null;
+        if (!matched) {
+          // Already removed remotely; treat as success.
+          return;
+        }
+        itemId = matched.id;
+      }
+      const updated = await removePalletItem(token, palletId, itemId, operation.op_id);
+      upsertLocalPallet(updated);
+      return;
+    }
+    case "pallet.complete": {
+      const palletId = resolvePalletId(Number(operation.payload.pallet_id));
+      if (palletId <= 0) {
+        throw new Error("Pallet ID not resolved for pallet.complete");
+      }
+      const updated = await completePallet(token, palletId, operation.op_id);
+      upsertLocalPallet(updated);
+      return;
+    }
+    default:
+      throw new Error(`Unsupported outbox operation: ${operation.op_type}`);
+  }
+}
+
+async function syncOutbox(): Promise<void> {
+  if (syncInFlight) {
+    return;
+  }
+  syncInFlight = true;
+  try {
+    const token = getAccessToken();
+    if (!token) {
+      return;
+    }
+    const operations = listOutboxOperations();
+    for (const operation of operations) {
+      if (!isRetryReady(operation)) {
+        continue;
+      }
+      try {
+        await replayOperation(token, operation);
+        removeOutboxOperation(operation.op_id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Sync replay failed";
+        const nextAttempt = operation.attempt_count + 1;
+        updateOutboxOperation(operation.op_id, {
+          attempt_count: nextAttempt,
+          last_error: message,
+          next_retry_at: calcNextRetry(nextAttempt),
+        });
+      }
+    }
+  } finally {
+    syncInFlight = false;
+  }
+}
+
 export function startSyncEngine(): void {
   if (onlineListenerRegistered) {
     return;
   }
   onlineListenerRegistered = true;
-  window.addEventListener("online", () => {
-    // Placeholder: real replay logic lands in next step.
-    // eslint-disable-next-line no-console
-    console.info("Network restored. Pending queued operations:", getPendingSyncCount());
-  });
+  window.addEventListener("online", () => void syncOutbox());
+  window.setInterval(() => void syncOutbox(), 10_000);
+  void syncOutbox();
 }
-
