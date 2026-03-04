@@ -84,12 +84,17 @@ scripts\install_all_windows.bat
 
 #### `scripts/build_windows.bat`
 **Build the .exe only**
-- Requires Python and dependencies installed
+- Auto-installs compile dependencies (from `requirements.txt` + explicit build packages)
+- Verifies PDF and build imports (`reportlab`, `PyPDF2`, `PyInstaller`, etc.)
 - Creates `dist/Pallet Manager.exe`
 - Does not create installer
 
 ```bash
 scripts\build_windows.bat
+# Optional:
+# scripts\build_windows.bat --deps-only
+# scripts\build_windows.bat --no-clean
+# scripts\build_windows.bat --skip-sumatra
 ```
 
 #### `scripts/setup_windows.bat`
@@ -294,6 +299,5 @@ chmod +x scripts/*.sh  # macOS/Linux
 **Dependencies missing:**
 - Run `scripts\setup_windows.bat` (Windows)
 - Or `pip install -r requirements.txt`
-
 
 

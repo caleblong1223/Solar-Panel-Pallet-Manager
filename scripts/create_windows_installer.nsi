@@ -5,6 +5,7 @@
 !define APP_VERSION "1.0.0"
 !define APP_PUBLISHER "Crossroads Solar"
 !define APP_EXE "Pallet Manager.exe"
+!define APP_EXE_SOURCE "dist\Pallet Manager.exe"
 !define APP_INSTALL_DIR "$PROGRAMFILES\${APP_NAME}"
 
 ; Modern UI
@@ -50,11 +51,11 @@ Section "Main Application" SecMain
     ; Set output path
     SetOutPath "$INSTDIR"
 
-    ; Check if exe exists in current directory
-    IfFileExists "${APP_EXE}" 0 +3
-        File "${APP_EXE}"
+    ; Check if exe exists in dist folder
+    IfFileExists "${APP_EXE_SOURCE}" 0 +3
+        File "${APP_EXE_SOURCE}"
         Goto +2
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Error: ${APP_EXE} not found. Please build the application first."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Error: ${APP_EXE_SOURCE} not found. Please run scripts\\build_windows.bat first."
     Abort
 
     ; Create application directory structure
@@ -150,4 +151,3 @@ Section "Uninstall"
     ; Remove install directory (only if empty)
     RMDir "$INSTDIR"
 SectionEnd
-
