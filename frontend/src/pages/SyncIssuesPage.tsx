@@ -9,6 +9,24 @@ import {
 } from "../sync/syncEngine";
 import { listOutboxOperations, type OutboxOperation } from "../sync/outbox";
 
+function getGuidance(errorCode: string | null): string {
+  switch (errorCode) {
+    case "SERIAL_ALREADY_ASSIGNED_ELSEWHERE":
+      return "Serial already exists on another pallet. Remove from this queue item or correct source scan.";
+    case "SERIAL_ALREADY_ON_PALLET":
+      return "Serial is already on the target pallet. This operation is likely duplicate.";
+    case "PALLET_AT_CAPACITY":
+    case "PALLET_NOT_FULL":
+      return "Pallet capacity state changed. Open Builder and reconcile pallet contents.";
+    case "PALLET_NOT_ACTIVE":
+      return "Pallet is no longer active. Verify lifecycle state before retrying.";
+    case "PALLET_NOT_FOUND":
+      return "Target pallet no longer exists on server. Discard or recreate locally.";
+    default:
+      return "Review operation details, then retry or discard.";
+  }
+}
+
 export default function SyncIssuesPage() {
   const [operations, setOperations] = useState<OutboxOperation[]>([]);
   const [isSyncingNow, setIsSyncingNow] = useState(false);
@@ -64,6 +82,8 @@ export default function SyncIssuesPage() {
                   <span>
                     {operation.op_type} ({operation.op_id.slice(0, 8)})<br />
                     <small>{operation.last_error ?? "Conflict requires operator review."}</small>
+                    <br />
+                    <small>{getGuidance(operation.last_error_code)}</small>
                   </span>
                   <span className="sync-issue-actions">
                     <Button variant="secondary" onClick={() => { retryOutboxOperation(operation.op_id); refresh(); }}>
@@ -107,4 +127,3 @@ export default function SyncIssuesPage() {
     </AppFrame>
   );
 }
-

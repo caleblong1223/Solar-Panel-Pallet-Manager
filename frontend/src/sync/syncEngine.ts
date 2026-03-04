@@ -149,8 +149,9 @@ async function syncOutbox(): Promise<void> {
         refreshSyncCounts();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Sync replay failed";
+        const errorCode = error instanceof ApiError ? error.errorCode : null;
         if (isHardConflict(error)) {
-          markOperationNeedsReview(operation.op_id, message);
+          markOperationNeedsReview(operation.op_id, message, errorCode);
           refreshSyncCounts();
           continue;
         }
@@ -158,6 +159,7 @@ async function syncOutbox(): Promise<void> {
         updateOutboxOperation(operation.op_id, {
           attempt_count: nextAttempt,
           last_error: message,
+          last_error_code: errorCode,
           next_retry_at: calcNextRetry(nextAttempt),
         });
         refreshSyncCounts();
@@ -195,6 +197,7 @@ export function retryOutboxOperation(opId: string): void {
     state: "pending",
     next_retry_at: null,
     last_error: null,
+    last_error_code: null,
   });
   refreshSyncCounts();
   void syncOutbox();

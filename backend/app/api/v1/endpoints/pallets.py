@@ -30,8 +30,15 @@ def _now_utc() -> datetime:
 def _normalize_serial(serial: str) -> str:
     normalized = serial.strip().upper()
     if not normalized:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Serial cannot be empty")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error_code": "SERIAL_EMPTY", "message": "Serial cannot be empty"},
+        )
     return normalized
+
+
+def _error(status_code: int, error_code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"error_code": error_code, "message": message})
 
 
 def _read_client_operation_response(db: Session, operation_id: str | None) -> dict | None:
@@ -94,7 +101,7 @@ def _get_pallet_or_404(db: Session, pallet_id: int) -> Pallet:
         .first()
     )
     if pallet is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pallet not found")
+        raise _error(status.HTTP_404_NOT_FOUND, "PALLET_NOT_FOUND", "Pallet not found")
     return pallet
 
 
@@ -156,7 +163,7 @@ def create_pallet(
     if payload.customer_id is not None:
         customer_exists = db.query(Customer.id).filter(Customer.id == payload.customer_id).first()
         if customer_exists is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+            raise _error(status.HTTP_404_NOT_FOUND, "CUSTOMER_NOT_FOUND", "Customer not found")
 
     max_number = db.query(func.max(Pallet.pallet_number)).filter(Pallet.deleted_at.is_(None)).scalar()
     pallet_number = (max_number or 0) + 1
@@ -210,12 +217,12 @@ def update_pallet(
 ) -> PalletResponse:
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only active pallets can be updated")
+        raise _error(status.HTTP_409_CONFLICT, "PALLET_NOT_ACTIVE", "Only active pallets can be updated")
 
     if payload.customer_id is not None:
         customer_exists = db.query(Customer.id).filter(Customer.id == payload.customer_id).first()
         if customer_exists is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+            raise _error(status.HTTP_404_NOT_FOUND, "CUSTOMER_NOT_FOUND", "Customer not found")
 
     changes: dict[str, object] = {}
     if payload.template_type is not None and payload.template_type != pallet.template_type:
@@ -226,9 +233,10 @@ def update_pallet(
         pallet.customer_id = payload.customer_id
     if payload.max_panels is not None:
         if payload.max_panels < len(pallet.items):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="max_panels cannot be less than current item count",
+            raise _error(
+                status.HTTP_409_CONFLICT,
+                "PALLET_CAPACITY_BELOW_ITEM_COUNT",
+                "max_panels cannot be less than current item count",
             )
         if payload.max_panels != pallet.max_panels:
             changes["max_panels"] = {"old": pallet.max_panels, "new": payload.max_panels}
@@ -262,14 +270,14 @@ def add_pallet_item(
 
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot add serials to non-active pallet")
+        raise _error(status.HTTP_409_CONFLICT, "PALLET_NOT_ACTIVE", "Cannot add serials to non-active pallet")
     if len(pallet.items) >= pallet.max_panels:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Pallet is at capacity")
+        raise _error(status.HTTP_409_CONFLICT, "PALLET_AT_CAPACITY", "Pallet is at capacity")
 
     serial = _normalize_serial(payload.serial)
     same_pallet = next((item for item in pallet.items if item.serial == serial), None)
     if same_pallet is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Serial already on this pallet")
+        raise _error(status.HTTP_409_CONFLICT, "SERIAL_ALREADY_ON_PALLET", "Serial already on this pallet")
 
     in_other_pallet = (
         db.query(PalletItem.id)
@@ -278,21 +286,29 @@ def add_pallet_item(
         .first()
     )
     if in_other_pallet is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Serial already assigned to another pallet")
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "SERIAL_ALREADY_ASSIGNED_ELSEWHERE",
+            "Serial already assigned to another pallet",
+        )
 
     occupied_slots = {item.slot_index for item in pallet.items}
     if payload.slot_index is not None:
         if payload.slot_index in occupied_slots:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Requested slot is already occupied")
+            raise _error(status.HTTP_409_CONFLICT, "SLOT_OCCUPIED", "Requested slot is already occupied")
         if payload.slot_index > pallet.max_panels:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Requested slot exceeds pallet capacity")
+            raise _error(
+                status.HTTP_409_CONFLICT,
+                "SLOT_EXCEEDS_CAPACITY",
+                "Requested slot exceeds pallet capacity",
+            )
         slot_index = payload.slot_index
     else:
         slot_index = 1
         while slot_index in occupied_slots:
             slot_index += 1
         if slot_index > pallet.max_panels:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No remaining slots on pallet")
+            raise _error(status.HTTP_409_CONFLICT, "NO_SLOTS_REMAINING", "No remaining slots on pallet")
 
     db.add(
         PalletItem(
@@ -337,10 +353,7 @@ def remove_pallet_item(
 
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot remove serials from non-active pallet",
-        )
+        raise _error(status.HTTP_409_CONFLICT, "PALLET_NOT_ACTIVE", "Cannot remove serials from non-active pallet")
 
     item = (
         db.query(PalletItem)
@@ -348,7 +361,7 @@ def remove_pallet_item(
         .first()
     )
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pallet item not found")
+        raise _error(status.HTTP_404_NOT_FOUND, "PALLET_ITEM_NOT_FOUND", "Pallet item not found")
     serial = item.serial
     slot_index = item.slot_index
     db.delete(item)
@@ -386,12 +399,9 @@ def complete_pallet(
 
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only active pallets can be completed")
+        raise _error(status.HTTP_409_CONFLICT, "PALLET_NOT_ACTIVE", "Only active pallets can be completed")
     if len(pallet.items) != pallet.max_panels:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Pallet must be full before completion",
-        )
+        raise _error(status.HTTP_409_CONFLICT, "PALLET_NOT_FULL", "Pallet must be full before completion")
     pallet.status = "completed"
     pallet.completed_at = _now_utc()
     pallet.completed_by = current_user.id
@@ -423,7 +433,7 @@ def reset_pallet(
 ) -> PalletResponse:
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "completed":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only completed pallets can be reset")
+        raise _error(status.HTTP_409_CONFLICT, "PALLET_NOT_COMPLETED", "Only completed pallets can be reset")
     pallet.status = "active"
     pallet.completed_at = None
     pallet.completed_by = None

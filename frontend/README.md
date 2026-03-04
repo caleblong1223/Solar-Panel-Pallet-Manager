@@ -29,6 +29,7 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 - A background sync engine now replays queued operations when connectivity is restored.
 - Replays send `X-Client-Operation-Id` so backend can dedupe duplicate mutation attempts.
 - Sync status is surfaced in navigation/settings, and unresolved conflicts are listed in `/sync-issues` for operator action.
+- Backend conflict responses now include machine-readable `error_code` values, and Sync Issues displays remediation hints per code.
 
 ## Tauri
 

@@ -11,6 +11,7 @@ export type OutboxOperation = {
   created_at: string;
   attempt_count: number;
   last_error: string | null;
+  last_error_code: string | null;
   next_retry_at: string | null;
   state: "pending" | "needs_review";
 };
@@ -35,6 +36,7 @@ function parseOutbox(raw: string | null): OutboxOperation[] {
         created_at: item.created_at ?? new Date().toISOString(),
         attempt_count: item.attempt_count ?? 0,
         last_error: item.last_error ?? null,
+        last_error_code: item.last_error_code ?? null,
         next_retry_at: item.next_retry_at ?? null,
         state: item.state ?? "pending",
       }));
@@ -58,6 +60,7 @@ export function enqueueOutboxOperation(
     created_at: new Date().toISOString(),
     attempt_count: 0,
     last_error: null,
+    last_error_code: null,
     next_retry_at: null,
     state: "pending",
   };
@@ -83,10 +86,11 @@ export function clearOutbox(): void {
   localStorage.removeItem(OUTBOX_KEY);
 }
 
-export function markOperationNeedsReview(opId: string, reason: string): void {
+export function markOperationNeedsReview(opId: string, reason: string, errorCode?: string | null): void {
   updateOutboxOperation(opId, {
     state: "needs_review",
     last_error: reason,
+    last_error_code: errorCode ?? null,
     next_retry_at: null,
   });
 }
