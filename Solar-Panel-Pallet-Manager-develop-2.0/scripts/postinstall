@@ -1,0 +1,17 @@
+#!/bin/bash
+# Post-install script for macOS installer
+# This runs after the app is installed
+
+# Remove quarantine attribute to prevent Gatekeeper issues
+APP_PATH="/Applications/Pallet Manager.app"
+
+if [ -d "$APP_PATH" ]; then
+    # Remove quarantine attribute
+    xattr -d com.apple.quarantine "$APP_PATH" 2>/dev/null || true
+    xattr -cr "$APP_PATH" 2>/dev/null || true
+fi
+
+exit 0
+
+
+

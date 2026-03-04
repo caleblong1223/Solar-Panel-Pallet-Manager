@@ -1,0 +1,48 @@
+{
+  "pallets": [
+    {
+      "pallet_number": 1,
+      "serial_numbers": [
+        "CRS25WT3609839",
+        "CRS25WT3609840",
+        "CRS25WT3609824",
+        "CRS25WT3609831"
+      ],
+      "completed_at": "2026-01-06 12:07:35",
+      "exported_file": "/Users/caleblong/Documents/Crossroads Solar/Excel Script for Packout/PALLETS/6-Jan-26/Pallet_6.xlsx"
+    },
+    {
+      "pallet_number": 2,
+      "serial_numbers": [
+        "CRS25WT3609662",
+        "CRS25WT3609650",
+        "CRS25WT3609649",
+        "CRS25WT3609647"
+      ],
+      "completed_at": "2026-01-06 13:08:01",
+      "exported_file": "/Users/caleblong/Documents/Crossroads Solar/Excel Script for Packout/PALLETS/6-Jan-26/450WT162026-2.xlsx"
+    },
+    {
+      "pallet_number": 1,
+      "serial_numbers": [
+        "CRS25WT3609648",
+        "CRS25WT3609633",
+        "CRS25WT3609658"
+      ],
+      "completed_at": "2026-01-06 14:17:15",
+      "exported_file": "/Users/caleblong/Documents/Crossroads Solar/Excel Script for Packout/PALLETS/6-Jan-26/200WT162026-1.xlsx"
+    },
+    {
+      "pallet_number": 1,
+      "serial_numbers": [
+        "CRS25WT3609758",
+        "CRS25WT3609753",
+        "CRS25WT3609754",
+        "CRS25WT3609755"
+      ],
+      "completed_at": "2026-01-06 18:08:02",
+      "exported_file": "/Users/caleblong/Documents/Crossroads Solar/Excel Script for Packout/PALLETS/6-Jan-26/330WT162026-1.xlsx"
+    }
+  ],
+  "next_pallet_number": 2
+}
