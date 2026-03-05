@@ -9,6 +9,10 @@ class CustomerCreate(BaseModel):
     business_name: str | None = Field(default=None, max_length=255)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=100)
+    address: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=255)
+    state: str | None = Field(default=None, max_length=64)
+    zip_code: str | None = Field(default=None, max_length=32)
     is_active: bool = True
 
 
@@ -18,6 +22,10 @@ class CustomerUpdate(BaseModel):
     business_name: str | None = Field(default=None, max_length=255)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=100)
+    address: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=255)
+    state: str | None = Field(default=None, max_length=64)
+    zip_code: str | None = Field(default=None, max_length=32)
     is_active: bool | None = None
 
 
@@ -30,6 +38,10 @@ class CustomerResponse(BaseModel):
     business_name: str | None
     email: EmailStr | None
     phone: str | None
+    address: str | None
+    city: str | None
+    state: str | None
+    zip_code: str | None
     is_active: bool
     created_at: datetime
 

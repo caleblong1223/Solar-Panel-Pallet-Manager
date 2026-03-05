@@ -44,6 +44,10 @@ def create_customer(
         business_name=payload.business_name,
         email=str(payload.email) if payload.email else None,
         phone=payload.phone,
+        address=payload.address,
+        city=payload.city,
+        state=payload.state,
+        zip_code=payload.zip_code,
         is_active=payload.is_active,
     )
     db.add(customer)
@@ -98,6 +102,14 @@ def update_customer(
         customer.email = str(payload.email)
     if payload.phone is not None:
         customer.phone = payload.phone
+    if payload.address is not None:
+        customer.address = payload.address
+    if payload.city is not None:
+        customer.city = payload.city
+    if payload.state is not None:
+        customer.state = payload.state
+    if payload.zip_code is not None:
+        customer.zip_code = payload.zip_code
     if payload.is_active is not None:
         customer.is_active = payload.is_active
 

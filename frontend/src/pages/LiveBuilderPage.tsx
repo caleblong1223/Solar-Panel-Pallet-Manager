@@ -82,14 +82,6 @@ function getEffectiveToken(contextToken: string | null): string | null {
   return contextToken ?? localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-/** Format date as MDYYYY (single-digit month/day, like 1.1) for B3 preview */
-function formatB3Date(date: Date): string {
-  const m = date.getMonth() + 1;
-  const d = date.getDate();
-  const y = date.getFullYear();
-  return `${m}${d}${y}`;
-}
-
 export default function LiveBuilderPage() {
   const { token: contextToken } = useAuth();
   const token = getEffectiveToken(contextToken);
@@ -117,21 +109,21 @@ export default function LiveBuilderPage() {
     // Start each app session with a clean Builder state instead of auto-resuming
     // previously active pallets from local cache/server.
     setCurrent(null);
+  }, []);
 
+  useEffect(() => {
     // Seed from any cached customers first so offline builder still has a usable dropdown.
     try {
       const cachedRaw = localStorage.getItem(CUSTOMERS_CACHE_KEY);
       if (cachedRaw) {
         const parsed = JSON.parse(cachedRaw) as Customer[];
         setCustomers(parsed);
-        if (selectedCustomerId === "none") {
-          const legacyDefault = parsed.find((customer) => {
-            const name = (customer.display_name ?? "").toLowerCase();
-            return name.includes("josh") && name.includes("future") && name.includes("solution");
-          });
-          if (legacyDefault) {
-            setSelectedCustomerId(legacyDefault.id);
-          }
+        const legacyDefault = parsed.find((customer) => {
+          const name = (customer.display_name ?? "").toLowerCase();
+          return name.includes("josh") && name.includes("future") && name.includes("solution");
+        });
+        if (legacyDefault) {
+          setSelectedCustomerId((prev) => (prev === "none" ? legacyDefault.id : prev));
         }
       }
     } catch {
@@ -148,20 +140,18 @@ export default function LiveBuilderPage() {
           // Ignore cache write failures.
         }
         // Prefer the legacy default customer if present.
-        if (selectedCustomerId === "none") {
-          const legacyDefault = response.customers.find((customer) => {
-            const name = (customer.display_name ?? "").toLowerCase();
-            return name.includes("josh") && name.includes("future") && name.includes("solution");
-          });
-          if (legacyDefault) {
-            setSelectedCustomerId(legacyDefault.id);
-          }
+        const legacyDefault = response.customers.find((customer) => {
+          const name = (customer.display_name ?? "").toLowerCase();
+          return name.includes("josh") && name.includes("future") && name.includes("solution");
+        });
+        if (legacyDefault) {
+          setSelectedCustomerId((prev) => (prev === "none" ? legacyDefault.id : prev));
         }
       })
       .catch(() => {
         // Customers are optional for pallet creation; swallow errors here and surface via explicit actions if needed.
       });
-  }, [contextToken, selectedCustomerId]);
+  }, [contextToken]);
 
   const handleStartNewPallet = async () => {
     setIsBusy(true);
@@ -234,6 +224,7 @@ export default function LiveBuilderPage() {
     }
     const desiredTemplateType = newPalletTemplate;
     const desiredCustomerId = selectedCustomerId === "none" ? null : selectedCustomerId;
+    const desiredMaxPanels = newPalletSize;
     let workingPallet = current;
     const palletNumber = current.pallet_number;
 
@@ -241,21 +232,31 @@ export default function LiveBuilderPage() {
     try {
       if (
         token &&
-        (workingPallet.template_type !== desiredTemplateType || workingPallet.customer_id !== desiredCustomerId)
+        (
+          workingPallet.template_type !== desiredTemplateType ||
+          workingPallet.customer_id !== desiredCustomerId ||
+          workingPallet.max_panels !== desiredMaxPanels
+        )
       ) {
         workingPallet = await updatePallet(token, workingPallet.id, {
           template_type: desiredTemplateType,
           customer_id: desiredCustomerId,
+          max_panels: desiredMaxPanels,
         });
         setCurrent(workingPallet);
       } else if (
         !token &&
-        (workingPallet.template_type !== desiredTemplateType || workingPallet.customer_id !== desiredCustomerId)
+        (
+          workingPallet.template_type !== desiredTemplateType ||
+          workingPallet.customer_id !== desiredCustomerId ||
+          workingPallet.max_panels !== desiredMaxPanels
+        )
       ) {
         workingPallet = {
           ...workingPallet,
           template_type: desiredTemplateType,
           customer_id: desiredCustomerId,
+          max_panels: desiredMaxPanels,
         };
         setCurrent(workingPallet);
       }
@@ -286,12 +287,7 @@ export default function LiveBuilderPage() {
           {current ? (
             <>
               <p className="builder-meta">
-                <strong>Panel type (for export):</strong> {newPalletTemplate}
-              </p>
-              <p className="builder-meta">
-                <strong>Cell B3 on export:</strong>{" "}
-                {newPalletTemplate}
-                {formatB3Date(new Date())}-{current.pallet_number}
+                <strong>Panel Type:</strong> {newPalletTemplate}
               </p>
               <p className="builder-meta">
                 <strong>{current.item_count}</strong> / {current.max_panels} panels
@@ -326,6 +322,15 @@ export default function LiveBuilderPage() {
                   }))}
                   onChange={(next) => setNewPalletTemplate(next)}
                 />
+                <AnimatedSelect
+                  label="Pallet size (can be changed before export)"
+                  value={String(newPalletSize)}
+                  options={PALLET_SIZES.map<AnimatedSelectOption>((size) => ({
+                    value: String(size),
+                    label: `${size} panels`,
+                  }))}
+                  onChange={(next) => setNewPalletSize(Number(next))}
+                />
               </div>
               <form className="builder-form" onSubmit={handleAddSerial} style={{ marginTop: "12px" }}>
                 <TextInput
@@ -342,7 +347,7 @@ export default function LiveBuilderPage() {
               </form>
               <div style={{ marginTop: "12px" }}>
                 <label className="ui-input-label" style={{ marginBottom: "8px" }}>
-                  <span>Packout date (for Excel B3 / G3)</span>
+                  <span>Packout date</span>
                   <input
                     className="ui-input"
                     type="date"

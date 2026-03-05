@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
+const LOOPBACK_API_BASE_URL = "http://127.0.0.1:8000/api/v1";
 const SETTINGS_KEY = "pm2_runtime_settings";
 
 export type RuntimeSettings = {
@@ -68,6 +69,11 @@ export function saveRuntimeSettings(next: RuntimeSettings): RuntimeSettings {
 
 export function getApiBaseCandidates(): string[] {
   const settings = loadRuntimeSettings();
-  const candidates = [settings.primaryApiBaseUrl, settings.fallbackApiBaseUrl].filter(Boolean);
+  const candidates = [
+    settings.primaryApiBaseUrl,
+    settings.fallbackApiBaseUrl,
+    DEFAULT_API_BASE_URL,
+    LOOPBACK_API_BASE_URL,
+  ].filter(Boolean);
   return [...new Set(candidates)];
 }

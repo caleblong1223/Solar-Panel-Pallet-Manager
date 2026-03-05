@@ -12,7 +12,10 @@ async function copyInstallers() {
   await fs.mkdir(outputDir, { recursive: true });
 
   const candidates = [];
-  for (const subDir of ["nsis", "msi"]) {
+  const installerDirs = ["nsis", "msi", "dmg"];
+  const installerExtensions = [".exe", ".msi", ".dmg"];
+
+  for (const subDir of installerDirs) {
     const directory = path.join(bundleDir, subDir);
     try {
       const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -21,7 +24,7 @@ async function copyInstallers() {
           continue;
         }
         const fileName = entry.name.toLowerCase();
-        if (fileName.endsWith(".exe") || fileName.endsWith(".msi")) {
+        if (installerExtensions.some((ext) => fileName.endsWith(ext))) {
           candidates.push(path.join(directory, entry.name));
         }
       }

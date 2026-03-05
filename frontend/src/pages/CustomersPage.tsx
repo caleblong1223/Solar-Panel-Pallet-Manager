@@ -13,8 +13,6 @@ import {
   type Customer,
   type CustomerCreatePayload,
 } from "../features/customers";
-import { listPalletsForCustomer, type Pallet } from "../features/pallets";
-import { loadRuntimeSettings } from "../lib/runtimeConfig";
 
 type EditState = {
   id: number | null;
@@ -40,26 +38,26 @@ export default function CustomersPage() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [search, setSearch] = useState("");
 
   const [editState, setEditState] = useState<EditState>({ id: null, form: EMPTY_FORM });
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [pallets, setPallets] = useState<Pallet[]>([]);
-  const [palletsLoading, setPalletsLoading] = useState(false);
-  const [selectedPalletIds, setSelectedPalletIds] = useState<number[]>([]);
 
   const CUSTOMERS_CACHE_KEY = "pm2_cached_customers";
 
   const loadCustomers = async () => {
-    setIsLoading(true);
+    if (!hasLoadedOnce) {
+      setIsLoading(true);
+    }
     try {
       const response = await listCustomers(token ?? "", {
         isActive: showInactive ? undefined : true,
         search,
       });
       setCustomers(response.customers);
+      setHasLoadedOnce(true);
       try {
         localStorage.setItem(CUSTOMERS_CACHE_KEY, JSON.stringify(response.customers));
       } catch {
@@ -86,6 +84,7 @@ export default function CustomersPage() {
       } else {
         notify("Using last known customers (offline)", "warning");
       }
+      setHasLoadedOnce(true);
     } finally {
       setIsLoading(false);
     }
@@ -104,7 +103,7 @@ export default function CustomersPage() {
     }
     void loadCustomers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, showInactive]);
+  }, [showInactive]);
 
   const startCreate = () => {
     setEditState({ id: null, form: { ...EMPTY_FORM } });
@@ -177,98 +176,9 @@ export default function CustomersPage() {
     await loadCustomers();
   };
 
-  const handleViewPallets = async (customer: Customer) => {
-    setSelectedCustomer(customer);
-    setPallets([]);
-    setSelectedPalletIds([]);
-    setPalletsLoading(true);
-    try {
-      const response = await listPalletsForCustomer(token ?? "", customer.id, { includeDeleted: false });
-      setPallets(response.pallets);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load pallets for customer";
-      notify(message, "error");
-    } finally {
-      setPalletsLoading(false);
-    }
-  };
-
-  const togglePalletSelection = (palletId: number) => {
-    setSelectedPalletIds((prev) =>
-      prev.includes(palletId) ? prev.filter((id) => id !== palletId) : [...prev, palletId]
-    );
-  };
-
-  const handleDownloadExcel = async () => {
-    if (!token) {
-      notify("Unable to download without a connection to the server.", "warning");
-      return;
-    }
-    if (selectedPalletIds.length !== 1) {
-      notify("Select exactly one pallet to download Excel.", "warning");
-      return;
-    }
-    const { apiBaseUrl } = loadRuntimeSettings();
-    const palletId = selectedPalletIds[0];
-    try {
-      const response = await fetch(`${apiBaseUrl}/pallets/${palletId}/excel`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`Excel download failed with status ${response.status}`);
-      }
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `pallet-${palletId}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to download Excel";
-      notify(message, "error");
-    }
-  };
-
-  const handleCombinedPdf = async () => {
-    if (!token) {
-      notify("Unable to generate PDF without a connection to the server.", "warning");
-      return;
-    }
-    if (selectedPalletIds.length === 0) {
-      notify("Select at least one pallet to create a combined PDF.", "warning");
-      return;
-    }
-    const { apiBaseUrl } = loadRuntimeSettings();
-    try {
-      const response = await fetch(`${apiBaseUrl}/pallets/combined-pdf`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(selectedPalletIds),
-      });
-      if (!response.ok) {
-        throw new Error(`Combined PDF failed with status ${response.status}`);
-      }
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to generate combined PDF";
-      notify(message, "error");
-    }
-  };
-
   return (
     <AppFrame title="Customers">
-      <section className="builder-grid">
+      <section className="customers-layout">
         <Card title={editState.id == null ? "New customer" : `Edit customer #${editState.id}`}>
           <form className="builder-form" onSubmit={handleSave}>
             <TextInput
@@ -422,20 +332,21 @@ export default function CustomersPage() {
             </div>
           </form>
 
-          {isLoading ? (
+          {!hasLoadedOnce && isLoading ? (
             <p>Loading customers...</p>
           ) : customers.length === 0 ? (
             <p style={{ marginTop: "12px", color: "var(--color-text-secondary)" }}>
               No customers found.
             </p>
           ) : (
-            <table className="items-table" style={{ marginTop: "12px" }}>
+            <table className="items-table customers-table" style={{ marginTop: "12px" }}>
               <thead>
                 <tr>
                   <th>Name</th>
                   <th>Business</th>
                   <th>Contact</th>
                   <th>Phone</th>
+                  <th>Address</th>
                   <th>City/State</th>
                   <th>Status</th>
                   <th />
@@ -448,25 +359,18 @@ export default function CustomersPage() {
                     <td>{c.business_name}</td>
                     <td>{c.contact_name}</td>
                     <td>{c.phone}</td>
+                    <td>{c.address}</td>
                     <td>
                       {c.city}
                       {c.state ? (c.city ? `, ${c.state}` : c.state) : ""}
                     </td>
                     <td>{c.is_active ? "Active" : "Archived"}</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="customer-actions-cell">
                       <Button
                         variant="secondary"
                         onClick={() => startEdit(c)}
-                        style={{ marginRight: "4px" }}
                       >
                         Edit
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => void handleViewPallets(c)}
-                        style={{ marginRight: "4px" }}
-                      >
-                        View pallets
                       </Button>
                       {c.is_active ? (
                         <Button variant="danger" onClick={() => void handleDeactivate(c)}>
@@ -478,61 +382,6 @@ export default function CustomersPage() {
                 ))}
               </tbody>
             </table>
-          )}
-        </Card>
-
-        <Card title={selectedCustomer ? `Pallets for ${selectedCustomer.display_name}` : "Pallets by customer"}>
-          {selectedCustomer == null ? (
-            <p style={{ marginTop: "12px", color: "var(--color-text-secondary)" }}>
-              Select a customer and choose &quot;View pallets&quot; to see their pallets.
-            </p>
-          ) : palletsLoading ? (
-            <p>Loading pallets...</p>
-          ) : pallets.length === 0 ? (
-            <p style={{ marginTop: "12px", color: "var(--color-text-secondary)" }}>
-              No pallets found for this customer.
-            </p>
-          ) : (
-            <>
-              <div style={{ display: "flex", gap: "8px", marginTop: "8px", marginBottom: "8px" }}>
-                <Button type="button" variant="secondary" onClick={() => void handleDownloadExcel()}>
-                  Download Excel (selected)
-                </Button>
-                <Button type="button" variant="primary" onClick={() => void handleCombinedPdf()}>
-                  Combined PDF (selected)
-                </Button>
-              </div>
-              <table className="items-table" style={{ marginTop: "12px" }}>
-                <thead>
-                  <tr>
-                    <th />
-                    <th>Pallet #</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Completed</th>
-                    <th>Items</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pallets.map((pallet) => (
-                    <tr key={pallet.id}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={selectedPalletIds.includes(pallet.id)}
-                          onChange={() => togglePalletSelection(pallet.id)}
-                        />
-                      </td>
-                      <td>{pallet.pallet_number}</td>
-                      <td>{pallet.status}</td>
-                      <td>{new Date(pallet.created_at).toLocaleString()}</td>
-                      <td>{pallet.completed_at ? new Date(pallet.completed_at).toLocaleString() : "-"}</td>
-                      <td>{pallet.item_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
           )}
         </Card>
       </section>

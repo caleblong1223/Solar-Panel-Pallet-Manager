@@ -24,10 +24,8 @@ export default function AppFrame({ title, children }: Props) {
     const refresh = () => setSyncState(getSyncState());
     refresh();
     window.addEventListener(SYNC_STATE_EVENT, refresh);
-    const id = window.setInterval(refresh, 2000);
     return () => {
       window.removeEventListener(SYNC_STATE_EVENT, refresh);
-      window.clearInterval(id);
     };
   }, []);
 

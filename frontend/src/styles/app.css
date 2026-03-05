@@ -144,6 +144,7 @@ h1 {
   border-radius: var(--radius-md);
   padding: var(--space-4);
   box-shadow: var(--shadow-soft);
+  overflow: hidden;
 }
 
 .ui-card__title {
@@ -292,6 +293,13 @@ h1 {
   margin-top: var(--space-4);
 }
 
+.customers-layout {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+  margin-top: var(--space-4);
+}
+
 .builder-form {
   display: grid;
   gap: var(--space-3);
@@ -304,6 +312,7 @@ h1 {
 .items-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .items-table th,
@@ -311,10 +320,23 @@ h1 {
   border-bottom: 1px solid var(--color-border);
   padding: 8px 4px;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .items-table tbody tr {
   cursor: pointer;
+}
+
+.customers-table {
+  table-layout: auto;
+}
+
+.customer-actions-cell {
+  text-align: right;
+  white-space: nowrap;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .row-selected {
