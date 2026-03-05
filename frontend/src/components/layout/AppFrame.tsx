@@ -12,7 +12,7 @@ type Props = {
 const navItems = [
   { to: "/builder", label: "Builder" },
   { to: "/history", label: "History" },
-  { to: "/imports-exports", label: "Imports/Exports" },
+  { to: "/imports-exports", label: "Sun Simulator Import" },
   { to: "/sync-issues", label: "Sync Issues" },
   { to: "/settings", label: "Settings" },
 ];

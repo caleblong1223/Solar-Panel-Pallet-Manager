@@ -3,12 +3,27 @@ Setup script for py2app (macOS packaging)
 Build with: python setup.py py2app
 """
 
+import sys
+from pathlib import Path
+
+# Ensure project root is on path so app.version is importable at build time
+_project_root = Path(__file__).resolve().parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 from setuptools import setup
+from app.version import VERSION
 
 APP = ['app/pallet_builder_gui.py']
 DATA_FILES = [
-    # Include reference workbook for first-time setup
-    ('reference_workbook', ['EXCEL/BUILD 10-12-25.xlsx']),
+    # Include reference workbooks for first-time setup (26, 30, 35)
+    ('reference_workbook', [
+        'data/EXCEL/26.xlsx',
+        'data/EXCEL/30.xlsx',
+        'data/EXCEL/35.xlsx',
+    ]),
+    # Include app icon assets (same as 1.1) for window/dock icon at runtime
+    ('assets', ['assets/PalletManager.ico', 'assets/PalletManager.icns', 'assets/Pallet icon.png']),
 ]
 
 # Check if reportlab is available (optional dependency)
@@ -108,19 +123,23 @@ OPTIONS = {
         'PySide2',
         'wx',
         'kivy',
+        # PostgreSQL / backend (not needed for desktop GUI; avoids Mach-O relocate error)
+        'psycopg',
+        'psycopg2',
+        'psycopg_binary',
     ],
     'site_packages': True,  # Include site-packages but exclude large unused packages
     'semi_standalone': False,  # Fully standalone bundle (better performance)
     'use_pythonpath': True,  # Use Python path
     'strip': True,  # Strip debug symbols for smaller size and faster loading
-    'iconfile': 'icons/PalletManager.icns',  # Application icon
+    'iconfile': 'assets/PalletManager.icns',  # Application icon (same as 1.1)
     'plist': {
         'CFBundleName': 'Pallet Manager',
-        'CFBundleDisplayName': 'Pallet Manager',
-        'CFBundleGetInfoString': 'Pallet Builder for Solar Panel Management',
+        'CFBundleDisplayName': f'Pallet Manager {VERSION}',
+        'CFBundleGetInfoString': f'Pallet Manager {VERSION} - Pallet Builder for Solar Panel Management',
         'CFBundleIdentifier': 'com.crossroads.palletmanager',
-        'CFBundleVersion': '1.0.0',
-        'CFBundleShortVersionString': '1.0.0',
+        'CFBundleVersion': VERSION,
+        'CFBundleShortVersionString': VERSION,
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '10.13',  # macOS High Sierra or later
         'LSRequiresNativeExecution': True,  # Prefer native execution (ARM64)

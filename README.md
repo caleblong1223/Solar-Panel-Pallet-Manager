@@ -88,35 +88,38 @@ If not, open Packout’s firewall for inbound TCP port **8000**.
 
 ---
 
-### 3. Building the Windows desktop EXE (Tauri)
+### 3. Building the 2.0 desktop app (Tauri – React/JS UI)
 
-You need a Windows dev machine (can be Packout or another PC) with:
+**Important:** The **2.0** app with the JavaScript/React UI is built with **Tauri**, not py2app.  
+The Python `setup.py` / py2app build produces the **legacy Tkinter** desktop app (1.1-style).  
+To get the **2.0** UI (Live Builder, History, Import Center, etc.), build the Tauri app from `frontend/`.
+
+**Prerequisites:**
 
 - Node.js (LTS)
-- Rust (`rustup`)
-- Tauri CLI (`cargo install tauri-cli`)
+- Rust: install from [rustup.rs](https://rustup.rs) (or `brew install rust` on macOS)
+- No need to install Tauri CLI separately; the project uses `npx tauri` (via `@tauri-apps/cli` in devDependencies).
 
-**Build steps:**
+**Build steps (macOS .app or Windows .exe):**
 
 ```bash
 cd frontend
 
-# Point the UI at the Packout backend
-set VITE_API_BASE_URL=http://10.20.10.62:8000/api/v1   # Command Prompt
-# or: $env:VITE_API_BASE_URL = "http://10.20.10.62:8000/api/v1"   # PowerShell
+# Optional: point the UI at the Packout backend (baked in at build time)
+# macOS/Linux:
+export VITE_API_BASE_URL=http://10.20.10.62:8000/api/v1
+# Windows CMD: set VITE_API_BASE_URL=http://10.20.10.62:8000/api/v1
+# Windows PowerShell: $env:VITE_API_BASE_URL = "http://10.20.10.62:8000/api/v1"
 
 npm install
 npm run build
-npm run tauri build
+npx tauri build
 ```
 
-Tauri will produce a **Windows EXE** in `frontend/src-tauri/target/release/` (or similar), e.g.:
+- **macOS:** The `.app` bundle is produced under `frontend/src-tauri/target/release/bundle/macos/` (e.g. `Pallet Manager.app`).
+- **Windows:** The EXE (and optional NSIS/MSI installers) are under `frontend/src-tauri/target/release/` and `bundle/nsis`, `bundle/msi`. The script `npm run build:desktop` runs `tauri build` and then copies Windows installers to `frontend/dist/installers/`.
 
-```text
-frontend/src-tauri/target/release/PalletManager.exe
-```
-
-This EXE has the API base URL baked in and will always talk to `http://10.20.10.62:8000/api/v1`.
+The built app has the API base URL baked in and will talk to the configured backend (e.g. `http://10.20.10.62:8000/api/v1`).
 
 ---
 

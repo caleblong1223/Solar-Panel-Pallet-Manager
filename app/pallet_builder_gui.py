@@ -86,17 +86,22 @@ class PalletBuilderGUI:
             from app.path_utils import get_base_dir
             import sys
             
-            # Try to find icon file
+            # Try to find icon file (same icon as 1.1 in assets/)
             if getattr(sys, 'frozen', False):
-                # Running as exe - icon is bundled
+                # Running as exe/app - icon is bundled in assets/
                 if hasattr(sys, '_MEIPASS'):
                     # PyInstaller onefile
-                    icon_path = Path(sys._MEIPASS) / 'icons' / 'PalletManager.ico'
+                    icon_path = Path(sys._MEIPASS) / 'assets' / 'PalletManager.ico'
                 else:
-                    # PyInstaller onedir
-                    icon_path = Path(sys.executable).parent / 'icons' / 'PalletManager.ico'
+                    # PyInstaller onedir or py2app
+                    icon_path = Path(sys.executable).parent / 'assets' / 'PalletManager.ico'
+                if not icon_path.exists() and sys.platform == 'darwin':
+                    # macOS .app: Resources folder
+                    icon_path = Path(sys.executable).parent.parent / 'Resources' / 'assets' / 'PalletManager.icns'
             else:
                 # Running from source
+                icon_path = get_base_dir() / 'assets' / 'PalletManager.ico'
+            if not icon_path.exists():
                 icon_path = get_base_dir() / 'icons' / 'PalletManager.ico'
             
             if icon_path.exists():
@@ -217,14 +222,19 @@ class PalletBuilderGUI:
             icon_set = False
             
             if system == 'Windows':
-                # Windows: use .ico file for window title bar and taskbar
-                # Try multiple paths to find the icon
+                # Windows: use .ico file for window title bar and taskbar (same icon as 1.1 in assets/)
                 icon_paths = [
+                    get_resource_path('assets/PalletManager.ico'),
+                    get_base_dir() / 'assets' / 'PalletManager.ico',
+                    Path(sys.executable).parent / 'assets' / 'PalletManager.ico',
+                    Path(sys.executable).parent / '_internal' / 'assets' / 'PalletManager.ico',
+                ]
+                if hasattr(sys, '_MEIPASS'):
+                    icon_paths.insert(0, Path(sys._MEIPASS) / 'assets' / 'PalletManager.ico')
+                icon_paths.extend([
                     get_resource_path('icons/PalletManager.ico'),
                     get_base_dir() / 'icons' / 'PalletManager.ico',
-                    Path(sys.executable).parent / 'icons' / 'PalletManager.ico',
-                    Path(sys.executable).parent / '_internal' / 'icons' / 'PalletManager.ico',
-                ]
+                ])
                 
                 for icon_path in icon_paths:
                     if icon_path.exists():
@@ -249,11 +259,14 @@ class PalletBuilderGUI:
                     print(f"Warning: Could not find PalletManager.ico. Tried: {[str(p) for p in icon_paths]}")
                     
             elif system == 'Darwin':
-                # macOS: use .icns file
+                # macOS: use .icns file (same icon as 1.1 in assets/)
                 icon_paths = [
+                    Path(sys.executable).parent.parent / 'Resources' / 'assets' / 'PalletManager.icns',
+                    get_resource_path('assets/PalletManager.icns'),
+                    get_base_dir() / 'assets' / 'PalletManager.icns',
+                    Path(sys.executable).parent / 'assets' / 'PalletManager.icns',
                     get_resource_path('icons/PalletManager.icns'),
                     get_base_dir() / 'icons' / 'PalletManager.icns',
-                    Path(sys.executable).parent / 'icons' / 'PalletManager.icns',
                 ]
                 
                 for icon_path in icon_paths:
@@ -268,12 +281,14 @@ class PalletBuilderGUI:
                             print(f"Failed to set icon from {icon_path}: {e}")
                             continue
             else:
-                # Linux: try to use PNG or ICO
+                # Linux: try to use PNG or ICO (same icon as 1.1 in assets/)
                 icon_paths = [
+                    get_resource_path('assets/Pallet icon.png'),
+                    get_base_dir() / 'assets' / 'Pallet icon.png',
+                    get_resource_path('assets/PalletManager.ico'),
+                    get_base_dir() / 'assets' / 'PalletManager.ico',
                     get_resource_path('icons/PalletManager.png'),
                     get_base_dir() / 'icons' / 'PalletManager.png',
-                    get_resource_path('icons/PalletManager.ico'),
-                    get_base_dir() / 'icons' / 'PalletManager.ico',
                 ]
                 
                 for icon_path in icon_paths:
@@ -295,10 +310,12 @@ class PalletBuilderGUI:
                 system = platform.system()
                 if system == 'Windows':
                     icon_paths = [
-                        get_resource_path('icons/PalletManager.ico'),
-                        get_base_dir() / 'icons' / 'PalletManager.ico',
-                        Path(sys.executable).parent / 'icons' / 'PalletManager.ico',
+                        get_resource_path('assets/PalletManager.ico'),
+                        get_base_dir() / 'assets' / 'PalletManager.ico',
+                        Path(sys.executable).parent / 'assets' / 'PalletManager.ico',
                     ]
+                    if hasattr(sys, '_MEIPASS'):
+                        icon_paths.insert(0, Path(sys._MEIPASS) / 'assets' / 'PalletManager.ico')
                     for icon_path in icon_paths:
                         if icon_path.exists():
                             self.root.iconbitmap(str(icon_path))
@@ -796,13 +813,15 @@ class PalletBuilderGUI:
     
     def _ensure_reference_workbook(self, excel_dir: Path):
         """
-        Copy reference workbook to EXCEL folder if no workbooks exist.
-        Also ensure CURRENT.xlsx exists (create it if missing).
+        Copy reference workbooks (26.xlsx, 30.xlsx, 35.xlsx) to EXCEL folder if missing.
+        Also ensure CURRENT.xlsx exists (create from 26.xlsx if missing).
         This ensures the app works out of the box after installation.
         """
+        REFERENCE_FILES = ("26.xlsx", "30.xlsx", "35.xlsx")
+
         try:
             import shutil
-            
+
             # Debug logging for Windows troubleshooting
             print("\n" + "="*70)
             print("DEBUG: _ensure_reference_workbook() called")
@@ -814,100 +833,101 @@ class PalletBuilderGUI:
             if hasattr(sys, '_MEIPASS'):
                 print(f"sys._MEIPASS: {sys._MEIPASS}")
             print("="*70)
-            
-            # Check if any workbooks exist (excluding CURRENT.xlsx and temp files)
+
+            # Check existing workbooks (excluding CURRENT.xlsx and temp files)
             existing_workbooks = list(excel_dir.glob("*.xlsx"))
-            existing_workbooks = [f for f in existing_workbooks 
-                                 if not f.name.startswith("~$") 
+            existing_workbooks = [f for f in existing_workbooks
+                                 if not f.name.startswith("~$")
                                  and f.name != "CURRENT.xlsx"]
             print(f"Existing workbooks in EXCEL: {[f.name for f in existing_workbooks]}")
-            
-            # Try to find reference workbook in packaged app
-            reference_workbook = None
-            
-            # In packaged app, reference workbook is in reference_workbook/ subdirectory
+
+            # Find reference_workbook directory (sources for 26, 30, 35)
+            reference_dir = None
+
             if is_packaged():
-                # PyInstaller (Windows/Linux): Check _MEIPASS (temp extraction dir for onefile)
                 if hasattr(sys, '_MEIPASS'):
-                    # PyInstaller onefile mode - data files extracted to temp dir
-                    meipass_path = Path(sys._MEIPASS) / "reference_workbook" / "BUILD 10-12-25.xlsx"
-                    if meipass_path.exists():
-                        reference_workbook = meipass_path
-                        print(f"Found reference workbook in _MEIPASS: {meipass_path}")
-                
-                # py2app (macOS): Resources are in Contents/Resources/
-                if not reference_workbook:
+                    ref = Path(sys._MEIPASS) / "reference_workbook"
+                    if ref.exists():
+                        reference_dir = ref
+                        print(f"Found reference_workbook in _MEIPASS: {ref}")
+                if not reference_dir:
                     exe_dir = Path(sys.executable).parent
                     resources_dir = exe_dir.parent / "Resources"
-                    ref_path = resources_dir / "reference_workbook" / "BUILD 10-12-25.xlsx"
-                    if ref_path.exists():
-                        reference_workbook = ref_path
-                        print(f"Found reference workbook in Resources: {ref_path}")
-                
-                # Fallback: Try _internal subdirectory (PyInstaller onedir mode)
-                if not reference_workbook:
+                    ref = resources_dir / "reference_workbook"
+                    if ref.exists():
+                        reference_dir = ref
+                        print(f"Found reference_workbook in Resources: {ref}")
+                if not reference_dir:
                     exe_dir = Path(sys.executable).parent
-                    internal_path = exe_dir / "_internal" / "reference_workbook" / "BUILD 10-12-25.xlsx"
-                    if internal_path.exists():
-                        reference_workbook = internal_path
-                        print(f"Found reference workbook in _internal: {internal_path}")
-            
-            # In development, check project EXCEL folder
-            if not reference_workbook:
-                dev_excel = Path(__file__).parent.parent / "EXCEL" / "BUILD 10-12-25.xlsx"
-                if dev_excel.exists():
-                    reference_workbook = dev_excel
-            
-            # Copy reference workbook if no workbooks exist
-            print(f"\nChecking if we need to copy reference workbook...")
-            print(f"  existing_workbooks: {len(existing_workbooks)}")
-            print(f"  reference_workbook: {reference_workbook}")
-            print(f"  reference exists: {reference_workbook.exists() if reference_workbook else 'N/A'}")
-            
-            if not existing_workbooks and reference_workbook and reference_workbook.exists():
-                # Copy BUILD workbook
-                build_target = excel_dir / "BUILD 10-12-25.xlsx"
-                if not build_target.exists():
-                    print(f"  → Copying BUILD workbook to: {build_target}")
-                    shutil.copy2(reference_workbook, build_target)
-                    print(f"  ✅ Copied reference workbook successfully!")
-                else:
-                    print(f"  ℹ️  BUILD workbook already exists, skipping")
-            
-            # Always ensure CURRENT.xlsx exists (create it if missing)
+                    ref = exe_dir / "_internal" / "reference_workbook"
+                    if ref.exists():
+                        reference_dir = ref
+                        print(f"Found reference_workbook in _internal: {ref}")
+            else:
+                # Development: data/EXCEL or EXCEL
+                project_root = Path(__file__).parent.parent
+                for candidate in (project_root / "data" / "EXCEL", project_root / "EXCEL"):
+                    if candidate.exists():
+                        reference_dir = candidate
+                        print(f"Using reference dir (dev): {reference_dir}")
+                        break
+
+            print(f"\nReference dir: {reference_dir}")
+
+            # Copy each reference file (26, 30, 35) into excel_dir if missing
+            if reference_dir:
+                for filename in REFERENCE_FILES:
+                    src = reference_dir / filename
+                    dst = excel_dir / filename
+                    if src.exists() and not dst.exists():
+                        print(f"  → Copying {filename} to EXCEL/")
+                        shutil.copy2(src, dst)
+                        print(f"  ✅ Copied {filename}")
+                    elif dst.exists():
+                        print(f"  ℹ️  {filename} already in EXCEL, skipping")
+                    elif not src.exists():
+                        print(f"  ⚠️  Reference {filename} not found at {src}")
+
+            # Ensure CURRENT.xlsx exists (create from 26.xlsx or first available)
             current_target = excel_dir / "CURRENT.xlsx"
             print(f"\nChecking CURRENT.xlsx...")
             print(f"  Target: {current_target}")
             print(f"  Exists: {current_target.exists()}")
-            
+
             if not current_target.exists():
-                # Try to use reference workbook if available
-                if reference_workbook and reference_workbook.exists():
-                    print(f"  → Creating CURRENT.xlsx from reference workbook")
-                    shutil.copy2(reference_workbook, current_target)
-                    print(f"  ✅ Created CURRENT.xlsx successfully!")
-                    print(f"     Size: {current_target.stat().st_size} bytes")
+                source = None
+                if (excel_dir / "26.xlsx").exists():
+                    source = excel_dir / "26.xlsx"
+                else:
+                    for name in REFERENCE_FILES:
+                        p = excel_dir / name
+                        if p.exists():
+                            source = p
+                            break
+                if source:
+                    print(f"  → Creating CURRENT.xlsx from {source.name}")
+                    shutil.copy2(source, current_target)
+                    print(f"  ✅ Created CURRENT.xlsx")
                 elif existing_workbooks:
-                    # Use the most recent BUILD file if reference not available
                     latest_build = max(existing_workbooks, key=lambda p: p.stat().st_mtime)
                     print(f"  → Creating CURRENT.xlsx from {latest_build.name}")
                     shutil.copy2(latest_build, current_target)
                     print(f"  ✅ Created CURRENT.xlsx from existing BUILD file!")
                 else:
-                    print(f"  ❌ No reference workbook or existing BUILD files found!")
+                    print(f"  ❌ No reference workbooks (26/30/35) or existing files found!")
             else:
                 print(f"  ℹ️  CURRENT.xlsx already exists, skipping")
-            
+
             print("="*70 + "\n")
-            
+
         except Exception as e:
-            # Log error but don't fail - user can add reference workbook manually
+            # Log error but don't fail - user can add reference workbooks manually
             print(f"\n❌ ERROR in _ensure_reference_workbook: {e}")
             print(f"   Exception type: {type(e).__name__}")
             import traceback
             print(f"   Traceback:\n{traceback.format_exc()}")
             print("="*70)
-            print("You can manually add a reference workbook to the EXCEL folder.")
+            print("You can manually add 26.xlsx, 30.xlsx, 35.xlsx to the EXCEL folder.")
     
     def setup_ui(self):
         """Create and layout all UI components"""

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import AppFrame from "../components/layout/AppFrame";
 import { useToast } from "../components/notifications/ToastProvider";
@@ -9,49 +9,49 @@ import {
   addPalletItem,
   completePallet,
   createPallet,
+  createExport,
   getPallet,
   listPallets,
   removePalletItem,
   type Pallet,
 } from "../features/pallets";
+import { getExportDownloadUrl } from "../features/exports";
 
+const DEFAULT_MAX_PANELS = 25;
 const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
+const ACCESS_TOKEN_KEY = "pm2_access_token";
+
+function getEffectiveToken(contextToken: string | null): string | null {
+  return contextToken ?? localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+/** Format date as MDYYYY (single-digit month/day, like 1.1) for B3 preview */
+function formatB3Date(date: Date): string {
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  const y = date.getFullYear();
+  return `${m}${d}${y}`;
+}
 
 export default function LiveBuilderPage() {
-  const { token } = useAuth();
+  const { token: contextToken } = useAuth();
+  const token = getEffectiveToken(contextToken);
   const { notify } = useToast();
 
-  const [activePallets, setActivePallets] = useState<Pallet[]>([]);
-  const [selectedPalletId, setSelectedPalletId] = useState<number | null>(null);
   const [current, setCurrent] = useState<Pallet | null>(null);
   const [serial, setSerial] = useState("");
   const [isBusy, setIsBusy] = useState(false);
-
-  const [newMaxPanels, setNewMaxPanels] = useState("25");
-  const [newTemplate, setNewTemplate] = useState(TEMPLATE_OPTIONS[0]);
-
+  const [newPalletTemplate, setNewPalletTemplate] = useState(TEMPLATE_OPTIONS[0]);
   const serialInputRef = useRef<HTMLInputElement | null>(null);
 
-  const remaining = useMemo(() => {
-    if (!current) {
-      return 0;
-    }
-    return current.max_panels - current.item_count;
-  }, [current]);
+  const remaining = current ? current.max_panels - current.item_count : 0;
 
-  const refreshActivePallets = async () => {
-    if (!token) {
-      return;
-    }
-    const response = await listPallets(token, "active");
-    setActivePallets(response.pallets);
-
-    const selectedStillActive = response.pallets.find((pallet) => pallet.id === selectedPalletId);
-    const nextSelected = selectedStillActive?.id ?? response.pallets[0]?.id ?? null;
-    setSelectedPalletId(nextSelected);
-
-    if (nextSelected) {
-      const full = await getPallet(token, nextSelected);
+  const loadFirstActivePallet = async () => {
+    const t = getEffectiveToken(contextToken);
+    if (!t) return;
+    const { pallets } = await listPallets(t, "active");
+    if (pallets.length > 0) {
+      const full = await getPallet(t, pallets[0].id);
       setCurrent(full);
     } else {
       setCurrent(null);
@@ -59,42 +59,28 @@ export default function LiveBuilderPage() {
   };
 
   useEffect(() => {
-    void refreshActivePallets();
-  }, [token]);
+    void loadFirstActivePallet();
+  }, [contextToken]);
 
-  useEffect(() => {
-    if (!token || !selectedPalletId) {
+  const handleStartNewPallet = async () => {
+    const t = getEffectiveToken(contextToken);
+    if (!t) {
+      notify("No session. Sign in or check connection.", "warning");
       return;
     }
-
-    void getPallet(token, selectedPalletId).then(setCurrent).catch(() => {
-      notify("Failed to load pallet", "error");
-    });
-  }, [selectedPalletId, token, notify]);
-
-  const handleCreatePallet = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!token) {
-      return;
-    }
-
-    const parsed = Number.parseInt(newMaxPanels, 10);
-    if (!Number.isFinite(parsed) || parsed < 1) {
-      notify("Max panels must be a positive number", "error");
-      return;
-    }
-
     setIsBusy(true);
     try {
-      const created = await createPallet(token, { max_panels: parsed, template_type: newTemplate });
-      notify(`Created pallet #${created.pallet_number}`, "success");
-      await refreshActivePallets();
-      setSelectedPalletId(created.id);
+      const created = await createPallet(t, {
+        max_panels: DEFAULT_MAX_PANELS,
+        template_type: newPalletTemplate,
+      });
       setCurrent(created);
       setSerial("");
+      notify(`Pallet #${created.pallet_number} started`, "success");
       serialInputRef.current?.focus();
-    } catch {
-      notify("Failed to create pallet", "error");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start pallet";
+      notify(message, "error");
     } finally {
       setIsBusy(false);
     }
@@ -102,17 +88,25 @@ export default function LiveBuilderPage() {
 
   const handleAddSerial = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token || !current) {
-      notify("Select or create an active pallet first", "warning");
+    const t = getEffectiveToken(contextToken);
+    if (!t || !current) {
+      notify("Start a pallet first", "warning");
+      return;
+    }
+    const s = serial.trim();
+    if (!s) return;
+
+    if (remaining <= 0) {
+      notify("Pallet is full. Complete it first.", "warning");
       return;
     }
 
     setIsBusy(true);
     try {
-      const updated = await addPalletItem(token, current.id, serial);
+      const updated = await addPalletItem(t, current.id, s);
       setCurrent(updated);
       setSerial("");
-      notify("Serial added", "success");
+      notify("Added", "success");
       serialInputRef.current?.focus();
     } catch {
       notify("Failed to add serial", "error");
@@ -122,167 +116,129 @@ export default function LiveBuilderPage() {
   };
 
   const handleRemoveItem = async (itemId: number) => {
-    if (!token || !current) {
-      return;
-    }
-
+    if (!token || !current) return;
     setIsBusy(true);
     try {
       const updated = await removePalletItem(token, current.id, itemId);
       setCurrent(updated);
-      notify("Serial removed", "success");
+      notify("Removed", "success");
     } catch {
-      notify("Failed to remove serial", "error");
+      notify("Failed to remove", "error");
     } finally {
       setIsBusy(false);
     }
   };
 
   const handleComplete = async () => {
-    if (!token || !current) {
+    if (!token || !current) return;
+    if (remaining !== 0) {
+      notify("Pallet must be full to complete", "warning");
       return;
     }
-
+    const palletId = current.id;
+    const palletNumber = current.pallet_number;
+    const templateType = current.template_type ?? "200WT";
     setIsBusy(true);
     try {
-      const updated = await completePallet(token, current.id);
-      notify(`Pallet #${updated.pallet_number} completed`, "success");
-      await refreshActivePallets();
+      await completePallet(token, current.id);
+      const created = await createExport(token, { pallet_id: palletId, template_type: templateType });
+      const { download_url } = await getExportDownloadUrl(token, created.id, "xlsx");
+      window.open(download_url, "_blank", "noopener,noreferrer");
+      notify(`Pallet #${palletNumber} completed · export ready`, "success");
+      setCurrent(null);
+      await loadFirstActivePallet();
+      serialInputRef.current?.focus();
     } catch {
-      notify("Failed to complete pallet", "error");
+      notify("Failed to complete or export pallet", "error");
     } finally {
       setIsBusy(false);
     }
   };
 
   return (
-    <AppFrame title="Live Builder">
+    <AppFrame title="Builder">
       <section className="builder-grid">
-        <Card title="Active pallet">
-          <label className="ui-input-label">
-            <span>Choose active pallet</span>
-            <select
-              className="ui-select"
-              value={selectedPalletId ?? ""}
-              onChange={(event) => {
-                const value = event.target.value;
-                setSelectedPalletId(value ? Number(value) : null);
-              }}
-            >
-              <option value="">None</option>
-              {activePallets.map((pallet) => (
-                <option key={pallet.id} value={pallet.id}>
-                  #{pallet.pallet_number} ({pallet.item_count}/{pallet.max_panels})
-                </option>
-              ))}
-            </select>
-          </label>
-
+        <Card title={current ? `Pallet #${current.pallet_number}` : "No active pallet"}>
           {current ? (
-            <div className="builder-meta">
-              <p>
-                <strong>Status:</strong> {current.status}
+            <>
+              <p className="builder-meta">
+                <strong>Panel type (for export):</strong> {current.template_type ?? "200WT"}
               </p>
-              <p>
-                <strong>Template:</strong> {current.template_type ?? "-"}
+              <p className="builder-meta">
+                <strong>Cell B3 on export:</strong>{" "}
+                {current.template_type ?? "200WT"}
+                {formatB3Date(new Date())}-{current.pallet_number}
               </p>
-              <p>
-                <strong>Capacity:</strong> {current.item_count}/{current.max_panels}
+              <p className="builder-meta">
+                <strong>{current.item_count}</strong> / {current.max_panels} panels
+                {remaining > 0 && ` · ${remaining} remaining`}
               </p>
-              <p>
-                <strong>Remaining:</strong> {remaining}
-              </p>
-            </div>
+              <form className="builder-form" onSubmit={handleAddSerial} style={{ marginTop: "12px" }}>
+                <TextInput
+                  label="Scan barcode"
+                  ref={serialInputRef}
+                  value={serial}
+                  onChange={(e) => setSerial(e.target.value.toUpperCase())}
+                  placeholder="Scan then press Enter"
+                  autoFocus
+                />
+                <Button type="submit" disabled={isBusy || remaining <= 0}>
+                  Add
+                </Button>
+              </form>
+              <div style={{ marginTop: "12px" }}>
+                <Button
+                  variant="primary"
+                  disabled={isBusy || remaining !== 0}
+                  onClick={handleComplete}
+                >
+                  Complete pallet
+                </Button>
+              </div>
+            </>
           ) : (
-            <p>No active pallet selected.</p>
-          )}
-        </Card>
-
-        <Card title="Create pallet">
-          <form className="builder-form" onSubmit={handleCreatePallet}>
-            <TextInput
-              label="Max panels"
-              inputMode="numeric"
-              value={newMaxPanels}
-              onChange={(event) => setNewMaxPanels(event.target.value)}
-              required
-            />
-
-            <label className="ui-input-label">
-              <span>Template</span>
-              <select className="ui-select" value={newTemplate} onChange={(event) => setNewTemplate(event.target.value)}>
-                {TEMPLATE_OPTIONS.map((template) => (
-                  <option key={template} value={template}>
-                    {template}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <Button disabled={isBusy} type="submit">
-              Create Active Pallet
-            </Button>
-          </form>
-        </Card>
-      </section>
-
-      <section className="builder-grid">
-        <Card title="Scan/Add serial">
-          <form className="builder-form" onSubmit={handleAddSerial}>
-            <TextInput
-              label="Serial"
-              ref={serialInputRef}
-              value={serial}
-              onChange={(event) => setSerial(event.target.value.toUpperCase())}
-              placeholder="Scan barcode and press Enter"
-              required
-            />
-            <Button disabled={isBusy || !current || remaining <= 0} type="submit">
-              Add Serial
-            </Button>
-          </form>
-        </Card>
-
-        <Card title="Complete pallet">
-          <p>Completion is enabled only when pallet is full.</p>
-          <Button disabled={isBusy || !current || remaining !== 0} onClick={handleComplete}>
-            Complete Current Pallet
-          </Button>
-        </Card>
-      </section>
-
-      <section className="card-grid">
-        <Card title="Current items">
-          {!current || current.items.length === 0 ? (
-            <p>No serials added yet.</p>
-          ) : (
-            <table className="items-table">
-              <thead>
-                <tr>
-                  <th>Slot</th>
-                  <th>Serial</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {current.items
-                  .slice()
-                  .sort((a, b) => a.slot_index - b.slot_index)
-                  .map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.slot_index}</td>
-                      <td className="mono">{item.serial}</td>
-                      <td>
-                        <Button variant="danger" disabled={isBusy} onClick={() => void handleRemoveItem(item.id)}>
-                          Remove
-                        </Button>
-                      </td>
-                    </tr>
+            <>
+              <p style={{ marginBottom: "12px", color: "var(--color-text-secondary)" }}>
+                Start a new pallet to begin scanning. Panel type is used for export and cell B3.
+              </p>
+              <label className="ui-input-label" style={{ marginBottom: "8px" }}>
+                <span>Panel type</span>
+                <select
+                  className="ui-select"
+                  value={newPalletTemplate}
+                  onChange={(e) => setNewPalletTemplate(e.target.value)}
+                >
+                  {TEMPLATE_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
                   ))}
-              </tbody>
-            </table>
+                </select>
+              </label>
+              <Button type="button" disabled={isBusy} onClick={() => void handleStartNewPallet()}>
+                Start new pallet
+              </Button>
+            </>
           )}
         </Card>
+
+        {current && current.items.length > 0 ? (
+          <Card title="Items on pallet">
+            <ul className="flat-list">
+              {current.items
+                .slice()
+                .sort((a, b) => a.slot_index - b.slot_index)
+                .map((item) => (
+                  <li key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <span className="mono">{item.serial}</span>
+                    <Button variant="danger" disabled={isBusy} onClick={() => void handleRemoveItem(item.id)}>
+                      Remove
+                    </Button>
+                  </li>
+                ))}
+            </ul>
+          </Card>
+        ) : null}
       </section>
     </AppFrame>
   );

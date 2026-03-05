@@ -5,9 +5,8 @@ import { useToast } from "../components/notifications/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
-import { getExportDownloadUrl, listExportsByPallet, type ExportRecord } from "../features/exports";
-import { getImportBatch, uploadSimulatorFile, type SimImportBatch } from "../features/simulator";
-import { createExport } from "../features/pallets";
+import { searchBarcodes, type BarcodeSearchResult } from "../features/barcodes";
+import { uploadSimulatorFile, type SimImportBatch } from "../features/simulator";
 
 export default function ImportExportPage() {
   const { token } = useAuth();
@@ -15,15 +14,12 @@ export default function ImportExportPage() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [latestBatch, setLatestBatch] = useState<SimImportBatch | null>(null);
-  const [batchLookupId, setBatchLookupId] = useState("");
-
-  const [createPalletId, setCreatePalletId] = useState("");
-  const [createTemplate, setCreateTemplate] = useState("200WT");
-
-  const [exportPalletFilter, setExportPalletFilter] = useState("");
-  const [exportRows, setExportRows] = useState<ExportRecord[]>([]);
-
   const [isBusy, setIsBusy] = useState(false);
+
+  const [searchSerial, setSearchSerial] = useState("");
+  const [searchResults, setSearchResults] = useState<BarcodeSearchResult[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const handleUpload = async (event: FormEvent) => {
     event.preventDefault();
@@ -33,10 +29,10 @@ export default function ImportExportPage() {
     }
 
     setIsBusy(true);
+    setLatestBatch(null);
     try {
       const batch = await uploadSimulatorFile(token, selectedFile);
       setLatestBatch(batch);
-      setBatchLookupId(String(batch.id));
       notify(`Import batch #${batch.id} created`, "success");
     } catch {
       notify("Import upload failed", "error");
@@ -45,99 +41,42 @@ export default function ImportExportPage() {
     }
   };
 
-  const handleFetchBatch = async () => {
-    if (!token) {
-      return;
-    }
-    const id = Number.parseInt(batchLookupId, 10);
-    if (!Number.isFinite(id)) {
-      notify("Enter a valid batch ID", "warning");
-      return;
-    }
-
-    setIsBusy(true);
-    try {
-      const batch = await getImportBatch(token, id);
-      setLatestBatch(batch);
-      notify(`Loaded batch #${batch.id}`, "success");
-    } catch {
-      notify("Batch not found", "error");
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleCreateExport = async (event: FormEvent) => {
+  const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token) {
+    const serial = searchSerial.trim();
+    if (!token || !serial) {
+      notify("Enter a serial to search", "warning");
       return;
     }
 
-    const palletId = Number.parseInt(createPalletId, 10);
-    if (!Number.isFinite(palletId)) {
-      notify("Enter a valid pallet ID", "warning");
-      return;
-    }
-
-    setIsBusy(true);
+    setSearchBusy(true);
+    setSearchResults([]);
+    setHasSearched(false);
     try {
-      const created = await createExport(token, { pallet_id: palletId, template_type: createTemplate });
-      notify(`Created export #${created.id}`, "success");
-      if (exportPalletFilter === String(palletId)) {
-        const listed = await listExportsByPallet(token, palletId);
-        setExportRows(listed.exports);
+      const response = await searchBarcodes(token, { q: serial, exact: false, limit: 50 });
+      const simOnly = response.results.filter((r) => r.source === "sim_panel");
+      setSearchResults(simOnly);
+      setHasSearched(true);
+      if (simOnly.length === 0) {
+        notify("No Sun Simulator data found for this serial", "warning");
       }
     } catch {
-      notify("Failed to create export", "error");
+      notify("Search failed", "error");
     } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleListExports = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!token) {
-      return;
-    }
-
-    const palletId = Number.parseInt(exportPalletFilter, 10);
-    if (!Number.isFinite(palletId)) {
-      notify("Enter a valid pallet ID filter", "warning");
-      return;
-    }
-
-    setIsBusy(true);
-    try {
-      const response = await listExportsByPallet(token, palletId);
-      setExportRows(response.exports);
-      notify(`Loaded ${response.total} exports`, "success");
-    } catch {
-      notify("Failed to list exports", "error");
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleOpenExport = async (exportId: number) => {
-    if (!token) {
-      return;
-    }
-
-    try {
-      const response = await getExportDownloadUrl(token, exportId);
-      window.open(response.download_url, "_blank", "noopener,noreferrer");
-    } catch {
-      notify("Failed to open export", "error");
+      setSearchBusy(false);
     }
   };
 
   return (
-    <AppFrame title="Import Center + Export Library">
+    <AppFrame title="Sun Simulator Import">
       <section className="builder-grid">
-        <Card title="Simulator import">
+        <Card title="Import Sun Simulator data">
+          <p style={{ marginBottom: "12px", color: "var(--color-text-secondary)" }}>
+            Upload a file (.csv, .xlsx, .xls) from the Sun Simulator to import panel test data into the database.
+          </p>
           <form className="builder-form" onSubmit={handleUpload}>
             <label className="ui-input-label">
-              <span>Choose source file (.csv/.xlsx/.xls)</span>
+              <span>Choose source file</span>
               <input
                 className="ui-input"
                 type="file"
@@ -150,20 +89,8 @@ export default function ImportExportPage() {
             </Button>
           </form>
 
-          <div className="builder-form" style={{ marginTop: "12px" }}>
-            <TextInput
-              label="Fetch batch by ID"
-              inputMode="numeric"
-              value={batchLookupId}
-              onChange={(event) => setBatchLookupId(event.target.value)}
-            />
-            <Button variant="secondary" disabled={isBusy} onClick={() => void handleFetchBatch()}>
-              Load Batch
-            </Button>
-          </div>
-
           {latestBatch ? (
-            <div className="builder-meta" style={{ marginTop: "12px" }}>
+            <div className="builder-meta" style={{ marginTop: "16px" }}>
               <p>
                 <strong>Batch:</strong> #{latestBatch.id}
               </p>
@@ -177,64 +104,46 @@ export default function ImportExportPage() {
           ) : null}
         </Card>
 
-        <Card title="Create export">
-          <form className="builder-form" onSubmit={handleCreateExport}>
+        <Card title="Search: is this panel in the database?">
+          <p style={{ marginBottom: "12px", color: "var(--color-text-secondary)" }}>
+            Enter a panel serial to check whether its Sun Simulator information has been imported.
+          </p>
+          <form className="builder-form" onSubmit={handleSearch}>
             <TextInput
-              label="Pallet ID"
-              inputMode="numeric"
-              value={createPalletId}
-              onChange={(event) => setCreatePalletId(event.target.value)}
-              required
+              label="Panel serial"
+              value={searchSerial}
+              onChange={(event) => setSearchSerial(event.target.value)}
+              placeholder="e.g. serial number or barcode"
             />
-            <label className="ui-input-label">
-              <span>Template</span>
-              <select className="ui-select" value={createTemplate} onChange={(event) => setCreateTemplate(event.target.value)}>
-                <option value="200WT">200WT</option>
-                <option value="220WT">220WT</option>
-                <option value="220M6">220M6</option>
-                <option value="330WT">330WT</option>
-                <option value="450WT">450WT</option>
-                <option value="450BT">450BT</option>
-              </select>
-            </label>
-            <Button type="submit" disabled={isBusy}>
-              Create Export
-            </Button>
-          </form>
-        </Card>
-      </section>
-
-      <section className="card-grid">
-        <Card title="Export library">
-          <form className="builder-form" onSubmit={handleListExports}>
-            <TextInput
-              label="Filter by pallet ID"
-              inputMode="numeric"
-              value={exportPalletFilter}
-              onChange={(event) => setExportPalletFilter(event.target.value)}
-              required
-            />
-            <Button type="submit" disabled={isBusy}>
-              Load Exports
+            <Button type="submit" disabled={searchBusy}>
+              Search
             </Button>
           </form>
 
-          {exportRows.length === 0 ? (
-            <p style={{ marginTop: "12px" }}>No export rows loaded.</p>
-          ) : (
-            <ul className="flat-list" style={{ marginTop: "12px" }}>
-              {exportRows.map((row) => (
-                <li key={row.id}>
-                  <span>
-                    #{row.id} {row.file_name}
-                  </span>
-                  <Button variant="secondary" onClick={() => void handleOpenExport(row.id)}>
-                    Open
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {searchResults.length > 0 ? (
+            <div style={{ marginTop: "16px" }}>
+              <p className="builder-meta">
+                <strong>Found {searchResults.length} Sun Simulator record(s):</strong>
+              </p>
+              <ul className="flat-list" style={{ marginTop: "8px" }}>
+                {searchResults.map((r) => (
+                  <li key={`${r.sim_panel_id ?? 0}-${r.serial}-${r.sim_test_timestamp ?? ""}`}>
+                    <span>
+                      {r.serial}
+                      {r.sim_panel_type != null ? ` · ${r.sim_panel_type}` : ""}
+                      {r.sim_result != null ? ` · ${r.sim_result}` : ""}
+                      {r.sim_test_timestamp != null ? ` · ${r.sim_test_timestamp}` : ""}
+                      {r.sim_batch_id != null ? ` (batch #${r.sim_batch_id})` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : searchBusy ? null : hasSearched && searchResults.length === 0 ? (
+            <p style={{ marginTop: "12px", color: "var(--color-text-secondary)" }}>
+              No Sun Simulator data found for this serial.
+            </p>
+          ) : null}
         </Card>
       </section>
     </AppFrame>
