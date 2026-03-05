@@ -214,6 +214,77 @@ h1 {
   font: inherit;
 }
 
+.animated-select {
+  position: relative;
+}
+
+.animated-select__control {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.animated-select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.animated-select__caret {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-left: 8px;
+}
+
+.animated-select__options {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform-origin: top;
+  transform: scaleY(0.9);
+  transition:
+    max-height 220ms ease-out,
+    opacity 220ms ease-out,
+    transform 220ms ease-out;
+  z-index: 20;
+}
+
+.animated-select__options--open {
+  max-height: 220px;
+  opacity: 1;
+  transform: scaleY(1);
+  overflow-y: auto;
+}
+
+.animated-select__option {
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.animated-select__option:hover {
+  background: color-mix(in srgb, var(--color-surface-alt) 70%, transparent);
+}
+
 .builder-grid {
   display: grid;
   gap: var(--space-4);

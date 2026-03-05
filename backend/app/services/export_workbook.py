@@ -135,6 +135,22 @@ def generate_export_workbook_bytes(pallet: Pallet, panel_type: str, export_dt: d
         sheet["G3"] = when
         sheet["B3"] = _build_b3_value(panel_type, pallet.pallet_number, when)
 
+        # Default customer block in A3, matching 1.1 layout.
+        # Single station customer:
+        #   Name:    Josh Atwood
+        #   Business: Future Solutions Inc
+        #   Street:  2616 Glenview Dr
+        #   City:    Elkhart, IN 46514
+        customer_block = "\n".join(
+            [
+                "Josh Atwood",
+                "Future Solutions Inc",
+                "2616 Glenview Dr",
+                "Elkhart, IN 46514",
+            ]
+        )
+        sheet["A3"] = customer_block
+
         # Clear serial slots then write current pallet serials into B5..B30
         for row in range(5, 31):
             sheet.cell(row=row, column=2).value = None

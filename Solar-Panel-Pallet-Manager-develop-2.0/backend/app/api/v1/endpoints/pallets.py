@@ -8,8 +8,6 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.v1.deps import require_roles
-from app.api.v1.endpoints.auth import get_current_user
 from app.db.session import get_db
 from app.models.pallet import AuditEvent, Customer, Pallet, PalletItem, SimPanel
 from app.models.user import User
@@ -103,9 +101,7 @@ def list_pallets(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> PalletListResponse:
-    del current_user
     base_query = db.query(Pallet).options(selectinload(Pallet.items))
     if not include_deleted:
         base_query = base_query.filter(Pallet.deleted_at.is_(None))
@@ -133,7 +129,6 @@ def list_pallets(
 def create_pallet(
     payload: PalletCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> PalletResponse:
     if payload.customer_id is not None:
         customer_exists = db.query(Customer.id).filter(Customer.id == payload.customer_id).first()
@@ -148,13 +143,13 @@ def create_pallet(
         template_type=payload.template_type,
         max_panels=payload.max_panels,
         customer_id=payload.customer_id,
-        created_by=current_user.id,
+        created_by=None,
     )
     db.add(pallet)
     db.flush()
     _record_audit(
         db,
-        actor_user_id=current_user.id,
+        actor_user_id=None,
         event_type="pallet.created",
         resource_type="pallet",
         resource_id=str(pallet.id),
@@ -170,9 +165,7 @@ def create_pallet(
 def get_pallet(
     pallet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> PalletResponse:
-    del current_user
     pallet = _get_pallet_or_404(db, pallet_id)
     return _to_pallet_response(pallet)
 
@@ -182,7 +175,6 @@ def update_pallet(
     pallet_id: int,
     payload: PalletUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> PalletResponse:
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
@@ -212,7 +204,7 @@ def update_pallet(
 
     _record_audit(
         db,
-        actor_user_id=current_user.id,
+        actor_user_id=None,
         event_type="pallet.updated",
         resource_type="pallet",
         resource_id=str(pallet.id),
@@ -229,7 +221,6 @@ def add_pallet_item(
     pallet_id: int,
     payload: PalletItemCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> PalletResponse:
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
@@ -278,12 +269,12 @@ def add_pallet_item(
             pallet_id=pallet.id,
             serial=serial,
             slot_index=slot_index,
-            added_by=current_user.id,
+            added_by=None,
         )
     )
     _record_audit(
         db,
-        actor_user_id=current_user.id,
+        actor_user_id=None,
         event_type="pallet.item_added",
         resource_type="pallet",
         resource_id=str(pallet.id),
@@ -300,7 +291,6 @@ def remove_pallet_item(
     pallet_id: int,
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> PalletResponse:
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
@@ -321,7 +311,7 @@ def remove_pallet_item(
     db.delete(item)
     _record_audit(
         db,
-        actor_user_id=current_user.id,
+        actor_user_id=None,
         event_type="pallet.item_removed",
         resource_type="pallet",
         resource_id=str(pallet.id),
@@ -337,7 +327,6 @@ def remove_pallet_item(
 def complete_pallet(
     pallet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> PalletResponse:
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
@@ -349,10 +338,10 @@ def complete_pallet(
         )
     pallet.status = "completed"
     pallet.completed_at = _now_utc()
-    pallet.completed_by = current_user.id
+    pallet.completed_by = None
     _record_audit(
         db,
-        actor_user_id=current_user.id,
+        actor_user_id=None,
         event_type="pallet.completed",
         resource_type="pallet",
         resource_id=str(pallet.id),
@@ -368,7 +357,6 @@ def complete_pallet(
 def reset_pallet(
     pallet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin")),
 ) -> PalletResponse:
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "completed":
@@ -378,7 +366,7 @@ def reset_pallet(
     pallet.completed_by = None
     _record_audit(
         db,
-        actor_user_id=current_user.id,
+        actor_user_id=None,
         event_type="pallet.reset",
         resource_type="pallet",
         resource_id=str(pallet.id),
@@ -396,14 +384,13 @@ def reset_pallet(
 def delete_pallet(
     pallet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin")),
 ) -> None:
     pallet = _get_pallet_or_404(db, pallet_id)
     pallet.status = "deleted"
     pallet.deleted_at = _now_utc()
     _record_audit(
         db,
-        actor_user_id=current_user.id,
+        actor_user_id=None,
         event_type="pallet.deleted",
         resource_type="pallet",
         resource_id=str(pallet.id),
@@ -416,9 +403,7 @@ def delete_pallet(
 def pallet_history(
     pallet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> list[AuditEventResponse]:
-    del current_user
     _get_pallet_or_404(db, pallet_id)
     events = (
         db.query(AuditEvent)
@@ -433,10 +418,8 @@ def pallet_history(
 def download_pallet_excel(
     pallet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> FileResponse:
     """Generate (or regenerate) and download a 1.1-style Excel pallet sheet for a pallet."""
-    del current_user
     pallet = _get_pallet_or_404(db, pallet_id)
     template_type = pallet.template_type or "200WT"
     path = write_legacy_excel_export(pallet, template_type, db)
@@ -456,10 +439,8 @@ def download_pallet_excel(
 def combined_pallets_pdf(
     pallet_ids: list[int],
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> Response:
     """Generate a lightweight combined PDF for one or more pallets, optimized for printing."""
-    del current_user
     if not pallet_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="pallet_ids is required")
     pallets: Sequence[Pallet] = (

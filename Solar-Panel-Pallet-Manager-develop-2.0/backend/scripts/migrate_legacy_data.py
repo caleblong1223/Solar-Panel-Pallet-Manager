@@ -291,6 +291,16 @@ def main() -> None:
     apply = args.apply
 
     customers = parse_customer_rows(args.customers)
+    # In the 2.0 simplified deployment we only persist the default
+    # Josh Atwood / Future Solutions customer from legacy data.
+    filtered: list[dict[str, Any]] = []
+    for row in customers:
+        name = (row.get("display_name") or "").lower()
+        if "josh" in name and "future" in name and "solution" in name:
+            filtered.append(row)
+    if filtered:
+        customers = filtered
+
     pallets = parse_history(args.history)
 
     print(f"Loaded {len(customers)} customer rows from {args.customers}")

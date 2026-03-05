@@ -8,6 +8,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 # revision identifiers, used by Alembic.
@@ -18,11 +19,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-  op.add_column("sim_panels", sa.Column("pm", sa.Float(), nullable=True))
-  op.add_column("sim_panels", sa.Column("isc", sa.Float(), nullable=True))
-  op.add_column("sim_panels", sa.Column("voc", sa.Float(), nullable=True))
-  op.add_column("sim_panels", sa.Column("ipm", sa.Float(), nullable=True))
-  op.add_column("sim_panels", sa.Column("vpm", sa.Float(), nullable=True))
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    existing_cols = {col["name"] for col in inspector.get_columns("sim_panels")}
+
+    if "pm" not in existing_cols:
+        op.add_column("sim_panels", sa.Column("pm", sa.Float(), nullable=True))
+    if "isc" not in existing_cols:
+        op.add_column("sim_panels", sa.Column("isc", sa.Float(), nullable=True))
+    if "voc" not in existing_cols:
+        op.add_column("sim_panels", sa.Column("voc", sa.Float(), nullable=True))
+    if "ipm" not in existing_cols:
+        op.add_column("sim_panels", sa.Column("ipm", sa.Float(), nullable=True))
+    if "vpm" not in existing_cols:
+        op.add_column("sim_panels", sa.Column("vpm", sa.Float(), nullable=True))
 
 
 def downgrade() -> None:

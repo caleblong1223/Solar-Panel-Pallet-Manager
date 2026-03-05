@@ -140,10 +140,10 @@ async function syncOutbox(): Promise<void> {
   syncInFlight = true;
   setSyncState({ syncing: true });
   try {
-    const token = getAccessToken();
-    if (!token) {
-      return;
-    }
+    // In the 2.0 no-login desktop app we always attempt to replay
+    // outbox operations without requiring an auth token. Backend
+    // endpoints accept anonymous calls, so we just omit the header.
+    const token = getAccessToken() ?? "";
     const operations = listOutboxOperations();
     for (const operation of operations) {
       if (operation.state === "needs_review") {

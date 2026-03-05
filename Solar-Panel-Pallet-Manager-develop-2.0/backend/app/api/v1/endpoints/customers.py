@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.v1.deps import require_roles
 from app.db.session import get_db
 from app.models.pallet import Customer
-from app.models.user import User
 from app.schemas.customer import CustomerCreate, CustomerListResponse, CustomerResponse, CustomerUpdate
 
 router = APIRouter()
@@ -17,9 +15,7 @@ def list_customers(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> CustomerListResponse:
-    del current_user
     query = db.query(Customer)
     if search:
         query = query.filter(Customer.display_name.ilike(f"%{search.strip()}%"))
@@ -34,9 +30,7 @@ def list_customers(
 def create_customer(
     payload: CustomerCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> CustomerResponse:
-    del current_user
     existing = db.query(Customer.id).filter(Customer.display_name == payload.display_name.strip()).first()
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Customer display_name already exists")
@@ -62,9 +56,7 @@ def create_customer(
 def get_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> CustomerResponse:
-    del current_user
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if customer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
@@ -76,9 +68,7 @@ def update_customer(
     customer_id: int,
     payload: CustomerUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> CustomerResponse:
-    del current_user
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if customer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
@@ -124,9 +114,7 @@ def update_customer(
 def delete_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin")),
 ) -> None:
-    del current_user
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if customer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")

@@ -440,7 +440,14 @@ def _update_pallet_sheet_from_db(sheet, pallet: Pallet, template_type: str, cust
         _ = total_serials
 
 
-def write_legacy_excel_export(pallet: Pallet, template_type: str, db: Session, *, base_dir: Path | None = None) -> Path | None:
+def write_legacy_excel_export(
+    pallet: Pallet,
+    template_type: str,
+    db: Session,
+    *,
+    export_dt: datetime | None = None,
+    base_dir: Path | None = None,
+) -> Path | None:
     """Excel export that mirrors 1.1 PALLET SHEET behavior as closely as possible."""
     try:
         excel_dir = Path("data") / "EXCEL"
@@ -466,7 +473,8 @@ def write_legacy_excel_export(pallet: Pallet, template_type: str, db: Session, *
             wb.save(path)
             return path
 
-        # Date-based export directory
+        # Date-based export directory (always uses current time so filesystem layout
+        # reflects when the export was generated, even if packout_date is backdated).
         root = base_dir or Path("data") / "PALLETS"
         now = datetime.now(timezone.utc)
         try:
@@ -518,8 +526,10 @@ def write_legacy_excel_export(pallet: Pallet, template_type: str, db: Session, *
 
             customer = db.query(Customer).filter(Customer.id == pallet.customer_id).first() if pallet.customer_id else None
             sheet = wb[sheet_name]
-            export_dt = datetime.now()
-            _update_pallet_sheet_from_db(sheet, pallet, template_type, customer, serial_data_cache, export_dt)
+            # Use explicitly provided export_dt for backdating (packout date) if present;
+            # otherwise fall back to "now" so sheets default to today's date.
+            sheet_export_dt = export_dt or datetime.now()
+            _update_pallet_sheet_from_db(sheet, pallet, template_type, customer, serial_data_cache, sheet_export_dt)
 
             # Use B3 for filename if possible
             b3_val = sheet["B3"].value

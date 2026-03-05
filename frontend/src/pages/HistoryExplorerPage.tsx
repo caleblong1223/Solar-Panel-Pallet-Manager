@@ -262,7 +262,6 @@ export default function HistoryExplorerPage() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value.toUpperCase())}
                   placeholder="Enter full or partial serial"
-                  required
                 />
                 <label className="ui-checkbox">
                   <input type="checkbox" checked={exact} onChange={(event) => setExact(event.target.checked)} />

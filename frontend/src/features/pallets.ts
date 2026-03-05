@@ -67,7 +67,13 @@ export async function createPallet(
   );
 }
 
-export async function createExport(token: string, payload: { pallet_id: number; template_type: string }) {
+export type CreateExportPayload = {
+  pallet_id: number;
+  template_type: string;
+  packout_date?: string; // ISO date (YYYY-MM-DD) for backdated packout
+};
+
+export async function createExport(token: string, payload: CreateExportPayload) {
   return apiRequest<{ id: number }>("/exports", "POST", token, payload);
 }
 

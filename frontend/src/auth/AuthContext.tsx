@@ -47,135 +47,40 @@ function parseCachedUser(): User | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [accessToken, setAccessToken] = useState<string | null>(() => localStorage.getItem(ACCESS_TOKEN_KEY));
-  const [user, setUser] = useState<User | null>(() => parseCachedUser());
-  const [sessionMode, setSessionMode] = useState<SessionMode>("anonymous");
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [sessionMode] = useState<SessionMode>("anonymous");
   const [isInitializing, setIsInitializing] = useState(true);
-  const [hasTriedAutoLogin, setHasTriedAutoLogin] = useState(false);
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(CACHED_USER_KEY);
     setAccessToken(null);
     setUser(null);
-    setSessionMode("anonymous");
   }, []);
 
-  const enableOfflineSession = useCallback(() => {
-    const cached = parseCachedUser();
-    const offlineUser = cached ?? getFallbackOfflineUser();
-    setUser(offlineUser);
-    setSessionMode("offline");
+  const handleLogin = useCallback(async (_username: string, _password: string) => {
+    // In the 2.0 no-login model we don't support interactive login.
+    // This is a no-op to satisfy existing call sites.
+    return;
   }, []);
-
-  const refreshSession = useCallback(async (token: string) => {
-    try {
-      const profile = await getCurrentUser(token);
-      setUser(profile);
-      localStorage.setItem(CACHED_USER_KEY, JSON.stringify(profile));
-      setSessionMode("authenticated");
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const handleLogin = useCallback(async (username: string, password: string) => {
-    const result = await apiLogin(username, password);
-    localStorage.setItem(ACCESS_TOKEN_KEY, result.access_token);
-    setAccessToken(result.access_token);
-    const didRefresh = await refreshSession(result.access_token);
-    if (!didRefresh) {
-      throw new Error("Unable to load session profile");
-    }
-  }, [refreshSession]);
 
   const handleLogout = useCallback(() => {
     clearSession();
   }, [clearSession]);
 
+  // Immediately mark initialization as complete; we don't perform any
+  // background login or token refresh in the no-login 2.0 desktop app.
   useEffect(() => {
-    let cancelled = false;
-
-    const initialize = async () => {
-      // If we already have a token, just refresh the session.
-      if (accessToken) {
-        const didRefresh = await refreshSession(accessToken);
-        if (!didRefresh) {
-          setAccessToken(null);
-          localStorage.removeItem(ACCESS_TOKEN_KEY);
-          enableOfflineSession();
-        }
-        if (!cancelled) {
-          setIsInitializing(false);
-        }
-        return;
-      }
-
-      // Otherwise, attempt background login with shared credentials once.
-      if (!hasTriedAutoLogin) {
-        try {
-          const result = await apiLogin(SHARED_USERNAME, SHARED_PASSWORD);
-          localStorage.setItem(ACCESS_TOKEN_KEY, result.access_token);
-          setAccessToken(result.access_token);
-          const didRefresh = await refreshSession(result.access_token);
-          if (!didRefresh) {
-            enableOfflineSession();
-          }
-        } catch {
-          enableOfflineSession();
-        } finally {
-          if (!cancelled) {
-            setHasTriedAutoLogin(true);
-            setIsInitializing(false);
-          }
-        }
-        return;
-      }
-
-      if (!cancelled) {
-        setIsInitializing(false);
-      }
-    };
-
-    void initialize();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, hasTriedAutoLogin, enableOfflineSession, refreshSession]);
-
-  useEffect(() => {
-    if (!accessToken) {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      const expiryMs = getTokenExpiryMs(accessToken);
-      if (!expiryMs) {
-        return;
-      }
-
-      const msUntilExpiry = expiryMs - Date.now();
-      if (msUntilExpiry <= 0) {
-        clearSession();
-        return;
-      }
-
-      if (msUntilExpiry <= REFRESH_WINDOW_MS) {
-        void refreshSession(accessToken);
-      }
-    }, 60_000);
-
-    return () => window.clearInterval(interval);
-  }, [accessToken, clearSession, refreshSession]);
+    setIsInitializing(false);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       token: accessToken,
-      isAuthenticated: sessionMode === "authenticated",
-      canAccessApp: sessionMode === "authenticated" || sessionMode === "offline",
-      isOfflineSession: sessionMode === "offline",
+      isAuthenticated: false,
+      canAccessApp: true,
+      isOfflineSession: false,
       isInitializing,
       user,
       login: handleLogin,

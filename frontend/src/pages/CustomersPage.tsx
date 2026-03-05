@@ -50,24 +50,58 @@ export default function CustomersPage() {
   const [palletsLoading, setPalletsLoading] = useState(false);
   const [selectedPalletIds, setSelectedPalletIds] = useState<number[]>([]);
 
+  const CUSTOMERS_CACHE_KEY = "pm2_cached_customers";
+
   const loadCustomers = async () => {
-    if (!token) return;
     setIsLoading(true);
     try {
-      const response = await listCustomers(token, {
+      const response = await listCustomers(token ?? "", {
         isActive: showInactive ? undefined : true,
         search,
       });
       setCustomers(response.customers);
+      try {
+        localStorage.setItem(CUSTOMERS_CACHE_KEY, JSON.stringify(response.customers));
+      } catch {
+        // Ignore cache write failures.
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load customers";
-      notify(message, "error");
+      // On network/auth failures, fall back to any cached customers so the page
+      // still works offline.
+      let usedCache = false;
+      try {
+        const cachedRaw = localStorage.getItem(CUSTOMERS_CACHE_KEY);
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw) as Customer[];
+          setCustomers(parsed);
+          usedCache = true;
+        }
+      } catch {
+        // Ignore cache parse failures.
+      }
+      const message =
+        error instanceof Error ? error.message : "Failed to load customers";
+      if (!usedCache) {
+        notify(message, "error");
+      } else {
+        notify("Using last known customers (offline)", "warning");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    // Hydrate from cache immediately for a fast, offline-friendly experience.
+    try {
+      const cachedRaw = localStorage.getItem(CUSTOMERS_CACHE_KEY);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw) as Customer[];
+        setCustomers(parsed);
+      }
+    } catch {
+      // Ignore cache parse failures.
+    }
     void loadCustomers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, showInactive]);
@@ -96,10 +130,6 @@ export default function CustomersPage() {
 
   const handleSave = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token) {
-      notify("No session. Sign in or check connection.", "warning");
-      return;
-    }
     const payload: CustomerCreatePayload = {
       ...editState.form,
       display_name: editState.form.display_name.trim(),
@@ -111,10 +141,10 @@ export default function CustomersPage() {
     setIsSaving(true);
     try {
       if (editState.id == null) {
-        await createCustomer(token, payload);
+        await createCustomer(token ?? "", payload);
         notify("Customer created", "success");
       } else {
-        await updateCustomer(token, editState.id, payload);
+        await updateCustomer(token ?? "", editState.id, payload);
         notify("Customer updated", "success");
       }
       setEditState({ id: null, form: EMPTY_FORM });
@@ -133,7 +163,7 @@ export default function CustomersPage() {
       return;
     }
     try {
-      await deleteCustomer(token, customer.id);
+      await deleteCustomer(token ?? "", customer.id);
       notify("Customer archived", "success");
       await loadCustomers();
     } catch (error) {
@@ -148,16 +178,12 @@ export default function CustomersPage() {
   };
 
   const handleViewPallets = async (customer: Customer) => {
-    if (!token) {
-      notify("No session. Sign in or check connection.", "warning");
-      return;
-    }
     setSelectedCustomer(customer);
     setPallets([]);
     setSelectedPalletIds([]);
     setPalletsLoading(true);
     try {
-      const response = await listPalletsForCustomer(token, customer.id, { includeDeleted: false });
+      const response = await listPalletsForCustomer(token ?? "", customer.id, { includeDeleted: false });
       setPallets(response.pallets);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load pallets for customer";
@@ -175,7 +201,7 @@ export default function CustomersPage() {
 
   const handleDownloadExcel = async () => {
     if (!token) {
-      notify("No session. Sign in or check connection.", "warning");
+      notify("Unable to download without a connection to the server.", "warning");
       return;
     }
     if (selectedPalletIds.length !== 1) {
@@ -211,7 +237,7 @@ export default function CustomersPage() {
 
   const handleCombinedPdf = async () => {
     if (!token) {
-      notify("No session. Sign in or check connection.", "warning");
+      notify("Unable to generate PDF without a connection to the server.", "warning");
       return;
     }
     if (selectedPalletIds.length === 0) {

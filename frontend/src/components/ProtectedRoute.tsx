@@ -19,14 +19,8 @@ export default function ProtectedRoute() {
     );
   }
 
-  return (
-    <>
-      {isOfflineSession ? (
-        <div className="status-banner status-banner--warning">
-          Offline mode: changes will sync when the server is reachable.
-        </div>
-      ) : null}
-      <Outlet />
-    </>
-  );
+  // In the 2.0 desktop app we always allow access and no longer
+  // surface a global "offline mode" banner; individual screens
+  // handle connectivity errors themselves.
+  return <Outlet />;
 }

@@ -5,7 +5,6 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.v1.deps import require_roles
 from app.db.session import get_db
 from app.models.pallet import Export, Pallet
 from app.models.user import User
@@ -55,7 +54,6 @@ def list_exports(
 def create_export(
     payload: ExportCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator")),
 ) -> ExportResponse:
     pallet = (
         db.query(Pallet)
@@ -83,7 +81,7 @@ def create_export(
         file_name=file_name,
         mime_type="application/pdf",
         size_bytes=len(artifact),
-        created_by=current_user.id,
+        created_by=None,
     )
     db.add(export)
     db.flush()
@@ -104,7 +102,11 @@ def create_export(
 
     # Excel parity: write a legacy-style .xlsx file to disk using DB-backed data.
     try:
-        write_legacy_excel_export(pallet, payload.template_type, db)
+        export_dt = None
+        if payload.packout_date is not None:
+            # Interpret packout_date as local date for sheet; time-of-day is not important.
+            export_dt = datetime.combine(payload.packout_date, datetime.min.time())
+        write_legacy_excel_export(pallet, payload.template_type, db, export_dt=export_dt)
     except Exception:
         # Do not fail the API if Excel export fails.
         pass
@@ -117,9 +119,7 @@ def get_export_download_url(
     export_id: int,
     expires_in_seconds: int = Query(default=900, ge=60, le=86400),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> ExportDownloadUrlResponse:
-    del current_user
     export = db.query(Export).filter(Export.id == export_id).first()
     if export is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")

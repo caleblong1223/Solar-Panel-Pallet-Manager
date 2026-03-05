@@ -23,10 +23,6 @@ export default function ExportsPage() {
 
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token) {
-      notify("No session. Sign in or check connection.", "warning");
-      return;
-    }
     let palletId: number | undefined;
     if (palletNumber.trim()) {
       const parsed = Number(palletNumber.trim());
@@ -45,7 +41,7 @@ export default function ExportsPage() {
 
     setIsLoading(true);
     try {
-      const response = await listExports(token, {
+      const response = await listExports(token ?? "", {
         palletId,
         templateType: templateType || undefined,
         createdFrom: toIso(createdFrom, false),
@@ -68,9 +64,8 @@ export default function ExportsPage() {
   };
 
   const handleOpen = async (exportId: number) => {
-    if (!token) return;
     try {
-      const response = await getExportDownloadUrl(token, exportId);
+      const response = await getExportDownloadUrl(token ?? "", exportId);
       window.open(response.download_url, "_blank", "noopener,noreferrer");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to open export";

@@ -3,10 +3,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.v1.deps import require_roles
 from app.db.session import get_db
 from app.models.pallet import Pallet, PalletItem, SimPanel
-from app.models.user import User
 from app.schemas.barcode import BarcodeSearchResponse, BarcodeSearchResult
 
 router = APIRouter()
@@ -21,9 +19,7 @@ def search_barcodes(
     sort: str = Query(default="created_at"),
     order: str = Query(default="desc"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> BarcodeSearchResponse:
-    del current_user
     search_term = q.strip().upper()
     if exact:
         pallet_serial_filter = PalletItem.serial == search_term

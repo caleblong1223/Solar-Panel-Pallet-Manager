@@ -5,16 +5,15 @@ import { useToast } from "../components/notifications/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
+import { createExport, getPallet, listPallets, type Pallet } from "../features/pallets";
 import {
-  addPalletItem,
-  completePallet,
-  createPallet,
-  createExport,
-  getPallet,
-  listPallets,
-  removePalletItem,
-  type Pallet,
-} from "../features/pallets";
+  repoAddPalletItem,
+  repoCompletePallet,
+  repoCreatePallet,
+  repoListPallets,
+  repoGetPallet,
+  repoRemovePalletItem,
+} from "../features/palletRepo";
 import { getExportDownloadUrl } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
 
@@ -22,6 +21,64 @@ const DEFAULT_MAX_PANELS = 25;
 const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 const ACCESS_TOKEN_KEY = "pm2_access_token";
 const PALLET_SIZES = [25, 26, 30, 35];
+const CUSTOMERS_CACHE_KEY = "pm2_cached_customers";
+
+type AnimatedSelectOption = {
+  value: string;
+  label: string;
+};
+
+type AnimatedSelectProps = {
+  label: string;
+  value: string;
+  placeholder?: string;
+  options: AnimatedSelectOption[];
+  onChange: (value: string) => void;
+};
+
+function AnimatedSelect({ label, value, placeholder, options, onChange }: AnimatedSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const currentLabel =
+    options.find((opt) => opt.value === value)?.label ?? (value ? value : placeholder ?? "Select...");
+
+  const handleSelect = (nextValue: string) => {
+    onChange(nextValue);
+    setIsOpen(false);
+  };
+
+  return (
+    <label className="ui-input-label animated-select">
+      <span>{label}</span>
+      <button
+        type="button"
+        className="animated-select__control"
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <span className="animated-select__value">{currentLabel}</span>
+        <span className="animated-select__caret">{isOpen ? "▲" : "▼"}</span>
+      </button>
+      <div
+        className={
+          isOpen
+            ? "animated-select__options animated-select__options--open"
+            : "animated-select__options"
+        }
+      >
+        {options.map((opt) => (
+          <button
+            key={opt.value || opt.label}
+            type="button"
+            className="animated-select__option"
+            onClick={() => handleSelect(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </label>
+  );
+}
 
 function getEffectiveToken(contextToken: string | null): string | null {
   return contextToken ?? localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -47,45 +104,84 @@ export default function LiveBuilderPage() {
   const [newPalletSize, setNewPalletSize] = useState<number>(DEFAULT_MAX_PANELS);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | "none">("none");
+  const [packoutDate, setPackoutDate] = useState<string>(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
   const serialInputRef = useRef<HTMLInputElement | null>(null);
 
   const remaining = current ? current.max_panels - current.item_count : 0;
 
   const loadFirstActivePallet = async () => {
-    const t = getEffectiveToken(contextToken);
-    if (!t) return;
-    const { pallets } = await listPallets(t, "active");
-    if (pallets.length > 0) {
-      const full = await getPallet(t, pallets[0].id);
-      setCurrent(full);
-    } else {
-      setCurrent(null);
+    try {
+      // Prefer local/offline-aware repo, which syncs from server when available.
+      const { pallets } = await repoListPallets(null, "active");
+      if (pallets.length > 0) {
+        const full = await repoGetPallet(null, pallets[0].id);
+        setCurrent(full);
+      } else {
+        setCurrent(null);
+      }
+    } catch {
+      // If anything goes wrong, leave current as-is.
     }
   };
 
   useEffect(() => {
     void loadFirstActivePallet();
-    const t = getEffectiveToken(contextToken);
-    if (t) {
-      void listCustomers(t, { isActive: true })
-        .then((response) => {
-          setCustomers(response.customers);
-        })
-        .catch(() => {
-          // Customers are optional for pallet creation; swallow errors here and surface via explicit actions if needed.
-        });
+
+    // Seed from any cached customers first so offline builder still has a usable dropdown.
+    try {
+      const cachedRaw = localStorage.getItem(CUSTOMERS_CACHE_KEY);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw) as Customer[];
+        setCustomers(parsed);
+        if (selectedCustomerId === "none") {
+          const legacyDefault = parsed.find((customer) => {
+            const name = (customer.display_name ?? "").toLowerCase();
+            return name.includes("josh") && name.includes("future") && name.includes("solution");
+          });
+          if (legacyDefault) {
+            setSelectedCustomerId(legacyDefault.id);
+          }
+        }
+      }
+    } catch {
+      // Ignore cache parse failures.
     }
-  }, [contextToken]);
+
+    const t = getEffectiveToken(contextToken);
+    void listCustomers(t ?? "", { isActive: true })
+      .then((response) => {
+        setCustomers(response.customers);
+        try {
+          localStorage.setItem(CUSTOMERS_CACHE_KEY, JSON.stringify(response.customers));
+        } catch {
+          // Ignore cache write failures.
+        }
+        // Prefer the legacy default customer if present.
+        if (selectedCustomerId === "none") {
+          const legacyDefault = response.customers.find((customer) => {
+            const name = (customer.display_name ?? "").toLowerCase();
+            return name.includes("josh") && name.includes("future") && name.includes("solution");
+          });
+          if (legacyDefault) {
+            setSelectedCustomerId(legacyDefault.id);
+          }
+        }
+      })
+      .catch(() => {
+        // Customers are optional for pallet creation; swallow errors here and surface via explicit actions if needed.
+      });
+  }, [contextToken, selectedCustomerId]);
 
   const handleStartNewPallet = async () => {
-    const t = getEffectiveToken(contextToken);
-    if (!t) {
-      notify("No session. Sign in or check connection.", "warning");
-      return;
-    }
     setIsBusy(true);
     try {
-      const created = await createPallet(t, {
+      const created = await repoCreatePallet(null, {
         max_panels: newPalletSize,
         template_type: newPalletTemplate,
         customer_id: selectedCustomerId === "none" ? undefined : selectedCustomerId,
@@ -104,8 +200,7 @@ export default function LiveBuilderPage() {
 
   const handleAddSerial = async (event: FormEvent) => {
     event.preventDefault();
-    const t = getEffectiveToken(contextToken);
-    if (!t || !current) {
+    if (!current) {
       notify("Start a pallet first", "warning");
       return;
     }
@@ -119,7 +214,7 @@ export default function LiveBuilderPage() {
 
     setIsBusy(true);
     try {
-      const updated = await addPalletItem(t, current.id, s);
+      const updated = await repoAddPalletItem(null, current.id, s);
       setCurrent(updated);
       setSerial("");
       notify("Added", "success");
@@ -132,21 +227,22 @@ export default function LiveBuilderPage() {
   };
 
   const handleRemoveItem = async (itemId: number) => {
-    if (!token || !current) return;
+    if (!current) return;
     setIsBusy(true);
     try {
-      const updated = await removePalletItem(token, current.id, itemId);
+      const updated = await repoRemovePalletItem(null, current.id, itemId);
       setCurrent(updated);
       notify("Removed", "success");
-    } catch {
-      notify("Failed to remove", "error");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to remove";
+      notify(message, "error");
     } finally {
       setIsBusy(false);
     }
   };
 
   const handleComplete = async () => {
-    if (!token || !current) return;
+    if (!current) return;
     if (remaining !== 0) {
       notify("Pallet must be full to complete", "warning");
       return;
@@ -156,9 +252,14 @@ export default function LiveBuilderPage() {
     const templateType = current.template_type ?? "200WT";
     setIsBusy(true);
     try {
-      await completePallet(token, current.id);
-      const created = await createExport(token, { pallet_id: palletId, template_type: templateType });
-      const { download_url } = await getExportDownloadUrl(token, created.id, "xlsx");
+      const updated = await repoCompletePallet(null, current.id);
+      setCurrent(updated);
+      const created = await createExport(token ?? "", {
+        pallet_id: palletId,
+        template_type: templateType,
+        packout_date: packoutDate || undefined,
+      });
+      const { download_url } = await getExportDownloadUrl(token ?? "", created.id, "xlsx");
       window.open(download_url, "_blank", "noopener,noreferrer");
       notify(`Pallet #${palletNumber} completed · export ready`, "success");
       setCurrent(null);
@@ -203,6 +304,15 @@ export default function LiveBuilderPage() {
                 </Button>
               </form>
               <div style={{ marginTop: "12px" }}>
+                <label className="ui-input-label" style={{ marginBottom: "8px" }}>
+                  <span>Packout date (for Excel B3 / G3)</span>
+                  <input
+                    className="ui-input"
+                    type="date"
+                    value={packoutDate}
+                    onChange={(event) => setPackoutDate(event.target.value)}
+                  />
+                </label>
                 <Button
                   variant="primary"
                   disabled={isBusy || remaining !== 0}
@@ -215,58 +325,47 @@ export default function LiveBuilderPage() {
           ) : (
             <>
               <p style={{ marginBottom: "12px", color: "var(--color-text-secondary)" }}>
-                Start a new pallet to begin scanning. Panel type and pallet size are used for export and cell B3, matching the 1.1 workflow.
+                Start a new pallet to begin scanning. Choose the customer, panel type, and pallet size you need.
               </p>
-              <label className="ui-input-label" style={{ marginBottom: "8px" }}>
-                <span>Customer (optional)</span>
-                <select
-                  className="ui-select"
+              <div style={{ display: "grid", gap: "8px", marginBottom: "8px" }}>
+                <AnimatedSelect
+                  label="Customer (optional)"
                   value={selectedCustomerId === "none" ? "" : String(selectedCustomerId)}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (!value) {
+                  placeholder="No customer selected"
+                  options={[
+                    { value: "", label: "No customer selected" },
+                    ...customers.map<AnimatedSelectOption>((customer) => ({
+                      value: String(customer.id),
+                      label: customer.display_name,
+                    })),
+                  ]}
+                  onChange={(next) => {
+                    if (!next) {
                       setSelectedCustomerId("none");
                     } else {
-                      setSelectedCustomerId(Number(value));
+                      setSelectedCustomerId(Number(next));
                     }
                   }}
-                >
-                  <option value="">No customer selected</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.display_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="ui-input-label" style={{ marginBottom: "8px" }}>
-                <span>Panel type</span>
-                <select
-                  className="ui-select"
+                />
+                <AnimatedSelect
+                  label="Panel type"
                   value={newPalletTemplate}
-                  onChange={(e) => setNewPalletTemplate(e.target.value)}
-                >
-                  {TEMPLATE_OPTIONS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="ui-input-label" style={{ marginBottom: "8px" }}>
-                <span>Pallet size</span>
-                <select
-                  className="ui-select"
-                  value={newPalletSize}
-                  onChange={(e) => setNewPalletSize(Number(e.target.value))}
-                >
-                  {PALLET_SIZES.map((size) => (
-                    <option key={size} value={size}>
-                      {size} panels
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  options={TEMPLATE_OPTIONS.map<AnimatedSelectOption>((t) => ({
+                    value: t,
+                    label: t,
+                  }))}
+                  onChange={(next) => setNewPalletTemplate(next)}
+                />
+                <AnimatedSelect
+                  label="Pallet size"
+                  value={String(newPalletSize)}
+                  options={PALLET_SIZES.map<AnimatedSelectOption>((size) => ({
+                    value: String(size),
+                    label: `${size} panels`,
+                  }))}
+                  onChange={(next) => setNewPalletSize(Number(next))}
+                />
+              </div>
               <Button type="button" disabled={isBusy} onClick={() => void handleStartNewPallet()}>
                 Start new pallet
               </Button>
