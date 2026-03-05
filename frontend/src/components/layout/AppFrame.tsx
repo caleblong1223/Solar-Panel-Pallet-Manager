@@ -1,7 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "../../auth/AuthContext";
-import Button from "../ui/Button";
 import { SYNC_STATE_EVENT, getSyncState, type SyncState } from "../../sync/syncState";
 
 type Props = {
@@ -12,13 +11,13 @@ type Props = {
 const navItems = [
   { to: "/builder", label: "Builder" },
   { to: "/history", label: "History" },
-  { to: "/imports-exports", label: "Sun Simulator Import" },
-  { to: "/sync-issues", label: "Sync Issues" },
+  { to: "/imports-exports", label: "Import" },
+  { to: "/customers", label: "Customer Management" },
   { to: "/settings", label: "Settings" },
 ];
 
 export default function AppFrame({ title, children }: Props) {
-  const { user, logout } = useAuth();
+  const { isOfflineSession } = useAuth();
   const [syncState, setSyncState] = useState<SyncState>(() => getSyncState());
 
   useEffect(() => {
@@ -50,15 +49,12 @@ export default function AppFrame({ title, children }: Props) {
           <h1>{title}</h1>
           <div className="session-box">
             <p>
-              Signed in as <strong>{user?.username}</strong>
+              Connection: <strong>{isOfflineSession ? "Offline (cached)" : "Online"}</strong>
             </p>
             <p className="sync-summary">
               Sync: {syncState.syncing ? "Syncing" : "Idle"} | Pending: {syncState.pending_count} | Review:{" "}
               {syncState.needs_review_count}
             </p>
-            <Button variant="secondary" onClick={logout}>
-              Log out
-            </Button>
           </div>
         </header>
         {children}

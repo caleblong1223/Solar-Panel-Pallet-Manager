@@ -16,10 +16,12 @@ import {
   type Pallet,
 } from "../features/pallets";
 import { getExportDownloadUrl } from "../features/exports";
+import { listCustomers, type Customer } from "../features/customers";
 
 const DEFAULT_MAX_PANELS = 25;
 const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 const ACCESS_TOKEN_KEY = "pm2_access_token";
+const PALLET_SIZES = [25, 26, 30, 35];
 
 function getEffectiveToken(contextToken: string | null): string | null {
   return contextToken ?? localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -42,6 +44,9 @@ export default function LiveBuilderPage() {
   const [serial, setSerial] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [newPalletTemplate, setNewPalletTemplate] = useState(TEMPLATE_OPTIONS[0]);
+  const [newPalletSize, setNewPalletSize] = useState<number>(DEFAULT_MAX_PANELS);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | "none">("none");
   const serialInputRef = useRef<HTMLInputElement | null>(null);
 
   const remaining = current ? current.max_panels - current.item_count : 0;
@@ -60,6 +65,16 @@ export default function LiveBuilderPage() {
 
   useEffect(() => {
     void loadFirstActivePallet();
+    const t = getEffectiveToken(contextToken);
+    if (t) {
+      void listCustomers(t, { isActive: true })
+        .then((response) => {
+          setCustomers(response.customers);
+        })
+        .catch(() => {
+          // Customers are optional for pallet creation; swallow errors here and surface via explicit actions if needed.
+        });
+    }
   }, [contextToken]);
 
   const handleStartNewPallet = async () => {
@@ -71,8 +86,9 @@ export default function LiveBuilderPage() {
     setIsBusy(true);
     try {
       const created = await createPallet(t, {
-        max_panels: DEFAULT_MAX_PANELS,
+        max_panels: newPalletSize,
         template_type: newPalletTemplate,
+        customer_id: selectedCustomerId === "none" ? undefined : selectedCustomerId,
       });
       setCurrent(created);
       setSerial("");
@@ -199,8 +215,30 @@ export default function LiveBuilderPage() {
           ) : (
             <>
               <p style={{ marginBottom: "12px", color: "var(--color-text-secondary)" }}>
-                Start a new pallet to begin scanning. Panel type is used for export and cell B3.
+                Start a new pallet to begin scanning. Panel type and pallet size are used for export and cell B3, matching the 1.1 workflow.
               </p>
+              <label className="ui-input-label" style={{ marginBottom: "8px" }}>
+                <span>Customer (optional)</span>
+                <select
+                  className="ui-select"
+                  value={selectedCustomerId === "none" ? "" : String(selectedCustomerId)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (!value) {
+                      setSelectedCustomerId("none");
+                    } else {
+                      setSelectedCustomerId(Number(value));
+                    }
+                  }}
+                >
+                  <option value="">No customer selected</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="ui-input-label" style={{ marginBottom: "8px" }}>
                 <span>Panel type</span>
                 <select
@@ -211,6 +249,20 @@ export default function LiveBuilderPage() {
                   {TEMPLATE_OPTIONS.map((t) => (
                     <option key={t} value={t}>
                       {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="ui-input-label" style={{ marginBottom: "8px" }}>
+                <span>Pallet size</span>
+                <select
+                  className="ui-select"
+                  value={newPalletSize}
+                  onChange={(e) => setNewPalletSize(Number(e.target.value))}
+                >
+                  {PALLET_SIZES.map((size) => (
+                    <option key={size} value={size}>
+                      {size} panels
                     </option>
                   ))}
                 </select>

@@ -31,6 +31,26 @@ export async function listExportsByPallet(token: string, palletId: number) {
   return apiRequest<ExportListResponse>(`/exports?pallet_id=${palletId}&limit=50&offset=0`, "GET", token);
 }
 
+export async function listExports(token: string, options?: { palletId?: number; templateType?: string; createdFrom?: string; createdTo?: string; limit?: number; offset?: number }) {
+  const params = new URLSearchParams();
+  if (options?.palletId != null) {
+    params.set("pallet_id", String(options.palletId));
+  }
+  if (options?.templateType) {
+    params.set("template_type", options.templateType);
+  }
+  if (options?.createdFrom) {
+    params.set("created_from", options.createdFrom);
+  }
+  if (options?.createdTo) {
+    params.set("created_to", options.createdTo);
+  }
+  params.set("limit", String(options?.limit ?? 50));
+  params.set("offset", String(options?.offset ?? 0));
+  const query = params.toString();
+  return apiRequest<ExportListResponse>(`/exports?${query}`, "GET", token);
+}
+
 export async function getExportDownloadUrl(
   token: string,
   exportId: number,

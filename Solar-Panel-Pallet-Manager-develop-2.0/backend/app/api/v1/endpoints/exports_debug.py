@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter
 
 from app.services.export_generator import _find_pallet_workbook
+from app.services.export_workbook import inspect_core_export_templates
 
 
 router = APIRouter()
@@ -35,5 +36,6 @@ def get_template_info() -> dict:
             "35_panels": str(template_35) if template_35.exists() else None,
         },
         "pallets_dir_exists": pallets_dir.exists(),
+        "core_templates": inspect_core_export_templates(),
     }
 

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.user import Role, User
+from app.services.export_workbook import verify_core_export_templates
 
 app = FastAPI(title=settings.app_name)
 
@@ -25,11 +26,15 @@ def readiness() -> dict[str, str]:
 
 
 @app.on_event("startup")
-def seed_e2e_user() -> None:
+def validate_templates_and_seed_e2e_user() -> None:
     """Optionally seed a QA user for end-to-end tests.
 
     Controlled by ENABLE_E2E_SEED=1 to avoid impacting normal environments.
     """
+    # First, verify that core Excel templates exist and look correct.
+    verify_core_export_templates()
+
+    # Optionally seed the E2E user for QA/test environments.
     if not os.getenv("ENABLE_E2E_SEED"):
         return
 

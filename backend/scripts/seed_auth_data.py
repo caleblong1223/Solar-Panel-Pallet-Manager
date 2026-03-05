@@ -14,7 +14,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Seed roles and a default admin user")
     parser.add_argument("--username", default=os.getenv("SEED_ADMIN_USERNAME", "admin"))
     parser.add_argument("--email", default=os.getenv("SEED_ADMIN_EMAIL", "admin@local.test"))
-    parser.add_argument("--password", default=os.getenv("SEED_ADMIN_PASSWORD", "ChangeMe123!"))
+    parser.add_argument("--password", default=os.getenv("SEED_ADMIN_PASSWORD"))
     parser.add_argument("--inactive", action="store_true", help="Create user as inactive")
     return parser.parse_args()
 
@@ -24,6 +24,8 @@ def main() -> None:
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise SystemExit("DATABASE_URL environment variable is required")
+    if not args.password:
+        raise SystemExit("Admin password is required (set --password or SEED_ADMIN_PASSWORD)")
 
     role_names = ["admin", "packout_operator", "purchasing_manager"]
     password_hash = bcrypt.hashpw(args.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")

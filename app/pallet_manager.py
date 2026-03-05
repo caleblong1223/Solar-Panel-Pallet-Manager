@@ -10,7 +10,7 @@ import json
 import shutil
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Set
 
 
 class PalletManager:
@@ -37,6 +37,20 @@ class PalletManager:
         else:
             self.data = self.load_history()
         self._history_mtime = self._get_history_mtime()
+        self._history_indexes_dirty = True
+        self._serial_to_pallet_cache: Dict[str, Dict[str, Any]] = {}
+        self._file_usable_cache: Dict[str, bool] = {}
+        self._pallet_filenames_cache: Optional[Set[str]] = None
+        self._history_rows: List[Dict[str, Any]] = []
+        self._history_valid_indices: Set[int] = set()
+        self._history_customer_index: Dict[str, Set[int]] = {}
+        self._history_date_index: Dict[str, Set[int]] = {
+            "Today": set(),
+            "This Week": set(),
+            "This Month": set(),
+            "This Year": set(),
+        }
+        self._history_serial_index: Dict[str, Set[int]] = {}
 
     def _get_history_mtime(self) -> Optional[float]:
         """Get current history file modification time, if available."""
@@ -65,6 +79,24 @@ class PalletManager:
         if current_mtime > self._history_mtime:
             self.data = self.load_history()
             self._history_mtime = current_mtime
+            self._invalidate_history_indexes()
+
+    def _invalidate_history_indexes(self):
+        """Invalidate derived indexes/cache built from pallet history."""
+        self._history_indexes_dirty = True
+        self._serial_to_pallet_cache = {}
+        self._file_usable_cache = {}
+        self._pallet_filenames_cache = None
+        self._history_rows = []
+        self._history_valid_indices = set()
+        self._history_customer_index = {}
+        self._history_date_index = {
+            "Today": set(),
+            "This Week": set(),
+            "This Month": set(),
+            "This Year": set(),
+        }
+        self._history_serial_index = {}
     
     def _ensure_directory_structure(self):
         """Ensure PALLETS directory exists"""
@@ -105,6 +137,7 @@ class PalletManager:
                 return self._get_default_structure()
             
             self._history_mtime = self._get_history_mtime()
+            self._invalidate_history_indexes()
             return data
             
         except json.JSONDecodeError:
@@ -116,11 +149,13 @@ class PalletManager:
                 pass  # If backup fails, continue anyway
             
             self._history_mtime = self._get_history_mtime()
+            self._invalidate_history_indexes()
             return self._get_default_structure()
             
         except Exception as e:
             # Any other error (permissions, etc.) - return default
             self._history_mtime = self._get_history_mtime()
+            self._invalidate_history_indexes()
             return self._get_default_structure()
     
     def _get_default_structure(self) -> Dict[str, Any]:
@@ -150,6 +185,7 @@ class PalletManager:
             # Atomic rename (works on both Windows and Unix)
             temp_file.replace(self.history_file)
             self._history_mtime = self._get_history_mtime()
+            self._invalidate_history_indexes()
             
             return True
             
@@ -267,22 +303,151 @@ class PalletManager:
                 'completed_at': None,
                 'is_current': True
             }
-        
-        # Check all completed pallets in history.
-        # Skip reset pallets and stale records whose export file no longer exists.
-        for pallet in self.data.get("pallets", []):
+        self._ensure_history_indexes()
+        return self._serial_to_pallet_cache.get(normalized_serial)
+
+    def _ensure_history_indexes(self):
+        """Build history-derived indexes lazily when needed."""
+        if not self._history_indexes_dirty:
+            return
+
+        # Precompute once per refresh so repeated lookups avoid repeated disk scans.
+        self._pallet_filenames_cache = self._build_pallet_filenames_cache()
+        serial_map: Dict[str, Dict[str, Any]] = {}
+        history_rows: List[Dict[str, Any]] = []
+        valid_indices: Set[int] = set()
+        customer_index: Dict[str, Set[int]] = {}
+        date_index: Dict[str, Set[int]] = {
+            "Today": set(),
+            "This Week": set(),
+            "This Month": set(),
+            "This Year": set(),
+        }
+        search_serial_index: Dict[str, Set[int]] = {}
+        from app.serial_database import normalize_serial
+        now = datetime.now()
+        for idx, pallet in enumerate(self.data.get("pallets", [])):
+            history_rows.append({"idx": idx, "pallet": pallet})
+
+            if self._is_pallet_record_usable_for_duplicate_check(pallet):
+                valid_indices.add(idx)
+
             if pallet.get("reset", False):
-                continue  # Skip reset pallets - their serials can be reused
-            if not self._is_pallet_record_usable_for_duplicate_check(pallet):
+                pass
+            elif idx in valid_indices:
+                for serial in pallet.get("serial_numbers", []):
+                    serial_normalized = normalize_serial(serial)
+                    if serial_normalized and serial_normalized not in serial_map:
+                        serial_map[serial_normalized] = {
+                            'pallet_number': pallet.get("pallet_number"),
+                            'completed_at': pallet.get("completed_at"),
+                            'is_current': False
+                        }
+
+            customer_info = pallet.get("customer", {})
+            if customer_info:
+                display_name = customer_info.get("display_name")
+                if not display_name:
+                    name = customer_info.get("name", "")
+                    business = customer_info.get("business", "")
+                    display_name = f"{name} | {business}" if name and business else None
+                if display_name:
+                    customer_index.setdefault(display_name, set()).add(idx)
+
+            for serial in pallet.get("serial_numbers", []):
+                serial_key = str(serial).strip().upper()
+                if serial_key:
+                    search_serial_index.setdefault(serial_key, set()).add(idx)
+
+            completed_at = pallet.get("completed_at", "")
+            if not completed_at:
                 continue
-            if normalized_serial in pallet.get("serial_numbers", []):
-                return {
-                    'pallet_number': pallet.get("pallet_number"),
-                    'completed_at': pallet.get("completed_at"),
-                    'is_current': False
-                }
-        
-        return None
+            try:
+                pallet_date = datetime.strptime(completed_at.split()[0], "%Y-%m-%d")
+                days_diff = (now.date() - pallet_date.date()).days
+                if days_diff == 0:
+                    date_index["Today"].add(idx)
+                if 0 <= days_diff <= 6:
+                    date_index["This Week"].add(idx)
+                if pallet_date.year == now.year and pallet_date.month == now.month:
+                    date_index["This Month"].add(idx)
+                if pallet_date.year == now.year:
+                    date_index["This Year"].add(idx)
+            except (ValueError, IndexError):
+                continue
+
+        self._serial_to_pallet_cache = serial_map
+        self._history_rows = history_rows
+        self._history_valid_indices = valid_indices
+        self._history_customer_index = customer_index
+        self._history_date_index = date_index
+        self._history_serial_index = search_serial_index
+        self._history_indexes_dirty = False
+
+    def filter_history_for_ui(
+        self,
+        filter_value: str,
+        customer_filter: str,
+        search_term: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fast indexed filtering for history UI with behavior matching legacy logic.
+        """
+        self._refresh_from_disk_if_changed()
+        self._ensure_history_indexes()
+
+        if filter_value == "All":
+            candidate_indices = set(self._history_valid_indices)
+        else:
+            candidate_indices = set(self._history_valid_indices).intersection(
+                self._history_date_index.get(filter_value, set())
+            )
+
+        if customer_filter != "ALL":
+            candidate_indices = candidate_indices.intersection(
+                self._history_customer_index.get(customer_filter, set())
+            )
+
+        search_key = (search_term or "").strip().upper()
+        if search_key:
+            candidate_indices = candidate_indices.intersection(
+                self._history_serial_index.get(search_key, set())
+            )
+
+        pallets = [self.data["pallets"][i] for i in candidate_indices]
+        pallets.sort(key=lambda x: x.get("pallet_number", 0), reverse=True)
+        return pallets
+
+    def _build_pallet_filenames_cache(self) -> Set[str]:
+        """Build a set of filenames present under PALLETS and its dated subfolders."""
+        filenames: Set[str] = set()
+        try:
+            from app.path_utils import get_base_dir
+            pallets_dir = get_base_dir() / "PALLETS"
+            if not pallets_dir.exists():
+                return filenames
+
+            for entry in pallets_dir.iterdir():
+                if entry.is_file():
+                    filenames.add(entry.name)
+                    continue
+                if not entry.is_dir():
+                    continue
+                for subentry in entry.iterdir():
+                    if subentry.is_file():
+                        filenames.add(subentry.name)
+        except Exception:
+            return set()
+        return filenames
+
+    def is_pallet_record_file_available(self, pallet: Dict[str, Any]) -> bool:
+        """
+        Public helper for consumers (e.g., history UI) to apply the same
+        pallet-file availability rules used for duplicate checks.
+        """
+        self._refresh_from_disk_if_changed()
+        self._ensure_history_indexes()
+        return self._is_pallet_record_usable_for_duplicate_check(pallet)
 
     def _is_pallet_record_usable_for_duplicate_check(self, pallet: Dict[str, Any]) -> bool:
         """
@@ -296,10 +461,15 @@ class PalletManager:
         if not exported_file:
             return True
 
+        if exported_file in self._file_usable_cache:
+            return self._file_usable_cache[exported_file]
+
         try:
             file_path = Path(exported_file)
             if file_path.is_absolute():
-                return file_path.exists()
+                result = file_path.exists()
+                self._file_usable_cache[exported_file] = result
+                return result
 
             # Match pallet_history_window behavior for relative paths.
             from app.path_utils import get_base_dir
@@ -307,20 +477,23 @@ class PalletManager:
 
             full_path = pallets_dir / file_path
             if full_path.exists():
+                self._file_usable_cache[exported_file] = True
                 return True
 
             filename_only = file_path.name
             if (pallets_dir / filename_only).exists():
+                self._file_usable_cache[exported_file] = True
                 return True
 
-            if pallets_dir.exists():
-                for date_dir in pallets_dir.iterdir():
-                    if date_dir.is_dir() and (date_dir / filename_only).exists():
-                        return True
+            if self._pallet_filenames_cache is not None and filename_only in self._pallet_filenames_cache:
+                self._file_usable_cache[exported_file] = True
+                return True
         except Exception:
             # If we can't validate the path, do not hard-block scanning.
+            self._file_usable_cache[exported_file] = False
             return False
 
+        self._file_usable_cache[exported_file] = False
         return False
     
     def complete_pallet(self, pallet: Dict[str, Any], exported_file: Path, export_datetime: Optional[datetime] = None) -> bool:

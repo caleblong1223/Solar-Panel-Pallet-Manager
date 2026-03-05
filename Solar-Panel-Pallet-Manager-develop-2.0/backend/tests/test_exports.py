@@ -88,6 +88,7 @@ def test_create_export_success(monkeypatch) -> None:
             ),
         )
         response = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
+        print("DEBUG create_export_success", response.status_code, response.text)
         assert response.status_code == 201
         payload = response.json()
         assert payload["pallet_id"] == 1

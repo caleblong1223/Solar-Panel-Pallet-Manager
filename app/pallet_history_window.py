@@ -76,6 +76,7 @@ class PalletHistoryWindow:
         self.selected_pallet: Optional[dict] = None
         self.checkbox_states: dict = {}  # Track checkbox states by tree item id
         self.item_to_pallet: dict = {}  # Map tree item id -> pallet record
+        self.use_indexed_history_filters = os.getenv("PM_HISTORY_INDEXED_FILTERS", "1") == "1"
         
         self.setup_ui()
         self.load_history()
@@ -272,84 +273,56 @@ class PalletHistoryWindow:
                 customer_filter = self.customer_filter_var.get()
                 search_term = self.search_var.get().strip().upper() if hasattr(self, 'search_var') else ""
                 
-                # Get all pallets (use cached data directly)
-                all_pallets = self.pallet_manager.data.get('pallets', [])
-                
-                # Filter out pallets whose exported files no longer exist
-                project_root = get_base_dir()
-                pallets_dir = project_root / "PALLETS"
-                valid_pallets = []
-                for pallet in all_pallets:
-                    exported_file = pallet.get('exported_file', '')
-                    if exported_file:
-                        # Check if the exported file exists
-                        file_path = Path(exported_file)
-                        # Handle both absolute and relative paths
-                        if file_path.is_absolute():
-                            # Absolute path - check directly
-                            if not file_path.exists():
-                                continue  # Skip this pallet
-                        else:
-                            # Relative path - try multiple locations
-                            # First try: relative to PALLETS directory
-                            full_path = pallets_dir / file_path
-                            if not full_path.exists():
-                                # Try: just the filename in PALLETS directory
-                                filename_only = Path(file_path).name
-                                full_path = pallets_dir / filename_only
-                                if not full_path.exists():
-                                    # Try: search in date subdirectories
-                                    found = False
-                                    if pallets_dir.exists():
-                                        try:
-                                            for date_dir in pallets_dir.iterdir():
-                                                if date_dir.is_dir():
-                                                    potential_path = date_dir / filename_only
-                                                    if potential_path.exists():
-                                                        found = True
-                                                        break
-                                        except (PermissionError, OSError) as e:
-                                            # Can't read directory, skip search
-                                            print(f"Warning: Could not search PALLETS directory: {e}")
-                                    if not found:
-                                        continue  # Skip this pallet - file doesn't exist
-                        valid_pallets.append(pallet)
-                    else:
-                        # Keep pallets that haven't been exported yet
-                        valid_pallets.append(pallet)
-                
-                # Filter pallets based on selected time period
-                pallets = self._filter_pallets_by_date(valid_pallets, filter_value)
-                
-                # Filter by customer
-                if customer_filter != "ALL":
-                    filtered_pallets = []
-                    for p in pallets:
-                        customer_info = p.get('customer', {})
-                        if customer_info:
-                            # Check both display_name and fallback to name|business format
-                            display_name = customer_info.get('display_name')
-                            if not display_name:
-                                name = customer_info.get('name', '')
-                                business = customer_info.get('business', '')
-                                display_name = f"{name} | {business}" if name and business else None
-                            
-                            if display_name == customer_filter:
-                                filtered_pallets.append(p)
-                    pallets = filtered_pallets
-                
-                # Filter by barcode search
-                if search_term:
-                    matching_pallets = []
-                    for pallet in pallets:
-                        serials = pallet.get('serial_numbers', [])
-                        # Exact serial match only (case-insensitive) to avoid false positives.
-                        if any(search_term == str(serial).strip().upper() for serial in serials):
-                            matching_pallets.append(pallet)
-                    pallets = matching_pallets
-                
-                # Sort by pallet_number descending (most recent first)
-                pallets.sort(key=lambda x: x.get('pallet_number', 0), reverse=True)
+                if self.use_indexed_history_filters:
+                    pallets = self.pallet_manager.filter_history_for_ui(
+                        filter_value=filter_value,
+                        customer_filter=customer_filter,
+                        search_term=search_term,
+                    )
+                else:
+                    # Get all pallets (use cached data directly)
+                    all_pallets = self.pallet_manager.data.get('pallets', [])
+
+                    # Filter out pallets whose exported files no longer exist.
+                    # Reuse PalletManager cache/index logic to avoid repeated disk scans.
+                    valid_pallets = [
+                        pallet
+                        for pallet in all_pallets
+                        if self.pallet_manager.is_pallet_record_file_available(pallet)
+                    ]
+
+                    # Filter pallets based on selected time period
+                    pallets = self._filter_pallets_by_date(valid_pallets, filter_value)
+
+                    # Filter by customer
+                    if customer_filter != "ALL":
+                        filtered_pallets = []
+                        for p in pallets:
+                            customer_info = p.get('customer', {})
+                            if customer_info:
+                                # Check both display_name and fallback to name|business format
+                                display_name = customer_info.get('display_name')
+                                if not display_name:
+                                    name = customer_info.get('name', '')
+                                    business = customer_info.get('business', '')
+                                    display_name = f"{name} | {business}" if name and business else None
+
+                                if display_name == customer_filter:
+                                    filtered_pallets.append(p)
+                        pallets = filtered_pallets
+
+                    # Filter by barcode search
+                    if search_term:
+                        matching_pallets = []
+                        for pallet in pallets:
+                            serials = pallet.get('serial_numbers', [])
+                            # Exact serial match only (case-insensitive) to avoid false positives.
+                            if any(search_term == str(serial).strip().upper() for serial in serials):
+                                matching_pallets.append(pallet)
+                        pallets = matching_pallets
+
+                    # Sort by pallet_number descending (most recent first)
+                    pallets.sort(key=lambda x: x.get('pallet_number', 0), reverse=True)
                 
                 # Remove loading indicator
                 self.tree.delete(loading_item)

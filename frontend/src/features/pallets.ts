@@ -34,6 +34,25 @@ export async function listPallets(token: string, status = "active") {
   return apiRequest<PalletListResponse>(`/pallets?${query}`, "GET", token);
 }
 
+export async function listPalletsForCustomer(
+  token: string,
+  customerId: number,
+  options?: { includeDeleted?: boolean; status?: string | null }
+) {
+  const params = new URLSearchParams({
+    customer_id: String(customerId),
+    limit: "50",
+    offset: "0",
+  });
+  if (options?.status) {
+    params.set("status", options.status);
+  }
+  if (options?.includeDeleted) {
+    params.set("include_deleted", "true");
+  }
+  return apiRequest<PalletListResponse>(`/pallets?${params.toString()}`, "GET", token);
+}
+
 export async function createPallet(
   token: string,
   payload: { max_panels: number; template_type?: string; customer_id?: number },
@@ -94,4 +113,8 @@ export async function completePallet(token: string, palletId: number, clientOper
 
 export async function getPallet(token: string, palletId: number) {
   return apiRequest<Pallet>(`/pallets/${palletId}`, "GET", token);
+}
+
+export async function deletePallet(token: string, palletId: number) {
+  return apiRequest<void>(`/pallets/${palletId}`, "DELETE", token);
 }

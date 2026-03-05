@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,6 +21,7 @@ from app.schemas.pallet import (
     PalletResponse,
     PalletUpdate,
 )
+from app.services.export_generator import generate_multi_pallets_pdf_bytes, write_legacy_excel_export
 
 router = APIRouter()
 
@@ -424,3 +427,53 @@ def pallet_history(
         .all()
     )
     return [AuditEventResponse.model_validate(event) for event in events]
+
+
+@router.get("/{pallet_id}/excel")
+def download_pallet_excel(
+    pallet_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "packout_operator")),
+) -> FileResponse:
+    """Generate (or regenerate) and download a 1.1-style Excel pallet sheet for a pallet."""
+    del current_user
+    pallet = _get_pallet_or_404(db, pallet_id)
+    template_type = pallet.template_type or "200WT"
+    path = write_legacy_excel_export(pallet, template_type, db)
+    if path is None or not path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Excel export not available for this pallet",
+        )
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=path.name,
+    )
+
+
+@router.post("/combined-pdf")
+def combined_pallets_pdf(
+    pallet_ids: list[int],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "packout_operator")),
+) -> Response:
+    """Generate a lightweight combined PDF for one or more pallets, optimized for printing."""
+    del current_user
+    if not pallet_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="pallet_ids is required")
+    pallets: Sequence[Pallet] = (
+        db.query(Pallet)
+        .options(selectinload(Pallet.items))
+        .filter(Pallet.id.in_(pallet_ids), Pallet.deleted_at.is_(None))
+        .order_by(Pallet.pallet_number.asc())
+        .all()
+    )
+    if not pallets:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pallets found for requested IDs")
+    pdf_bytes = generate_multi_pallets_pdf_bytes(pallets)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="pallets-combined.pdf"'},
+    )

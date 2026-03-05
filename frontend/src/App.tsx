@@ -5,6 +5,8 @@ import LiveBuilderPage from "./pages/LiveBuilderPage";
 import ImportExportPage from "./pages/ImportExportPage";
 import SettingsPage from "./pages/SettingsPage";
 import SyncIssuesPage from "./pages/SyncIssuesPage";
+import CustomersPage from "./pages/CustomersPage";
+import ExportsPage from "./pages/ExportsPage";
 
 export default function App() {
   return (
@@ -14,6 +16,8 @@ export default function App() {
         <Route path="/builder" element={<LiveBuilderPage />} />
         <Route path="/history" element={<HistoryExplorerPage />} />
         <Route path="/imports-exports" element={<ImportExportPage />} />
+        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/exports" element={<ExportsPage />} />
         <Route path="/sync-issues" element={<SyncIssuesPage />} />
       </Route>
       <Route path="/settings" element={<SettingsPage />} />

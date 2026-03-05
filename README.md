@@ -28,6 +28,65 @@ It adds a proper backend API, a shared Postgres database, and a React/Tauri desk
     - `docs/BACKUP_RESTORE_RUNBOOK.md`
     - `docs/BACKEND_ENVIRONMENT_STRATEGY.md`
 
+### 2.0 feature highlights and upgrades vs 1.1
+
+- **Pallet Builder (1.1 parity + multi-station)**
+  - Single-screen pallet build flow with scan‑to‑add, per‑row **Remove** actions, and **Complete pallet** gate (must be full).
+  - Panel type and pallet size selection feed **B1/B2/B3** in the Excel templates exactly as 1.1.
+  - Customer selection on start wires through to **A3** in the pallet sheet (Name \| Business, Address, City/State/ZIP).
+  - On completion the backend:
+    - Marks the pallet `completed`.
+    - Generates a PDF summary and a 1.1‑style Excel workbook.
+    - Persists both artifacts in MinIO/S3.
+
+- **Customer Management (new UI for legacy Excel customers.xlsx)**
+  - Full CRUD for customers backed by `/customers`:
+    - Display name, business, contact, email, phone, address, city, state, ZIP, active flag.
+  - “View pallets” card shows a **per‑customer pallet list** with:
+    - Status, created/completed timestamps, item counts.
+    - Multi‑select checkboxes and actions:
+      - **Download Excel (selected)** → regenerates the pallet workbook via the locked templates.
+      - **Combined PDF (selected)** → single printable PDF for multiple pallets.
+
+- **History Explorer (improved 1.1 Pallet History)**
+  - Single‑row filter bar combining:
+    - Date preset: **All, Today, This week, This month, This year**.
+    - Customer dropdown: **All customers** or a single customer.
+    - Serial query + **Exact match only** toggle.
+    - Sort: newest/oldest, serial A–Z/Z–A, source then serial.
+  - Results show both **pallet items** and **simulator panels**, with selection loading:
+    - Exports for that pallet (with **Open** buttons for each export artefact).
+    - Audit trail of pallet lifecycle events.
+  - **Delete pallet** action in the Details pane:
+    - Soft‑deletes the pallet (`status="deleted"`), frees serials for reuse.
+    - Mirrors the 1.1 “Delete Pallet” behavior but now operates on DB‑backed history.
+
+- **Export pipeline (Excel‑first, PDF‑second)**
+  - Excel templates (`26.xlsx`, `30.xlsx`, `35.xlsx`) are treated as **critical, immutable assets**:
+    - On API startup, `verify_core_export_templates()` loads and validates each workbook and its `PALLET SHEET` tab.
+    - If any template is missing or corrupted, the backend **fails fast** instead of serving requests.
+    - `/api/v1/exports/debug/template-info` returns a detailed view of template paths, existence, and structural validity.
+  - `POST /exports` creates:
+    - A 1.1‑style workbook populated from pallet + simulator data (when capacity/template is supported).
+    - A lightweight PDF summary for quick viewing/printing.
+    - Both uploaded to MinIO with SHA‑256 checksums.
+  - `GET /exports/{id}/download-url` supports **PDF or XLSX** download via a presigned URL.
+
+- **Offline‑friendly sync and conflict handling**
+  - Frontend uses an **outbox** + **sync engine**:
+    - Pallet operations (create, add/remove item, complete) are queued locally when offline.
+    - A background worker retries operations when connectivity and token are available.
+  - **Sync Issues** page (for admins) surfaces:
+    - Operations needing review (hard conflicts like duplicate serials).
+    - Pending errors with retry/discard controls.
+  - This replaces 1.1’s purely local JSON history with a more robust, eventually‑consistent model while preserving “keep scanning even if the network blips”.
+
+- **Auth model tuned for the shop floor**
+  - Backend still enforces roles (`admin`, `packout_operator`, `purchasing_manager`) for API boundaries.
+  - Frontend performs **shared background login** using a configured station account:
+    - No operator login UI; the app “just opens” like 1.1.
+    - Falls back to an offline session if the backend can’t be reached at startup and syncs later when available.
+
 ---
 
 ## Deployment – Pallet Manager 2.0

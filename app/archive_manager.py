@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 import shutil
 import json
+import heapq
 
 
 class ArchiveManager:
@@ -85,15 +86,22 @@ class ArchiveManager:
             if len(pallets) <= max_entries:
                 return 0
             
-            # Sort by pallet_number (oldest first)
-            pallets.sort(key=lambda x: x.get('pallet_number', 0))
-            
-            # Archive old entries
-            entries_to_archive = pallets[:-max_entries]
+            # Keep newest entries in O(N log K) time when max_entries << N.
+            newest_entries = heapq.nlargest(
+                max_entries,
+                pallets,
+                key=lambda x: x.get('pallet_number', 0),
+            )
+
+            newest_ids = {id(p) for p in newest_entries}
+            entries_to_archive = [p for p in pallets if id(p) not in newest_ids]
             archived_count = len(entries_to_archive)
             
             # Keep only recent entries
-            data['pallets'] = pallets[-max_entries:]
+            data['pallets'] = sorted(
+                newest_entries,
+                key=lambda x: x.get('pallet_number', 0),
+            )
             
             # Save archived entries
             archive_file = self.archive_dir / f"pallet_history_archive_{datetime.now().strftime('%Y%m%d')}.json"
@@ -163,7 +171,6 @@ class ArchiveManager:
             return cleaned_count
         except Exception:
             return cleaned_count
-
 
 
 

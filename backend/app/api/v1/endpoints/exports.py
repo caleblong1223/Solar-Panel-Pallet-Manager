@@ -77,10 +77,12 @@ def create_export(
 
     xlsx_file_name = f"pallet-{pallet.pallet_number}-export.xlsx"
     pdf_file_name = f"pallet-{pallet.pallet_number}-export.pdf"
+    workbook_artifact: bytes | None
     try:
         workbook_artifact = generate_export_workbook_bytes(pallet, payload.template_type)
-    except ExportWorkbookError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except ExportWorkbookError:
+        # For unsupported capacities or missing templates, continue with PDF-only export.
+        workbook_artifact = None
     pdf_artifact = generate_export_pdf_bytes(pallet, payload.template_type)
 
     export = Export(
@@ -95,19 +97,18 @@ def create_export(
     db.add(export)
     db.flush()
     try:
-        upload_export_artifact(
-            export_id=export.id,
-            pallet_id=pallet.id,
-            filename=xlsx_file_name,
-            content=workbook_artifact,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        if workbook_artifact is not None:
+            upload_export_artifact(
+                export_id=export.id,
+                pallet_id=pallet.id,
+                filename=xlsx_file_name,
+                content=workbook_artifact,
+            )
         object_key, checksum = upload_export_artifact(
             export_id=export.id,
             pallet_id=pallet.id,
             filename=pdf_file_name,
             content=pdf_artifact,
-            content_type="application/pdf",
         )
     except StorageError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

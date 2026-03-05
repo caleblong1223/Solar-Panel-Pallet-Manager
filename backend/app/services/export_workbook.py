@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
+import os
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -42,6 +43,75 @@ def _template_path_for_capacity(max_panels: int) -> Path:
         f"Template workbook {template_name} not found. Checked: "
         + ", ".join(str(path) for path in candidates)
     )
+
+
+def _is_testing() -> bool:
+    """Detect pytest so we can skip hard failures during test runs."""
+    return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+
+def verify_core_export_templates() -> None:
+    """Ensure the critical Excel templates exist and are structurally valid.
+
+    This validates the 26/30/35 panel templates on startup so we fail fast if
+    the workbooks are missing or corrupted. In test runs we skip this check.
+    """
+    if _is_testing():
+        return
+
+    # Core capacities we expect exact templates for.
+    for capacity in (26, 30, 35):
+        path = _template_path_for_capacity(capacity)
+        try:
+            workbook = load_workbook(path)
+        except Exception as exc:  # pragma: no cover - defensive
+            raise ExportWorkbookError(f"Failed to load template workbook {path}: {exc}") from exc
+
+        try:
+            if "PALLET SHEET" not in workbook.sheetnames:
+                raise ExportWorkbookError(
+                    f"Template {path.name} missing required 'PALLET SHEET' worksheet."
+                )
+        finally:
+            workbook.close()
+
+
+def inspect_core_export_templates() -> dict[str, dict[str, object]]:
+    """Return a detailed, non-raising view of template status for debugging."""
+    status: dict[str, dict[str, object]] = {}
+    for capacity in (26, 30, 35):
+        key = f"{capacity}"
+        info: dict[str, object] = {
+            "capacity": capacity,
+            "path": None,
+            "exists": False,
+            "valid": False,
+            "error": None,
+        }
+        try:
+            path = _template_path_for_capacity(capacity)
+            info["path"] = str(path)
+            exists = path.exists()
+            info["exists"] = exists
+            if not exists:
+                info["error"] = "Template file not found"
+            else:
+                try:
+                    workbook = load_workbook(path)
+                except Exception as exc:  # pragma: no cover - defensive
+                    info["error"] = f"Failed to load workbook: {exc}"
+                else:
+                    try:
+                        if "PALLET SHEET" not in workbook.sheetnames:
+                            info["error"] = "Missing 'PALLET SHEET' worksheet"
+                        else:
+                            info["valid"] = True
+                    finally:
+                        workbook.close()
+        except ExportWorkbookError as exc:
+            info["error"] = str(exc)
+        status[key] = info
+    return status
 
 
 def _build_b3_value(panel_type: str, pallet_number: int, export_dt: datetime) -> str:
