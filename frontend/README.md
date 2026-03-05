@@ -20,7 +20,10 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 
 - The app now supports runtime backend configuration from the in-app `Settings` screen (`/settings`).
 - Saved settings are stored locally and override `VITE_API_BASE_URL` for API requests.
-- If the backend is unavailable during startup, the app can initialize into offline mode when a cached user profile exists.
+- Settings include:
+  - `Primary API Base URL (Central Server)`
+  - `Fallback API Base URL (Local Device)` (optional)
+- API calls will try primary first, then fallback on network timeout/unreachable/server-5xx failures.
 
 ## Offline Queue Foundation
 

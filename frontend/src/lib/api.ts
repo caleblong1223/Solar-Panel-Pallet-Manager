@@ -1,4 +1,4 @@
-import { loadRuntimeSettings } from "./runtimeConfig";
+import { getApiBaseCandidates, loadRuntimeSettings } from "./runtimeConfig";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const DEFAULT_REQUEST_TIMEOUT_MS = 4000;
@@ -18,6 +18,39 @@ export class ApiError extends Error {
   }
 }
 
+async function requestRaw(
+  url: string,
+  method: HttpMethod,
+  headers: Record<string, string>,
+  payload: BodyInit | undefined,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      method,
+      headers,
+      body: payload,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError(`Request timed out after ${timeoutMs}ms`, 0, method, url);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function shouldTryFallback(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.status === 0 || error.status >= 500;
+  }
+  return true;
+}
+
 export async function apiRequest<TResponse>(
   path: string,
   method: HttpMethod,
@@ -26,9 +59,6 @@ export async function apiRequest<TResponse>(
   extraHeaders?: Record<string, string>,
   timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<TResponse> {
-  const { apiBaseUrl } = loadRuntimeSettings();
-  const url = path.startsWith("http://") || path.startsWith("https://") ? path : `${apiBaseUrl}${path}`;
-
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
@@ -46,24 +76,39 @@ export async function apiRequest<TResponse>(
     payload = JSON.stringify(body);
   }
 
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  const isAbsolute = path.startsWith("http://") || path.startsWith("https://");
+  const candidates = isAbsolute
+    ? [path]
+    : (() => {
+        const configured = getApiBaseCandidates();
+        if (configured.length > 0) {
+          return configured.map((base) => `${base}${path}`);
+        }
+        const { apiBaseUrl } = loadRuntimeSettings();
+        return [`${apiBaseUrl}${path}`];
+      })();
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method,
-      headers,
-      body: payload,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiError(`Request timed out after ${timeoutMs}ms`, 0, method, path);
+  let response: Response | null = null;
+  let lastError: unknown = null;
+  for (let i = 0; i < candidates.length; i += 1) {
+    const url = candidates[i];
+    try {
+      response = await requestRaw(url, method, headers, payload, timeoutMs);
+      if (!response.ok && response.status >= 500 && i < candidates.length - 1) {
+        lastError = new ApiError(`${method} ${path} failed with status ${response.status}`, response.status, method, path);
+        continue;
+      }
+      break;
+    } catch (error) {
+      lastError = error;
+      if (i < candidates.length - 1 && shouldTryFallback(error)) {
+        continue;
+      }
+      throw error;
     }
-    throw error;
-  } finally {
-    window.clearTimeout(timeoutId);
+  }
+  if (!response) {
+    throw (lastError instanceof Error ? lastError : new Error("Request failed"));
   }
 
   if (!response.ok) {

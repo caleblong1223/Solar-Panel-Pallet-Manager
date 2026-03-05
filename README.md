@@ -198,6 +198,11 @@ On each workstation:
    - The app will launch.
    - It performs **background login** with the shared account.
    - All calls go to the backend on the Packout Computer.
+   - If the host server IP changes, open **Settings** in the app and update
+     `Primary API Base URL (Central Server)` to the new host
+     (for example `http://10.20.10.70:8000/api/v1`).
+   - Optionally configure `Fallback API Base URL (Local Device)` for local
+     failover (for example `http://localhost:8000/api/v1`).
 
 No Docker/DB/MinIO is needed on Computers 2–4.
 

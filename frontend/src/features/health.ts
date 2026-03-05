@@ -27,3 +27,13 @@ export async function testServerConnection(apiBaseUrl?: string): Promise<{ ok: b
   }
 }
 
+export async function testServerConnectionNamed(
+  name: string,
+  apiBaseUrl?: string
+): Promise<{ ok: boolean; message: string }> {
+  const result = await testServerConnection(apiBaseUrl);
+  if (result.ok) {
+    return { ok: true, message: `${name}: ${result.message}` };
+  }
+  return { ok: false, message: `${name}: ${result.message}` };
+}

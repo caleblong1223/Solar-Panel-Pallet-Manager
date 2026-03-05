@@ -103,6 +103,31 @@ export DATABASE_URL='postgresql://pallet_user:pallet_pass@localhost:5433/pallet_
 python scripts/seed_auth_data.py --username admin --email admin@local.test --password "$SEED_ADMIN_PASSWORD"
 ```
 
+## 8) Run local backend without Docker (SQLite)
+
+```bash
+cd backend
+python scripts/run_local_backend.py --host 0.0.0.0 --port 8000
+```
+
+Optional flags:
+
+```bash
+# Custom SQLite file
+python scripts/run_local_backend.py --db-file ./data/local_offline.db
+
+# Explicit DATABASE_URL (Postgres or SQLite)
+python scripts/run_local_backend.py --database-url sqlite:///./local.db
+
+# Seed baseline auth user before startup
+python scripts/run_local_backend.py --seed-admin-password 'set-a-strong-password'
+```
+
+The script performs:
+- `alembic upgrade head`
+- optional `scripts/seed_auth_data.py` (if seed password provided)
+- `uvicorn app.main:app --host <host> --port <port>`
+
 Notes:
 - Customer import uses `data/CUSTOMERS/customers.xlsx` if available.
 - Legacy pallet history import uses `data/PALLETS/pallet_history.json`.
