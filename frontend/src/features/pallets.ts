@@ -29,6 +29,12 @@ type PalletListResponse = {
   pallets: Pallet[];
 };
 
+export type UpdatePalletPayload = {
+  template_type?: string;
+  customer_id?: number | null;
+  max_panels?: number;
+};
+
 export async function listPallets(token: string, status = "active") {
   const query = new URLSearchParams({ status, limit: "50", offset: "0" }).toString();
   return apiRequest<PalletListResponse>(`/pallets?${query}`, "GET", token);
@@ -119,6 +125,10 @@ export async function completePallet(token: string, palletId: number, clientOper
 
 export async function getPallet(token: string, palletId: number) {
   return apiRequest<Pallet>(`/pallets/${palletId}`, "GET", token);
+}
+
+export async function updatePallet(token: string, palletId: number, payload: UpdatePalletPayload) {
+  return apiRequest<Pallet>(`/pallets/${palletId}`, "PATCH", token, payload);
 }
 
 export async function deletePallet(token: string, palletId: number) {

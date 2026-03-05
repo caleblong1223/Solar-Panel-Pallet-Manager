@@ -5,13 +5,11 @@ import { useToast } from "../components/notifications/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
-import { createExport, getPallet, listPallets, type Pallet } from "../features/pallets";
+import { createExport, updatePallet, type Pallet } from "../features/pallets";
 import {
   repoAddPalletItem,
   repoCompletePallet,
   repoCreatePallet,
-  repoListPallets,
-  repoGetPallet,
   repoRemovePalletItem,
 } from "../features/palletRepo";
 import { getExportDownloadUrl } from "../features/exports";
@@ -115,23 +113,10 @@ export default function LiveBuilderPage() {
 
   const remaining = current ? current.max_panels - current.item_count : 0;
 
-  const loadFirstActivePallet = async () => {
-    try {
-      // Prefer local/offline-aware repo, which syncs from server when available.
-      const { pallets } = await repoListPallets(null, "active");
-      if (pallets.length > 0) {
-        const full = await repoGetPallet(null, pallets[0].id);
-        setCurrent(full);
-      } else {
-        setCurrent(null);
-      }
-    } catch {
-      // If anything goes wrong, leave current as-is.
-    }
-  };
-
   useEffect(() => {
-    void loadFirstActivePallet();
+    // Start each app session with a clean Builder state instead of auto-resuming
+    // previously active pallets from local cache/server.
+    setCurrent(null);
 
     // Seed from any cached customers first so offline builder still has a usable dropdown.
     try {
@@ -247,23 +232,45 @@ export default function LiveBuilderPage() {
       notify("Pallet must be full to complete", "warning");
       return;
     }
-    const palletId = current.id;
+    const desiredTemplateType = newPalletTemplate;
+    const desiredCustomerId = selectedCustomerId === "none" ? null : selectedCustomerId;
+    let workingPallet = current;
     const palletNumber = current.pallet_number;
-    const templateType = current.template_type ?? "200WT";
+
     setIsBusy(true);
     try {
-      const updated = await repoCompletePallet(null, current.id);
+      if (
+        token &&
+        (workingPallet.template_type !== desiredTemplateType || workingPallet.customer_id !== desiredCustomerId)
+      ) {
+        workingPallet = await updatePallet(token, workingPallet.id, {
+          template_type: desiredTemplateType,
+          customer_id: desiredCustomerId,
+        });
+        setCurrent(workingPallet);
+      } else if (
+        !token &&
+        (workingPallet.template_type !== desiredTemplateType || workingPallet.customer_id !== desiredCustomerId)
+      ) {
+        workingPallet = {
+          ...workingPallet,
+          template_type: desiredTemplateType,
+          customer_id: desiredCustomerId,
+        };
+        setCurrent(workingPallet);
+      }
+
+      const updated = await repoCompletePallet(null, workingPallet.id);
       setCurrent(updated);
       const created = await createExport(token ?? "", {
-        pallet_id: palletId,
-        template_type: templateType,
+        pallet_id: workingPallet.id,
+        template_type: desiredTemplateType,
         packout_date: packoutDate || undefined,
       });
       const { download_url } = await getExportDownloadUrl(token ?? "", created.id, "xlsx");
       window.open(download_url, "_blank", "noopener,noreferrer");
       notify(`Pallet #${palletNumber} completed · export ready`, "success");
       setCurrent(null);
-      await loadFirstActivePallet();
       serialInputRef.current?.focus();
     } catch {
       notify("Failed to complete or export pallet", "error");
@@ -279,17 +286,47 @@ export default function LiveBuilderPage() {
           {current ? (
             <>
               <p className="builder-meta">
-                <strong>Panel type (for export):</strong> {current.template_type ?? "200WT"}
+                <strong>Panel type (for export):</strong> {newPalletTemplate}
               </p>
               <p className="builder-meta">
                 <strong>Cell B3 on export:</strong>{" "}
-                {current.template_type ?? "200WT"}
+                {newPalletTemplate}
                 {formatB3Date(new Date())}-{current.pallet_number}
               </p>
               <p className="builder-meta">
                 <strong>{current.item_count}</strong> / {current.max_panels} panels
                 {remaining > 0 && ` · ${remaining} remaining`}
               </p>
+              <div style={{ display: "grid", gap: "8px", marginTop: "8px", marginBottom: "8px" }}>
+                <AnimatedSelect
+                  label="Customer (can be changed before export)"
+                  value={selectedCustomerId === "none" ? "" : String(selectedCustomerId)}
+                  placeholder="No customer selected"
+                  options={[
+                    { value: "", label: "No customer selected" },
+                    ...customers.map<AnimatedSelectOption>((customer) => ({
+                      value: String(customer.id),
+                      label: customer.display_name,
+                    })),
+                  ]}
+                  onChange={(next) => {
+                    if (!next) {
+                      setSelectedCustomerId("none");
+                    } else {
+                      setSelectedCustomerId(Number(next));
+                    }
+                  }}
+                />
+                <AnimatedSelect
+                  label="Panel type (can be changed before export)"
+                  value={newPalletTemplate}
+                  options={TEMPLATE_OPTIONS.map<AnimatedSelectOption>((t) => ({
+                    value: t,
+                    label: t,
+                  }))}
+                  onChange={(next) => setNewPalletTemplate(next)}
+                />
+              </div>
               <form className="builder-form" onSubmit={handleAddSerial} style={{ marginTop: "12px" }}>
                 <TextInput
                   label="Scan barcode"

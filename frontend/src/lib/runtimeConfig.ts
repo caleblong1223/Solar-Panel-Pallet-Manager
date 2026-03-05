@@ -11,9 +11,21 @@ function normalizeUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
 
+function ensureApiV1Path(value: string): string {
+  const normalized = normalizeUrl(value);
+  if (!normalized) {
+    return normalized;
+  }
+  // Accept either full API path or bare host base.
+  if (normalized.endsWith("/api/v1")) {
+    return normalized;
+  }
+  return `${normalized}/api/v1`;
+}
+
 function getDefaultSettings(): RuntimeSettings {
   const envValue = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? DEFAULT_API_BASE_URL;
-  const normalized = normalizeUrl(envValue);
+  const normalized = ensureApiV1Path(envValue);
   return {
     primaryApiBaseUrl: normalized,
     fallbackApiBaseUrl: "",
@@ -29,8 +41,8 @@ export function loadRuntimeSettings(): RuntimeSettings {
   }
   try {
     const parsed = JSON.parse(raw) as Partial<RuntimeSettings> & { apiBaseUrl?: string };
-    const primary = normalizeUrl(parsed.primaryApiBaseUrl ?? parsed.apiBaseUrl ?? defaults.primaryApiBaseUrl);
-    const fallback = normalizeUrl(parsed.fallbackApiBaseUrl ?? "");
+    const primary = ensureApiV1Path(parsed.primaryApiBaseUrl ?? parsed.apiBaseUrl ?? defaults.primaryApiBaseUrl);
+    const fallback = ensureApiV1Path(parsed.fallbackApiBaseUrl ?? "");
     return {
       primaryApiBaseUrl: primary,
       fallbackApiBaseUrl: fallback,
@@ -43,8 +55,8 @@ export function loadRuntimeSettings(): RuntimeSettings {
 }
 
 export function saveRuntimeSettings(next: RuntimeSettings): RuntimeSettings {
-  const primary = normalizeUrl(next.primaryApiBaseUrl || next.apiBaseUrl);
-  const fallback = normalizeUrl(next.fallbackApiBaseUrl ?? "");
+  const primary = ensureApiV1Path(next.primaryApiBaseUrl || next.apiBaseUrl);
+  const fallback = ensureApiV1Path(next.fallbackApiBaseUrl ?? "");
   const normalized = {
     primaryApiBaseUrl: primary,
     fallbackApiBaseUrl: fallback,

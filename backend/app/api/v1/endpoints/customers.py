@@ -17,9 +17,7 @@ def list_customers(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> CustomerListResponse:
-    del current_user
     query = db.query(Customer)
     if search:
         query = query.filter(Customer.display_name.ilike(f"%{search.strip()}%"))

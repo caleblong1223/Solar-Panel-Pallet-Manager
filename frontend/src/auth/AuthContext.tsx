@@ -23,64 +23,158 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function getFallbackOfflineUser(): User {
-  return {
-    id: -1,
-    username: "offline_station",
-    email: "offline@local",
-    is_active: true,
-    roles: [],
-  };
-}
-
-function parseCachedUser(): User | null {
-  const cachedRaw = localStorage.getItem(CACHED_USER_KEY);
-  if (!cachedRaw) {
-    return null;
-  }
-  try {
-    return JSON.parse(cachedRaw) as User;
-  } catch {
-    localStorage.removeItem(CACHED_USER_KEY);
-    return null;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [sessionMode] = useState<SessionMode>("anonymous");
+  const [accessToken, setAccessToken] = useState<string | null>(() => localStorage.getItem(ACCESS_TOKEN_KEY));
+  const [user, setUser] = useState<User | null>(() => {
+    const raw = localStorage.getItem(CACHED_USER_KEY);
+    if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw) as User;
+    } catch {
+      return null;
+    }
+  });
+  const [sessionMode, setSessionMode] = useState<SessionMode>("anonymous");
   const [isInitializing, setIsInitializing] = useState(true);
+  const [hasTriedAutoLogin, setHasTriedAutoLogin] = useState(false);
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(CACHED_USER_KEY);
     setAccessToken(null);
     setUser(null);
+    setSessionMode("anonymous");
   }, []);
 
-  const handleLogin = useCallback(async (_username: string, _password: string) => {
-    // In the 2.0 no-login model we don't support interactive login.
-    // This is a no-op to satisfy existing call sites.
-    return;
+  const refreshSession = useCallback(async (token: string) => {
+    try {
+      const profile = await getCurrentUser(token);
+      setUser(profile);
+      localStorage.setItem(CACHED_USER_KEY, JSON.stringify(profile));
+      setSessionMode("authenticated");
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
+
+  const handleLogin = useCallback(async (username: string, password: string) => {
+    const result = await apiLogin(username, password);
+    localStorage.setItem(ACCESS_TOKEN_KEY, result.access_token);
+    setAccessToken(result.access_token);
+    const didRefresh = await refreshSession(result.access_token);
+    if (!didRefresh) {
+      throw new Error("Unable to load session profile");
+    }
+  }, [refreshSession]);
 
   const handleLogout = useCallback(() => {
     clearSession();
   }, [clearSession]);
 
-  // Immediately mark initialization as complete; we don't perform any
-  // background login or token refresh in the no-login 2.0 desktop app.
   useEffect(() => {
-    setIsInitializing(false);
-  }, []);
+    let cancelled = false;
+
+    const initialize = async () => {
+      if (accessToken) {
+        const didRefresh = await refreshSession(accessToken);
+        if (!didRefresh) {
+          setAccessToken(null);
+          localStorage.removeItem(ACCESS_TOKEN_KEY);
+          const cachedRaw = localStorage.getItem(CACHED_USER_KEY);
+          if (cachedRaw) {
+            try {
+              setUser(JSON.parse(cachedRaw) as User);
+              setSessionMode("offline");
+            } catch {
+              localStorage.removeItem(CACHED_USER_KEY);
+              setUser(null);
+              setSessionMode("anonymous");
+            }
+          } else {
+            setSessionMode("anonymous");
+          }
+        }
+        if (!cancelled) {
+          setIsInitializing(false);
+        }
+        return;
+      }
+
+      if (!hasTriedAutoLogin) {
+        try {
+          const result = await apiLogin(SHARED_USERNAME, SHARED_PASSWORD);
+          localStorage.setItem(ACCESS_TOKEN_KEY, result.access_token);
+          setAccessToken(result.access_token);
+          await refreshSession(result.access_token);
+        } catch {
+          const cachedRaw = localStorage.getItem(CACHED_USER_KEY);
+          if (cachedRaw) {
+            try {
+              setUser(JSON.parse(cachedRaw) as User);
+              setSessionMode("offline");
+            } catch {
+              localStorage.removeItem(CACHED_USER_KEY);
+              setUser(null);
+              setSessionMode("anonymous");
+            }
+          } else {
+            setSessionMode("anonymous");
+          }
+        } finally {
+          if (!cancelled) {
+            setHasTriedAutoLogin(true);
+            setIsInitializing(false);
+          }
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setIsInitializing(false);
+      }
+    };
+
+    void initialize();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, hasTriedAutoLogin, refreshSession]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      const expiryMs = getTokenExpiryMs(accessToken);
+      if (!expiryMs) {
+        return;
+      }
+
+      const msUntilExpiry = expiryMs - Date.now();
+      if (msUntilExpiry <= 0) {
+        clearSession();
+        return;
+      }
+
+      if (msUntilExpiry <= REFRESH_WINDOW_MS) {
+        void refreshSession(accessToken);
+      }
+    }, 60_000);
+
+    return () => window.clearInterval(interval);
+  }, [accessToken, clearSession, refreshSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       token: accessToken,
-      isAuthenticated: false,
-      canAccessApp: true,
-      isOfflineSession: false,
+      isAuthenticated: sessionMode === "authenticated",
+      canAccessApp: sessionMode === "authenticated" || sessionMode === "offline",
+      isOfflineSession: sessionMode === "offline",
       isInitializing,
       user,
       login: handleLogin,
