@@ -173,7 +173,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       token: accessToken,
       isAuthenticated: sessionMode === "authenticated",
-      canAccessApp: sessionMode === "authenticated" || sessionMode === "offline",
+      // Do not block app shell access on auth bootstrap failures.
+      // Individual API calls can still surface connection/auth errors.
+      canAccessApp: true,
       isOfflineSession: sessionMode === "offline",
       isInitializing,
       user,
