@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import AppFrame from "../components/layout/AppFrame";
 import { useToast } from "../components/notifications/ToastProvider";
@@ -124,8 +124,7 @@ export default function HistoryExplorerPage() {
     return filtered;
   };
 
-  const runSearch = async (event: FormEvent) => {
-    event.preventDefault();
+  const doSearch = useCallback(async () => {
     if (!token || !query.trim()) {
       return;
     }
@@ -154,7 +153,30 @@ export default function HistoryExplorerPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token, query, exact, notify, sortToParams]);
+
+const runSearch = async (event: FormEvent) => {
+  event.preventDefault();
+  await doSearch();
+};
+
+  const autoSearchTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!query.trim()) {
+      return;
+    }
+    if (autoSearchTimer.current) {
+      window.clearTimeout(autoSearchTimer.current);
+    }
+    autoSearchTimer.current = window.setTimeout(() => {
+      void doSearch();
+    }, 400);
+    return () => {
+      if (autoSearchTimer.current) {
+        window.clearTimeout(autoSearchTimer.current);
+      }
+    };
+  }, [query, doSearch]);
 
   const loadDetails = async (row: BarcodeSearchResult) => {
     setSelected(row);
