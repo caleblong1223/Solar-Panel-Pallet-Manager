@@ -12,22 +12,19 @@ import {
   createExport,
   createPallet as apiCreatePallet,
   updatePallet,
+  type PalletItem,
   type Pallet,
 } from "../features/pallets";
-import {
-  repoAddPalletItem,
-  repoCreatePallet,
-  repoRemovePalletItem,
-} from "../features/palletRepo";
 import { getExportDownloadUrl } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
-import { ApiError } from "../lib/api";
 
 const DEFAULT_MAX_PANELS = 25;
 const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 const ACCESS_TOKEN_KEY = "pm2_access_token";
 const PALLET_SIZES = [25, 26, 30, 35];
 const CUSTOMERS_CACHE_KEY = "pm2_cached_customers";
+let draftPalletCounter = 1;
+let draftItemCounter = 1;
 
 function getEffectiveToken(contextToken: string | null): string | null {
   return contextToken ?? localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -55,6 +52,7 @@ export default function LiveBuilderPage() {
     return `${year}-${month}-${day}`;
   });
   const serialInputRef = useRef<HTMLInputElement | null>(null);
+  const packoutDateRef = useRef<HTMLInputElement | null>(null);
 
   const remaining = current ? current.max_panels - current.item_count : 0;
 
@@ -124,12 +122,22 @@ export default function LiveBuilderPage() {
   const handleStartNewPallet = async () => {
     setIsBusy(true);
     try {
-      // Always start as a local draft; publish to server only at finalize/export.
-      const created = await repoCreatePallet(null, {
-        max_panels: newPalletSize,
+      const created: Pallet = {
+        id: -draftPalletCounter,
+        pallet_number: Number(palletNumberDraft) > 0 ? Number(palletNumberDraft) : draftPalletCounter,
+        status: "active",
         template_type: newPalletTemplate,
-        customer_id: selectedCustomerId === "none" ? undefined : selectedCustomerId,
-      });
+        max_panels: newPalletSize,
+        customer_id: selectedCustomerId === "none" ? null : selectedCustomerId,
+        created_by: null,
+        completed_by: null,
+        created_at: new Date().toISOString(),
+        completed_at: null,
+        deleted_at: null,
+        item_count: 0,
+        items: [],
+      };
+      draftPalletCounter += 1;
       setCurrent(created);
       setSerial("");
       notify(`Pallet #${created.pallet_number} started`, "success");
@@ -158,34 +166,29 @@ export default function LiveBuilderPage() {
 
     setIsBusy(true);
     try {
-      const updated = await repoAddPalletItem(null, current.id, s);
+      if (current.items.some((item) => item.serial === s)) {
+        notify("Serial already on pallet", "warning");
+        return;
+      }
+      const nextSlot = current.items.length + 1;
+      const item: PalletItem = {
+        id: -draftItemCounter,
+        serial: s,
+        slot_index: nextSlot,
+        added_by: null,
+        added_at: new Date().toISOString(),
+      };
+      draftItemCounter += 1;
+      const updated: Pallet = {
+        ...current,
+        item_count: current.item_count + 1,
+        items: [...current.items, item],
+      };
       setCurrent(updated);
       setSerial("");
       notify("Added", "success");
       serialInputRef.current?.focus();
     } catch (error) {
-      if (error instanceof ApiError && error.errorCode === "SIM_DATA_REQUIRED") {
-        const proceed = window.confirm(
-          "No sun simulator data was found for this serial. Add anyway using generated in-range fallback values?"
-        );
-        if (proceed) {
-          try {
-            const updated = await repoAddPalletItem(null, current.id, s, { allowMissingSimData: true });
-            setCurrent(updated);
-            setSerial("");
-            notify("Added with generated fallback simulator values", "warning");
-            serialInputRef.current?.focus();
-            return;
-          } catch (retryError) {
-            const retryMessage =
-              retryError instanceof Error ? retryError.message : "Failed to add serial";
-            notify(retryMessage, "error");
-            return;
-          }
-        }
-        notify("Serial not added", "warning");
-        return;
-      }
       const message = error instanceof Error ? error.message : "Failed to add serial";
       notify(message, "error");
     } finally {
@@ -197,7 +200,14 @@ export default function LiveBuilderPage() {
     if (!current) return;
     setIsBusy(true);
     try {
-      const updated = await repoRemovePalletItem(null, current.id, itemId);
+      const remainingItems = current.items
+        .filter((item) => item.id !== itemId)
+        .map((item, index) => ({ ...item, slot_index: index + 1 }));
+      const updated: Pallet = {
+        ...current,
+        item_count: remainingItems.length,
+        items: remainingItems,
+      };
       setCurrent(updated);
       notify("Removed", "success");
     } catch (err) {
@@ -283,6 +293,24 @@ export default function LiveBuilderPage() {
     }
   };
 
+  const bumpPalletNumber = (delta: number) => {
+    if (!current) return;
+    const parsed = Number(palletNumberDraft || current.pallet_number);
+    if (!Number.isFinite(parsed)) return;
+    const next = Math.max(1, Math.trunc(parsed + delta));
+    setPalletNumberDraft(String(next));
+  };
+
+  const bumpPackoutDate = (deltaDays: number) => {
+    const base = packoutDate ? new Date(`${packoutDate}T00:00:00`) : new Date();
+    if (Number.isNaN(base.getTime())) return;
+    base.setDate(base.getDate() + deltaDays);
+    const yyyy = base.getFullYear();
+    const mm = String(base.getMonth() + 1).padStart(2, "0");
+    const dd = String(base.getDate()).padStart(2, "0");
+    setPackoutDate(`${yyyy}-${mm}-${dd}`);
+  };
+
   const commitPalletNumber = async () => {
     if (!current) return;
     const parsed = Number(palletNumberDraft);
@@ -310,12 +338,11 @@ export default function LiveBuilderPage() {
                   ? "builder-active-pill__number builder-active-pill__number--push"
                   : "builder-active-pill__number"
               }
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
+              type="number"
+              min={1}
               value={palletNumberDraft}
               style={{ width: `${Math.max(3, palletNumberDraft.length + 1)}ch` }}
-              onChange={(event) => setPalletNumberDraft(event.target.value.replace(/\D+/g, ""))}
+              onChange={(event) => setPalletNumberDraft(event.target.value)}
               onBlur={() => void commitPalletNumber()}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -324,6 +351,10 @@ export default function LiveBuilderPage() {
                 }
               }}
             />
+            <div className="builder-active-pill__stepper" aria-hidden="true">
+              <button type="button" onClick={() => bumpPalletNumber(1)}>▲</button>
+              <button type="button" onClick={() => bumpPalletNumber(-1)}>▼</button>
+            </div>
           </label>
           <AnimatedSelect
             label="Customer"
@@ -371,14 +402,20 @@ export default function LiveBuilderPage() {
           <label className="builder-active-pill builder-active-pill--input builder-active-control builder-active-control--date">
             <span className="builder-active-pill__label">Packout date</span>
             <input
+              ref={packoutDateRef}
               className="builder-active-pill__date"
               type="date"
               value={packoutDate}
+              onClick={() => packoutDateRef.current?.showPicker?.()}
               onChange={(event) => {
                 setPackoutDate(event.target.value);
                 window.setTimeout(() => event.currentTarget.blur(), 0);
               }}
             />
+            <div className="builder-active-pill__stepper" aria-hidden="true">
+              <button type="button" onClick={() => bumpPackoutDate(1)}>▲</button>
+              <button type="button" onClick={() => bumpPackoutDate(-1)}>▼</button>
+            </div>
           </label>
         </section>
       ) : null}

@@ -362,19 +362,36 @@ h1 {
   min-width: 3ch;
   max-width: 100%;
   transition: width 220ms ease;
-  appearance: textfield;
-  -moz-appearance: textfield;
   line-height: 1.2;
-}
-
-.builder-active-pill__number::-webkit-outer-spin-button,
-.builder-active-pill__number::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
 }
 
 .builder-active-pill__number--push {
   animation: pallet-number-push 180ms ease-out;
+}
+
+.builder-active-pill--input {
+  position: relative;
+}
+
+.builder-active-pill__stepper {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  gap: 2px;
+}
+
+.builder-active-pill__stepper button {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text-muted);
+  border-radius: 4px;
+  width: 20px;
+  height: 16px;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 10px;
 }
 
 @keyframes pallet-number-push {
