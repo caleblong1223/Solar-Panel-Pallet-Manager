@@ -61,7 +61,7 @@ function AnimatedSelect({
       className={[
         "ui-input-label",
         "animated-select",
-        variant === "pill" ? "animated-select--pill" : "",
+        variant === "pill" ? "animated-select--pill builder-active-pill builder-active-pill--input" : "",
         className ?? "",
       ]
         .filter(Boolean)
@@ -439,7 +439,7 @@ export default function LiveBuilderPage() {
               value={packoutDate}
               onChange={(event) => {
                 setPackoutDate(event.target.value);
-                event.currentTarget.blur();
+                window.setTimeout(() => event.currentTarget.blur(), 0);
               }}
             />
           </label>

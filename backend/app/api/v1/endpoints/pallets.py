@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.v1.deps import require_roles
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.session import get_db
-from app.models.pallet import AuditEvent, ClientOperation, Customer, Pallet, PalletItem, SimImportBatch, SimPanel
+from app.models.pallet import AuditEvent, ClientOperation, Customer, Export, Pallet, PalletItem, SimImportBatch, SimPanel
 from app.models.user import User
 from app.schemas.pallet import (
     AuditEventResponse,
@@ -197,8 +197,13 @@ def create_pallet(
         if customer_exists is None:
             raise _error(status.HTTP_404_NOT_FOUND, "CUSTOMER_NOT_FOUND", "Customer not found")
 
-    max_number = db.query(func.max(Pallet.pallet_number)).filter(Pallet.deleted_at.is_(None)).scalar()
-    pallet_number = (max_number or 0) + 1
+    max_exported_number = (
+        db.query(func.max(Pallet.pallet_number))
+        .join(Export, Export.pallet_id == Pallet.id)
+        .filter(Pallet.deleted_at.is_(None))
+        .scalar()
+    )
+    pallet_number = (max_exported_number or 0) + 1
     pallet = Pallet(
         pallet_number=pallet_number,
         status="active",
