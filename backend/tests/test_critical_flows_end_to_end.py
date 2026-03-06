@@ -87,14 +87,14 @@ def test_pallet_build_export_and_download_flow(monkeypatch) -> None:
 
         add_first = client.post(
             f"/api/v1/pallets/{pallet_id}/items",
-            json={"serial": "E2E-PALLET-001"},
+            json={"serial": "E2E-PALLET-001", "allow_missing_sim_data": True},
             headers=headers,
         )
         assert add_first.status_code == 200
 
         add_second = client.post(
             f"/api/v1/pallets/{pallet_id}/items",
-            json={"serial": "E2E-PALLET-002"},
+            json={"serial": "E2E-PALLET-002", "allow_missing_sim_data": True},
             headers=headers,
         )
         assert add_second.status_code == 200

@@ -121,7 +121,11 @@ def _build_b3_value(panel_type: str, pallet_number: int, export_dt: datetime) ->
     return f"{panel_type}{date_mdyyyy}-{pallet_number}"
 
 
-def generate_export_workbook_bytes(pallet: Pallet, panel_type: str, export_dt: datetime | None = None) -> bytes:
+def generate_export_workbook_bytes(
+    pallet: Pallet,
+    panel_type: str,
+    export_dt: datetime | None = None,
+) -> bytes:
     when = export_dt or datetime.now()
     template_path = _template_path_for_capacity(pallet.max_panels)
     workbook = load_workbook(template_path)

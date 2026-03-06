@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ExportCreateRequest(BaseModel):
     pallet_id: int
     template_type: str = Field(min_length=1, max_length=64)
+    packout_date: date | None = None
 
 
 class ExportResponse(BaseModel):
@@ -14,6 +15,7 @@ class ExportResponse(BaseModel):
     id: int
     pallet_id: int
     template_type: str
+    packout_date: date | None
     object_key: str
     file_name: str
     mime_type: str

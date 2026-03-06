@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time, timezone
 from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -75,11 +75,31 @@ def create_export(
     if not pallet.items:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot export empty pallet")
 
-    xlsx_file_name = f"pallet-{pallet.pallet_number}-export.xlsx"
-    pdf_file_name = f"pallet-{pallet.pallet_number}-export.pdf"
+    effective_packout_date = payload.packout_date or datetime.now(timezone.utc).date()
+    export_dt = datetime.combine(effective_packout_date, time.min).replace(tzinfo=timezone.utc)
+
+    duplicate_count = (
+        db.query(Export.id)
+        .join(Pallet, Pallet.id == Export.pallet_id)
+        .filter(
+            Export.template_type == payload.template_type,
+            Export.packout_date == effective_packout_date,
+            Pallet.pallet_number == pallet.pallet_number,
+        )
+        .count()
+    )
+    duplicate_index = duplicate_count + 1
+    duplicate_suffix = f"-{duplicate_index}" if duplicate_index > 1 else ""
+
+    xlsx_file_name = f"pallet-{payload.template_type}-{effective_packout_date.isoformat()}-{pallet.pallet_number}{duplicate_suffix}.xlsx"
+    pdf_file_name = f"pallet-{payload.template_type}-{effective_packout_date.isoformat()}-{pallet.pallet_number}{duplicate_suffix}.pdf"
     workbook_artifact: bytes | None
     try:
-        workbook_artifact = generate_export_workbook_bytes(pallet, payload.template_type)
+        workbook_artifact = generate_export_workbook_bytes(
+            pallet,
+            payload.template_type,
+            export_dt=export_dt,
+        )
     except ExportWorkbookError:
         # For unsupported capacities or missing templates, continue with PDF-only export.
         workbook_artifact = None
@@ -88,6 +108,7 @@ def create_export(
     export = Export(
         pallet_id=pallet.id,
         template_type=payload.template_type,
+        packout_date=effective_packout_date,
         object_key="pending",
         file_name=pdf_file_name,
         mime_type="application/pdf",

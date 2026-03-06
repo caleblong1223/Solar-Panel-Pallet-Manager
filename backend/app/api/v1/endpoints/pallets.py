@@ -200,7 +200,10 @@ def create_pallet(
     max_exported_number = (
         db.query(func.max(Pallet.pallet_number))
         .join(Export, Export.pallet_id == Pallet.id)
-        .filter(Pallet.deleted_at.is_(None))
+        .filter(
+            Pallet.deleted_at.is_(None),
+            Pallet.template_type == payload.template_type,
+        )
         .scalar()
     )
     pallet_number = (max_exported_number or 0) + 1
@@ -262,7 +265,24 @@ def update_pallet(
             raise _error(status.HTTP_404_NOT_FOUND, "CUSTOMER_NOT_FOUND", "Customer not found")
 
     changes: dict[str, object] = {}
+    target_template_type = payload.template_type if payload.template_type is not None else pallet.template_type
     if payload.template_type is not None and payload.template_type != pallet.template_type:
+        template_conflict = (
+            db.query(Pallet.id)
+            .filter(
+                Pallet.deleted_at.is_(None),
+                Pallet.id != pallet.id,
+                Pallet.pallet_number == pallet.pallet_number,
+                Pallet.template_type == payload.template_type,
+            )
+            .first()
+        )
+        if template_conflict is not None:
+            raise _error(
+                status.HTTP_409_CONFLICT,
+                "PALLET_NUMBER_ALREADY_EXISTS",
+                "Pallet number already exists for this panel type",
+            )
         changes["template_type"] = {"old": pallet.template_type, "new": payload.template_type}
         pallet.template_type = payload.template_type
     if payload.customer_id is not None and payload.customer_id != pallet.customer_id:
@@ -285,6 +305,7 @@ def update_pallet(
                 Pallet.deleted_at.is_(None),
                 Pallet.id != pallet.id,
                 Pallet.pallet_number == payload.pallet_number,
+                Pallet.template_type == target_template_type,
             )
             .first()
         )
@@ -292,7 +313,7 @@ def update_pallet(
             raise _error(
                 status.HTTP_409_CONFLICT,
                 "PALLET_NUMBER_ALREADY_EXISTS",
-                "Pallet number already exists",
+                "Pallet number already exists for this panel type",
             )
         changes["pallet_number"] = {"old": pallet.pallet_number, "new": payload.pallet_number}
         pallet.pallet_number = payload.pallet_number

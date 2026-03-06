@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -174,6 +174,7 @@ class Export(Base):
         nullable=False,
     )
     template_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    packout_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     object_key: Mapped[str] = mapped_column(String(1024), nullable=False)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False, default="application/pdf")
