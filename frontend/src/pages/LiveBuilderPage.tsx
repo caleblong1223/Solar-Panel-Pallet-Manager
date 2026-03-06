@@ -476,6 +476,7 @@ export default function LiveBuilderPage() {
                       setSelectedCustomerId(Number(next));
                     }
                   }}
+                  variant="pill"
                 />
                 <AnimatedSelect
                   label="Panel type"
@@ -485,6 +486,7 @@ export default function LiveBuilderPage() {
                     label: t,
                   }))}
                   onChange={(next) => setNewPalletTemplate(next)}
+                  variant="pill"
                 />
                 <AnimatedSelect
                   label="Pallet size"
@@ -494,6 +496,7 @@ export default function LiveBuilderPage() {
                     label: `${size} panels`,
                   }))}
                   onChange={(next) => setNewPalletSize(Number(next))}
+                  variant="pill"
                 />
               </div>
               <Button type="button" disabled={isBusy} onClick={() => void handleStartNewPallet()}>

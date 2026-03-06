@@ -223,7 +223,7 @@ h1 {
 .animated-select__control {
   width: 100%;
   border: 1px solid var(--color-border);
-  background: #fff;
+  background-color: #fff;
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   font: inherit;
@@ -251,7 +251,7 @@ h1 {
   right: 0;
   top: calc(100% + 6px);
   margin-top: 0;
-  background: #fff;
+  background-color: #fff;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-soft);
@@ -300,12 +300,16 @@ h1 {
 }
 
 .animated-select--pill .animated-select__control {
-  background: transparent;
+  background-color: transparent;
   border: 0;
   border-radius: 0;
   padding: 0;
   min-height: 24px;
   font-weight: 700;
+}
+
+.animated-select--pill {
+  background-color: #fff;
 }
 
 .builder-grid {

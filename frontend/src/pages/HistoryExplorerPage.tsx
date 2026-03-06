@@ -225,6 +225,7 @@ export default function HistoryExplorerPage() {
                 label="Date"
                 value={datePreset}
                 onChange={(next) => setDatePreset(next as typeof datePreset)}
+                variant="pill"
                 options={[
                   { value: "all", label: "All time" },
                   { value: "today", label: "Today" },
@@ -237,6 +238,7 @@ export default function HistoryExplorerPage() {
                 label="Customer"
                 value={selectedCustomerId === "all" ? "" : String(selectedCustomerId)}
                 placeholder="All customers"
+                variant="pill"
                 onChange={(value) => {
                   if (!value) {
                     setSelectedCustomerId("all");
@@ -268,6 +270,7 @@ export default function HistoryExplorerPage() {
                 label="Sort"
                 value={sortMode}
                 onChange={(next) => setSortMode(next as typeof sortMode)}
+                variant="pill"
                 options={[
                   { value: "created_desc", label: "Newest activity first" },
                   { value: "created_asc", label: "Oldest activity first" },
