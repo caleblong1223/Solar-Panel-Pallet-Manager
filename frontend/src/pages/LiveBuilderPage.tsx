@@ -46,6 +46,7 @@ export default function LiveBuilderPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | "none">("none");
   const [palletNumberDraft, setPalletNumberDraft] = useState<string>("");
+  const [isPalletNumberAnimating, setIsPalletNumberAnimating] = useState(false);
   const [packoutDate, setPackoutDate] = useState<string>(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -64,6 +65,13 @@ export default function LiveBuilderPage() {
       setPalletNumberDraft("");
     }
   }, [current]);
+
+  useEffect(() => {
+    if (!current) return;
+    setIsPalletNumberAnimating(true);
+    const timeoutId = window.setTimeout(() => setIsPalletNumberAnimating(false), 180);
+    return () => window.clearTimeout(timeoutId);
+  }, [palletNumberDraft, current]);
 
   useEffect(() => {
     // Start each app session with a clean Builder state instead of auto-resuming
@@ -297,12 +305,17 @@ export default function LiveBuilderPage() {
           <label className="builder-active-pill builder-active-pill--input">
             <span className="builder-active-pill__label">Pallet</span>
             <input
-              className="builder-active-pill__number"
-              type="number"
-              min={1}
+              className={
+                isPalletNumberAnimating
+                  ? "builder-active-pill__number builder-active-pill__number--push"
+                  : "builder-active-pill__number"
+              }
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={palletNumberDraft}
               style={{ width: `${Math.max(3, palletNumberDraft.length + 1)}ch` }}
-              onChange={(event) => setPalletNumberDraft(event.target.value)}
+              onChange={(event) => setPalletNumberDraft(event.target.value.replace(/\D+/g, ""))}
               onBlur={() => void commitPalletNumber()}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {

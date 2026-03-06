@@ -362,6 +362,30 @@ h1 {
   min-width: 3ch;
   max-width: 100%;
   transition: width 220ms ease;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  line-height: 1.2;
+}
+
+.builder-active-pill__number::-webkit-outer-spin-button,
+.builder-active-pill__number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.builder-active-pill__number--push {
+  animation: pallet-number-push 180ms ease-out;
+}
+
+@keyframes pallet-number-push {
+  0% {
+    transform: translateY(6px);
+    opacity: 0.65;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .builder-active-pill__number:focus,
