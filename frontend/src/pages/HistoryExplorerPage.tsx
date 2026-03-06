@@ -218,7 +218,7 @@ export default function HistoryExplorerPage() {
   return (
     <AppFrame title="History Explorer">
       <section className="builder-grid">
-        <Card title="Pallet history filters">
+        <Card title="Pallet History Filters">
           <form className="builder-form" onSubmit={runSearch}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
               <AnimatedSelect
@@ -226,6 +226,7 @@ export default function HistoryExplorerPage() {
                 value={datePreset}
                 onChange={(next) => setDatePreset(next as typeof datePreset)}
                 variant="pill"
+                className="history-filter-select"
                 options={[
                   { value: "all", label: "All time" },
                   { value: "today", label: "Today" },
@@ -239,6 +240,7 @@ export default function HistoryExplorerPage() {
                 value={selectedCustomerId === "all" ? "" : String(selectedCustomerId)}
                 placeholder="All customers"
                 variant="pill"
+                className="history-filter-select"
                 onChange={(value) => {
                   if (!value) {
                     setSelectedCustomerId("all");
@@ -271,6 +273,7 @@ export default function HistoryExplorerPage() {
                 value={sortMode}
                 onChange={(next) => setSortMode(next as typeof sortMode)}
                 variant="pill"
+                className="history-filter-select"
                 options={[
                   { value: "created_desc", label: "Newest activity first" },
                   { value: "created_asc", label: "Oldest activity first" },

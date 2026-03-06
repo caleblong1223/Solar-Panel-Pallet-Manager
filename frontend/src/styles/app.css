@@ -314,6 +314,8 @@ h1 {
 }
 
 .builder-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -322,6 +324,8 @@ h1 {
 
 .builder-active-header {
   margin-top: var(--space-4);
+  position: relative;
+  z-index: 600;
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
@@ -457,6 +461,20 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.history-filter-select.builder-active-pill {
+  padding: 6px 10px;
+  gap: 2px;
+}
+
+.history-filter-select .builder-active-pill__label,
+.history-filter-select > span {
+  line-height: 1;
+}
+
+.history-filter-select .animated-select__control {
+  min-height: 18px;
 }
 
 .customers-layout {
