@@ -19,8 +19,8 @@ export default function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/exports" element={<ExportsPage />} />
         <Route path="/sync-issues" element={<SyncIssuesPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
-      <Route path="/settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

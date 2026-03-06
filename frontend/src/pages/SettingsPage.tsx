@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import AppFrame from "../components/layout/AppFrame";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
@@ -54,74 +55,73 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="settings-page">
-      <section className="settings-wrap">
-        <Card title="Server Settings">
-          <form className="builder-form" onSubmit={handleSave}>
-            <TextInput
-              label="Primary API Base URL (Central Server)"
-              value={primaryApiBaseUrl}
-              onChange={(event) => setPrimaryApiBaseUrl(event.target.value)}
-              placeholder="http://192.168.1.20:8000/api/v1"
-              required
-            />
-            <TextInput
-              label="Fallback API Base URL (Local Device)"
-              value={fallbackApiBaseUrl}
-              onChange={(event) => setFallbackApiBaseUrl(event.target.value)}
-              placeholder="http://localhost:8000/api/v1"
-            />
-            <div className="settings-actions">
-              <Button type="submit">Save Settings</Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={isTesting}
-                onClick={() => void handleTestConnection("primary")}
-              >
-                {isTesting ? "Testing..." : "Test Primary"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={isTesting}
-                onClick={() => void handleTestConnection("fallback")}
-              >
-                {isTesting ? "Testing..." : "Test Fallback"}
-              </Button>
-              <Link className="inline-link" to="/">
-                Back to App
-              </Link>
-            </div>
-          </form>
+    <AppFrame title="Settings">
+      <main className="settings-page">
+        <section className="settings-wrap">
+          <Card title="Server Settings">
+            <form className="builder-form" onSubmit={handleSave}>
+              <TextInput
+                label="Primary API Base URL (Central Server)"
+                value={primaryApiBaseUrl}
+                onChange={(event) => setPrimaryApiBaseUrl(event.target.value)}
+                placeholder="http://192.168.1.20:8000/api/v1"
+                required
+              />
+              <TextInput
+                label="Fallback API Base URL (Local Device)"
+                value={fallbackApiBaseUrl}
+                onChange={(event) => setFallbackApiBaseUrl(event.target.value)}
+                placeholder="http://localhost:8000/api/v1"
+              />
+              <div className="settings-actions">
+                <Button type="submit">Save Settings</Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={isTesting}
+                  onClick={() => void handleTestConnection("primary")}
+                >
+                  {isTesting ? "Testing..." : "Test Primary"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={isTesting}
+                  onClick={() => void handleTestConnection("fallback")}
+                >
+                  {isTesting ? "Testing..." : "Test Fallback"}
+                </Button>
+              </div>
+            </form>
 
-          {statusMessage ? (
-            <p className={`settings-status settings-status--${statusKind ?? "warning"}`}>{statusMessage}</p>
-          ) : null}
-        </Card>
+            {statusMessage ? (
+              <p className={`settings-status settings-status--${statusKind ?? "warning"}`}>{statusMessage}</p>
+            ) : null}
+          </Card>
 
-        <Card title="Sync Status">
-          <p>
-            <strong>Mode:</strong> {syncState.syncing ? "Syncing" : "Idle"}
-          </p>
-          <p>
-            <strong>Pending:</strong> {syncState.pending_count}
-          </p>
-          <p>
-            <strong>Needs Review:</strong> {syncState.needs_review_count}
-          </p>
-          <p>
-            <strong>Failed:</strong> {syncState.failed_count}
-          </p>
-          <p>
-            <strong>Last Sync:</strong>{" "}
-            {syncState.last_sync_at ? new Date(syncState.last_sync_at).toLocaleString() : "Never"}
-          </p>
-          <Link className="inline-link" to="/sync-issues">
-            Open Sync Issues
-          </Link>
-        </Card>
-      </section>
-    </main>
+          <Card title="Sync Status">
+            <p>
+              <strong>Mode:</strong> {syncState.syncing ? "Syncing" : "Idle"}
+            </p>
+            <p>
+              <strong>Pending:</strong> {syncState.pending_count}
+            </p>
+            <p>
+              <strong>Needs Review:</strong> {syncState.needs_review_count}
+            </p>
+            <p>
+              <strong>Failed:</strong> {syncState.failed_count}
+            </p>
+            <p>
+              <strong>Last Sync:</strong>{" "}
+              {syncState.last_sync_at ? new Date(syncState.last_sync_at).toLocaleString() : "Never"}
+            </p>
+            <Link className="inline-link" to="/sync-issues">
+              Open Sync Issues
+            </Link>
+          </Card>
+        </section>
+      </main>
+    </AppFrame>
   );
 }
