@@ -217,7 +217,7 @@ h1 {
 
 .animated-select {
   position: relative;
-  z-index: 1;
+  z-index: 5;
   overflow: visible;
 }
 
@@ -265,7 +265,7 @@ h1 {
     max-height 220ms ease-out,
     opacity 220ms ease-out,
     transform 220ms ease-out;
-  z-index: 200;
+  z-index: 1000;
 }
 
 .animated-select__options--open {
@@ -290,7 +290,7 @@ h1 {
 }
 
 .animated-select:focus-within {
-  z-index: 300;
+  z-index: 1200;
 }
 
 .animated-select--pill > span {
@@ -327,6 +327,7 @@ h1 {
   gap: 20px;
   align-items: end;
   width: 100%;
+  overflow: visible;
 }
 
 .builder-active-pill {
@@ -383,6 +384,10 @@ h1 {
   animation: pallet-number-push 180ms ease-out;
 }
 
+.builder-active-pill__date--push {
+  animation: pallet-number-push 180ms ease-out;
+}
+
 .builder-active-pill--input {
   position: relative;
 }
@@ -433,12 +438,14 @@ h1 {
 .builder-active-control--customer {
   min-width: 260px;
   flex: 2 1 360px;
+  z-index: 30;
 }
 
 .builder-active-control--panel,
 .builder-active-control--size {
   min-width: 140px;
   flex: 1 1 160px;
+  z-index: 20;
 }
 
 .builder-active-control--date {

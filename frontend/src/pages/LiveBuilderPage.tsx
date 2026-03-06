@@ -44,6 +44,7 @@ export default function LiveBuilderPage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | "none">("none");
   const [palletNumberDraft, setPalletNumberDraft] = useState<string>("");
   const [isPalletNumberAnimating, setIsPalletNumberAnimating] = useState(false);
+  const [isPackoutDateAnimating, setIsPackoutDateAnimating] = useState(false);
   const [packoutDate, setPackoutDate] = useState<string>(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -309,6 +310,8 @@ export default function LiveBuilderPage() {
     const mm = String(base.getMonth() + 1).padStart(2, "0");
     const dd = String(base.getDate()).padStart(2, "0");
     setPackoutDate(`${yyyy}-${mm}-${dd}`);
+    setIsPackoutDateAnimating(true);
+    window.setTimeout(() => setIsPackoutDateAnimating(false), 180);
   };
 
   const commitPalletNumber = async () => {
@@ -403,7 +406,11 @@ export default function LiveBuilderPage() {
             <span className="builder-active-pill__label">Packout date</span>
             <input
               ref={packoutDateRef}
-              className="builder-active-pill__date"
+              className={
+                isPackoutDateAnimating
+                  ? "builder-active-pill__date builder-active-pill__date--push"
+                  : "builder-active-pill__date"
+              }
               type="date"
               value={packoutDate}
               onClick={() => packoutDateRef.current?.showPicker?.()}
