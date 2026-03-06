@@ -144,7 +144,7 @@ h1 {
   border-radius: var(--radius-md);
   padding: var(--space-4);
   box-shadow: var(--shadow-soft);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ui-card__title {
@@ -187,7 +187,7 @@ h1 {
 
 .ui-input-label {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   font-size: 0.92rem;
 }
 
@@ -218,6 +218,7 @@ h1 {
 .animated-select {
   position: relative;
   z-index: 1;
+  overflow: visible;
 }
 
 .animated-select__control {
@@ -225,7 +226,7 @@ h1 {
   border: 1px solid var(--color-border);
   background-color: #fff;
   border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  padding: 8px 12px;
   font: inherit;
   display: flex;
   align-items: center;
@@ -264,7 +265,7 @@ h1 {
     max-height 220ms ease-out,
     opacity 220ms ease-out,
     transform 220ms ease-out;
-  z-index: 20;
+  z-index: 200;
 }
 
 .animated-select__options--open {
@@ -289,7 +290,7 @@ h1 {
 }
 
 .animated-select:focus-within {
-  z-index: 40;
+  z-index: 300;
 }
 
 .animated-select--pill > span {
@@ -304,7 +305,7 @@ h1 {
   border: 0;
   border-radius: 0;
   padding: 0;
-  min-height: 24px;
+  min-height: 20px;
   font-weight: 700;
 }
 
@@ -334,7 +335,7 @@ h1 {
   border-radius: var(--radius-md);
   padding: 10px 12px;
   display: grid;
-  gap: 4px;
+  gap: 2px;
   width: auto;
   min-width: 130px;
   flex: 1 1 140px;
@@ -345,6 +346,7 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
+  line-height: 1.05;
 }
 
 .builder-active-pill--input {
@@ -366,7 +368,15 @@ h1 {
   min-width: 3ch;
   max-width: 100%;
   transition: width 220ms ease;
+  appearance: textfield;
+  -moz-appearance: textfield;
   line-height: 1.2;
+}
+
+.builder-active-pill__number::-webkit-outer-spin-button,
+.builder-active-pill__number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .builder-active-pill__number--push {
