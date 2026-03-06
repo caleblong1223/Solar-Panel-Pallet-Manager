@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -147,7 +147,14 @@ class SimPanel(Base):
     serial: Mapped[str] = mapped_column(String(128), nullable=False)
     test_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     panel_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    watts: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    voc: Mapped[float | None] = mapped_column(Numeric(10, 3), nullable=True)
+    isc: Mapped[float | None] = mapped_column(Numeric(10, 3), nullable=True)
+    vmp: Mapped[float | None] = mapped_column(Numeric(10, 3), nullable=True)
+    imp: Mapped[float | None] = mapped_column(Numeric(10, 3), nullable=True)
+    ff: Mapped[float | None] = mapped_column(Numeric(10, 3), nullable=True)
     result: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    raw_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

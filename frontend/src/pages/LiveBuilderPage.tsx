@@ -14,6 +14,7 @@ import {
 } from "../features/palletRepo";
 import { getExportDownloadUrl } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
+import { ApiError } from "../lib/api";
 
 const DEFAULT_MAX_PANELS = 25;
 const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
@@ -156,7 +157,7 @@ export default function LiveBuilderPage() {
   const handleStartNewPallet = async () => {
     setIsBusy(true);
     try {
-      const created = await repoCreatePallet(null, {
+      const created = await repoCreatePallet(token, {
         max_panels: newPalletSize,
         template_type: newPalletTemplate,
         customer_id: selectedCustomerId === "none" ? undefined : selectedCustomerId,
@@ -189,13 +190,36 @@ export default function LiveBuilderPage() {
 
     setIsBusy(true);
     try {
-      const updated = await repoAddPalletItem(null, current.id, s);
+      const updated = await repoAddPalletItem(token, current.id, s);
       setCurrent(updated);
       setSerial("");
       notify("Added", "success");
       serialInputRef.current?.focus();
-    } catch {
-      notify("Failed to add serial", "error");
+    } catch (error) {
+      if (error instanceof ApiError && error.errorCode === "SIM_DATA_REQUIRED") {
+        const proceed = window.confirm(
+          "No sun simulator data was found for this serial. Add anyway using generated in-range fallback values?"
+        );
+        if (proceed) {
+          try {
+            const updated = await repoAddPalletItem(token, current.id, s, { allowMissingSimData: true });
+            setCurrent(updated);
+            setSerial("");
+            notify("Added with generated fallback simulator values", "warning");
+            serialInputRef.current?.focus();
+            return;
+          } catch (retryError) {
+            const retryMessage =
+              retryError instanceof Error ? retryError.message : "Failed to add serial";
+            notify(retryMessage, "error");
+            return;
+          }
+        }
+        notify("Serial not added", "warning");
+        return;
+      }
+      const message = error instanceof Error ? error.message : "Failed to add serial";
+      notify(message, "error");
     } finally {
       setIsBusy(false);
     }
@@ -205,7 +229,7 @@ export default function LiveBuilderPage() {
     if (!current) return;
     setIsBusy(true);
     try {
-      const updated = await repoRemovePalletItem(null, current.id, itemId);
+      const updated = await repoRemovePalletItem(token, current.id, itemId);
       setCurrent(updated);
       notify("Removed", "success");
     } catch (err) {
@@ -261,7 +285,7 @@ export default function LiveBuilderPage() {
         setCurrent(workingPallet);
       }
 
-      const updated = await repoCompletePallet(null, workingPallet.id);
+      const updated = await repoCompletePallet(token, workingPallet.id);
       setCurrent(updated);
       const created = await createExport(token ?? "", {
         pallet_id: workingPallet.id,
@@ -282,56 +306,71 @@ export default function LiveBuilderPage() {
 
   return (
     <AppFrame title="Builder">
+      {current ? (
+        <section className="builder-active-header">
+          <div className="builder-active-pill">
+            <span className="builder-active-pill__label">Pallet</span>
+            <strong>#{current.pallet_number}</strong>
+          </div>
+          <AnimatedSelect
+            label="Customer"
+            value={selectedCustomerId === "none" ? "" : String(selectedCustomerId)}
+            placeholder="No customer selected"
+            options={[
+              { value: "", label: "No customer selected" },
+              ...customers.map<AnimatedSelectOption>((customer) => ({
+                value: String(customer.id),
+                label: customer.display_name,
+              })),
+            ]}
+            onChange={(next) => {
+              if (!next) {
+                setSelectedCustomerId("none");
+              } else {
+                setSelectedCustomerId(Number(next));
+              }
+            }}
+          />
+          <AnimatedSelect
+            label="Panel Type"
+            value={newPalletTemplate}
+            options={TEMPLATE_OPTIONS.map<AnimatedSelectOption>((t) => ({
+              value: t,
+              label: t,
+            }))}
+            onChange={(next) => setNewPalletTemplate(next)}
+          />
+          <AnimatedSelect
+            label="Pallet Size"
+            value={String(newPalletSize)}
+            options={PALLET_SIZES.map<AnimatedSelectOption>((size) => ({
+              value: String(size),
+              label: `${size} panels`,
+            }))}
+            onChange={(next) => setNewPalletSize(Number(next))}
+          />
+          <label className="ui-input-label">
+            <span>Packout date</span>
+            <input
+              className="ui-input"
+              type="date"
+              value={packoutDate}
+              onChange={(event) => setPackoutDate(event.target.value)}
+            />
+          </label>
+          <div className="builder-active-pill">
+            <span className="builder-active-pill__label">Panels</span>
+            <strong>
+              {current.item_count}/{current.max_panels}
+              {remaining > 0 ? ` · ${remaining} remaining` : ""}
+            </strong>
+          </div>
+        </section>
+      ) : null}
       <section className="builder-grid">
-        <Card title={current ? `Pallet #${current.pallet_number}` : "No active pallet"}>
+        <Card title={current ? "Active pallet" : "No active pallet"}>
           {current ? (
             <>
-              <p className="builder-meta">
-                <strong>Panel Type:</strong> {newPalletTemplate}
-              </p>
-              <p className="builder-meta">
-                <strong>{current.item_count}</strong> / {current.max_panels} panels
-                {remaining > 0 && ` · ${remaining} remaining`}
-              </p>
-              <div style={{ display: "grid", gap: "8px", marginTop: "8px", marginBottom: "8px" }}>
-                <AnimatedSelect
-                  label="Customer (can be changed before export)"
-                  value={selectedCustomerId === "none" ? "" : String(selectedCustomerId)}
-                  placeholder="No customer selected"
-                  options={[
-                    { value: "", label: "No customer selected" },
-                    ...customers.map<AnimatedSelectOption>((customer) => ({
-                      value: String(customer.id),
-                      label: customer.display_name,
-                    })),
-                  ]}
-                  onChange={(next) => {
-                    if (!next) {
-                      setSelectedCustomerId("none");
-                    } else {
-                      setSelectedCustomerId(Number(next));
-                    }
-                  }}
-                />
-                <AnimatedSelect
-                  label="Panel type (can be changed before export)"
-                  value={newPalletTemplate}
-                  options={TEMPLATE_OPTIONS.map<AnimatedSelectOption>((t) => ({
-                    value: t,
-                    label: t,
-                  }))}
-                  onChange={(next) => setNewPalletTemplate(next)}
-                />
-                <AnimatedSelect
-                  label="Pallet size (can be changed before export)"
-                  value={String(newPalletSize)}
-                  options={PALLET_SIZES.map<AnimatedSelectOption>((size) => ({
-                    value: String(size),
-                    label: `${size} panels`,
-                  }))}
-                  onChange={(next) => setNewPalletSize(Number(next))}
-                />
-              </div>
               <form className="builder-form" onSubmit={handleAddSerial} style={{ marginTop: "12px" }}>
                 <TextInput
                   label="Scan barcode"
@@ -346,15 +385,6 @@ export default function LiveBuilderPage() {
                 </Button>
               </form>
               <div style={{ marginTop: "12px" }}>
-                <label className="ui-input-label" style={{ marginBottom: "8px" }}>
-                  <span>Packout date</span>
-                  <input
-                    className="ui-input"
-                    type="date"
-                    value={packoutDate}
-                    onChange={(event) => setPackoutDate(event.target.value)}
-                  />
-                </label>
                 <Button
                   variant="primary"
                   disabled={isBusy || remaining !== 0}

@@ -87,13 +87,14 @@ export async function addPalletItem(
   token: string,
   palletId: number,
   serial: string,
-  clientOperationId?: string
+  clientOperationId?: string,
+  options?: { allowMissingSimData?: boolean }
 ) {
   return apiRequest<Pallet>(
     `/pallets/${palletId}/items`,
     "POST",
     token,
-    { serial },
+    { serial, allow_missing_sim_data: options?.allowMissingSimData ?? false },
     clientOperationId ? { "X-Client-Operation-Id": clientOperationId } : undefined
   );
 }

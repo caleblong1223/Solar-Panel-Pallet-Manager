@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import random
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import func
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.v1.deps import require_roles
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.session import get_db
-from app.models.pallet import AuditEvent, ClientOperation, Customer, Pallet, PalletItem
+from app.models.pallet import AuditEvent, ClientOperation, Customer, Pallet, PalletItem, SimImportBatch, SimPanel
 from app.models.user import User
 from app.schemas.pallet import (
     AuditEventResponse,
@@ -35,6 +36,37 @@ def _normalize_serial(serial: str) -> str:
             detail={"error_code": "SERIAL_EMPTY", "message": "Serial cannot be empty"},
         )
     return normalized
+
+
+def _random_sim_values(panel_type: str | None) -> dict[str, float]:
+    pm_ranges: dict[str, tuple[float, float]] = {
+        "200WT": (195.0, 206.0),
+        "220WT": (214.0, 227.0),
+        "220M6": (214.0, 227.0),
+        "330WT": (320.0, 340.0),
+        "450WT": (439.0, 463.5),
+        "450BT": (439.0, 463.5),
+    }
+
+    normalized = (panel_type or "").strip().upper()
+    pm_min, pm_max = pm_ranges.get(normalized, (350.0, 450.0))
+
+    # Match 1.1 logic with non-deterministic Pm.
+    pm = random.uniform(pm_min, pm_max)
+    voc = random.uniform(38.0, 50.0)
+    vmp = voc * random.uniform(0.75, 0.85)
+    imp = pm / vmp if vmp > 0 else random.uniform(8.0, 12.0)
+    isc = imp / random.uniform(0.90, 0.98)
+    ff = (vmp * imp) / (voc * isc) if voc > 0 and isc > 0 else 0.0
+
+    return {
+        "watts": round(pm, 2),
+        "voc": round(voc, 3),
+        "isc": round(isc, 3),
+        "vmp": round(vmp, 3),
+        "imp": round(imp, 3),
+        "ff": round(ff, 3),
+    }
 
 
 def _error(status_code: int, error_code: str, message: str) -> HTTPException:
@@ -275,6 +307,64 @@ def add_pallet_item(
         raise _error(status.HTTP_409_CONFLICT, "PALLET_AT_CAPACITY", "Pallet is at capacity")
 
     serial = _normalize_serial(payload.serial)
+    sim_row = (
+        db.query(SimPanel.id)
+        .filter(SimPanel.serial == serial)
+        .order_by(SimPanel.test_timestamp.desc(), SimPanel.id.desc())
+        .first()
+    )
+    if sim_row is None and not payload.allow_missing_sim_data:
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "SIM_DATA_REQUIRED",
+            "No sun simulator data found for this serial. Confirm to add with generated fallback values.",
+        )
+    if sim_row is None and payload.allow_missing_sim_data:
+        now = _now_utc()
+        fallback_batch = (
+            db.query(SimImportBatch)
+            .filter(
+                SimImportBatch.source_filename == "manual-fallback-generated",
+                SimImportBatch.status == "completed",
+            )
+            .order_by(SimImportBatch.id.desc())
+            .first()
+        )
+        if fallback_batch is None:
+            fallback_batch = SimImportBatch(
+                source_filename="manual-fallback-generated",
+                status="completed",
+                rows_total=0,
+                rows_imported=0,
+                rows_rejected=0,
+                imported_by=current_user.id,
+                created_at=now,
+                completed_at=now,
+            )
+            db.add(fallback_batch)
+            db.flush()
+
+        generated = _random_sim_values(pallet.template_type)
+        db.add(
+            SimPanel(
+                batch_id=fallback_batch.id,
+                serial=serial,
+                test_timestamp=now,
+                panel_type=pallet.template_type,
+                watts=generated["watts"],
+                voc=generated["voc"],
+                isc=generated["isc"],
+                vmp=generated["vmp"],
+                imp=generated["imp"],
+                ff=generated["ff"],
+                result="GENERATED",
+                raw_payload={"generated": True, "source": "manual_fallback"},
+                created_at=now,
+            )
+        )
+        fallback_batch.rows_total = (fallback_batch.rows_total or 0) + 1
+        fallback_batch.rows_imported = (fallback_batch.rows_imported or 0) + 1
+
     same_pallet = next((item for item in pallet.items if item.serial == serial), None)
     if same_pallet is not None:
         raise _error(status.HTTP_409_CONFLICT, "SERIAL_ALREADY_ON_PALLET", "Serial already on this pallet")

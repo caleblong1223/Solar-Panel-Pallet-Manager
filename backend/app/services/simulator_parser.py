@@ -15,6 +15,12 @@ class ParsedSimRow:
     panel_type: str | None
     result: str | None
     test_timestamp: datetime | None
+    watts: float | None
+    voc: float | None
+    isc: float | None
+    vmp: float | None
+    imp: float | None
+    ff: float | None
 
 
 @dataclass
@@ -63,6 +69,18 @@ def _parse_datetime(value: object) -> datetime | None:
     return None
 
 
+def _parse_float(value: object) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
 def _build_result(headers: list[str], rows: list[list[object]]) -> SimulatorParseResult:
     serial_col = _find_column(
         headers,
@@ -71,6 +89,12 @@ def _build_result(headers: list[str], rows: list[list[object]]) -> SimulatorPars
     panel_type_col = _find_column(headers, aliases={"paneltype", "type", "moduletype"})
     result_col = _find_column(headers, aliases={"result", "status", "passfail"})
     ts_col = _find_column(headers, aliases={"testtimestamp", "timestamp", "testtime", "datetime"})
+    watts_col = _find_column(headers, aliases={"watts", "watt", "pm", "pmax"})
+    voc_col = _find_column(headers, aliases={"voc"})
+    isc_col = _find_column(headers, aliases={"isc"})
+    vmp_col = _find_column(headers, aliases={"vmp", "vmpp", "vpm"})
+    imp_col = _find_column(headers, aliases={"imp", "impp", "ipm"})
+    ff_col = _find_column(headers, aliases={"ff", "fillfactor"})
 
     accepted: list[ParsedSimRow] = []
     rejected: list[RejectedSimRow] = []
@@ -96,6 +120,12 @@ def _build_result(headers: list[str], rows: list[list[object]]) -> SimulatorPars
                 panel_type=panel_type,
                 result=result,
                 test_timestamp=test_ts,
+                watts=_parse_float(row[watts_col]) if watts_col is not None and watts_col < len(row) else None,
+                voc=_parse_float(row[voc_col]) if voc_col is not None and voc_col < len(row) else None,
+                isc=_parse_float(row[isc_col]) if isc_col is not None and isc_col < len(row) else None,
+                vmp=_parse_float(row[vmp_col]) if vmp_col is not None and vmp_col < len(row) else None,
+                imp=_parse_float(row[imp_col]) if imp_col is not None and imp_col < len(row) else None,
+                ff=_parse_float(row[ff_col]) if ff_col is not None and ff_col < len(row) else None,
             )
         )
 

@@ -93,7 +93,14 @@ def import_simulator_data(
                     serial=parsed_row.serial,
                     test_timestamp=panel_ts,
                     panel_type=parsed_row.panel_type,
+                    watts=parsed_row.watts,
+                    voc=parsed_row.voc,
+                    isc=parsed_row.isc,
+                    vmp=parsed_row.vmp,
+                    imp=parsed_row.imp,
+                    ff=parsed_row.ff,
                     result=parsed_row.result,
+                    raw_payload=None,
                     created_at=now,
                 )
             )

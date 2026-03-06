@@ -62,7 +62,14 @@ def test_pallet_lifecycle_and_history() -> None:
         assert pallet["status"] == "active"
         assert pallet["item_count"] == 0
 
-        add_1 = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "abc123"})
+        missing_sim = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "abc123"})
+        assert missing_sim.status_code == 409
+        assert missing_sim.json()["detail"]["error_code"] == "SIM_DATA_REQUIRED"
+
+        add_1 = client.post(
+            f"/api/v1/pallets/{pallet_id}/items",
+            json={"serial": "abc123", "allow_missing_sim_data": True},
+        )
         assert add_1.status_code == 200
         assert add_1.json()["item_count"] == 1
 
@@ -72,7 +79,10 @@ def test_pallet_lifecycle_and_history() -> None:
         incomplete_complete = client.post(f"/api/v1/pallets/{pallet_id}/complete")
         assert incomplete_complete.status_code == 409
 
-        add_2 = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "abc124"})
+        add_2 = client.post(
+            f"/api/v1/pallets/{pallet_id}/items",
+            json={"serial": "abc124", "allow_missing_sim_data": True},
+        )
         assert add_2.status_code == 200
         assert add_2.json()["item_count"] == 2
 
@@ -97,7 +107,10 @@ def test_reset_and_delete_allowed_for_all_roles() -> None:
         with _make_test_client(user) as client:
             create_response = client.post("/api/v1/pallets", json={"max_panels": 1})
             pallet_id = create_response.json()["id"]
-            client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": f"SER{idx}"})
+            client.post(
+                f"/api/v1/pallets/{pallet_id}/items",
+                json={"serial": f"SER{idx}", "allow_missing_sim_data": True},
+            )
             client.post(f"/api/v1/pallets/{pallet_id}/complete")
 
             reset_response = client.post(f"/api/v1/pallets/{pallet_id}/reset")
@@ -118,7 +131,10 @@ def test_conflict_responses_include_error_code_payload() -> None:
         assert create_response.status_code == 201
         pallet_id = create_response.json()["id"]
 
-        first_add = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER-100"})
+        first_add = client.post(
+            f"/api/v1/pallets/{pallet_id}/items",
+            json={"serial": "SER-100", "allow_missing_sim_data": True},
+        )
         assert first_add.status_code == 200
 
         duplicate = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "ser-100"})
@@ -127,7 +143,10 @@ def test_conflict_responses_include_error_code_payload() -> None:
         assert duplicate_payload["detail"]["error_code"] == "SERIAL_ALREADY_ON_PALLET"
         assert "message" in duplicate_payload["detail"]
 
-        second_add = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER-101"})
+        second_add = client.post(
+            f"/api/v1/pallets/{pallet_id}/items",
+            json={"serial": "SER-101", "allow_missing_sim_data": True},
+        )
         assert second_add.status_code == 200
 
         over_capacity = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "SER-102"})

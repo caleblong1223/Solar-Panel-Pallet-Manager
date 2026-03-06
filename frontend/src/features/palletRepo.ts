@@ -127,7 +127,12 @@ export async function repoCreatePallet(token: string | null, payload: CreatePall
   return created;
 }
 
-export async function repoAddPalletItem(token: string | null, palletId: number, serialInput: string): Promise<Pallet> {
+export async function repoAddPalletItem(
+  token: string | null,
+  palletId: number,
+  serialInput: string,
+  options?: { allowMissingSimData?: boolean }
+): Promise<Pallet> {
   const serial = normalizeSerial(serialInput);
   if (!serial) {
     throw new Error("Serial cannot be empty");
@@ -135,7 +140,7 @@ export async function repoAddPalletItem(token: string | null, palletId: number, 
 
   if (token && palletId > 0) {
     try {
-      const updated = await apiAddPalletItem(token, palletId, serial);
+      const updated = await apiAddPalletItem(token, palletId, serial, undefined, options);
       upsertLocalPallet(updated);
       return updated;
     } catch {

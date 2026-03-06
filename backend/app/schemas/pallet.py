@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class PalletItemCreate(BaseModel):
     serial: str = Field(min_length=1, max_length=128)
     slot_index: int | None = Field(default=None, ge=1)
+    allow_missing_sim_data: bool = False
 
 
 class PalletCreate(BaseModel):

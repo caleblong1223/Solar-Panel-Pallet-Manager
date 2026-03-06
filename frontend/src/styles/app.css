@@ -293,6 +293,29 @@ h1 {
   margin-top: var(--space-4);
 }
 
+.builder-active-header {
+  margin-top: var(--space-4);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.builder-active-pill {
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.builder-active-pill__label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
 .customers-layout {
   display: grid;
   gap: var(--space-4);
