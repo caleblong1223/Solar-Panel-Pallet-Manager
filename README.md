@@ -246,6 +246,14 @@ set VITE_API_BASE_URL=http://localhost:8000/api/v1
 npm run dev
 ```
 
+If you want to run the desktop UI and backend together (so the anonymous simulator endpoint is available even when the network is down), use the helper script:
+
+```bash
+bash scripts/start_desktop.sh
+```
+
+It starts the backend on `127.0.0.1:8000` (logs to `/tmp/pallet-manager-backend.log`) and then launches `npm run tauri dev`. When you quit the Tauri window it cleans up the backend automatically.
+
 To run Playwright UI smoke tests:
 
 ```bash
