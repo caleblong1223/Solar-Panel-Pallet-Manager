@@ -218,7 +218,7 @@ export default function HistoryExplorerPage() {
   return (
     <AppFrame title="History Explorer">
       <section className="builder-grid">
-        <Card title="Pallet History Filters">
+        <Card title="Pallet History Filters" className="history-filters-card">
           <form className="builder-form" onSubmit={runSearch}>
             <div className="builder-active-header">
               <AnimatedSelect

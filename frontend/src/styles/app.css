@@ -528,6 +528,23 @@ h1 {
   margin-top: var(--space-4);
 }
 
+.history-filters-card {
+  padding: 12px 14px;
+}
+
+.history-filters-card .ui-card__title {
+  margin: 0 0 8px;
+}
+
+.history-filters-card .builder-form {
+  gap: 8px;
+}
+
+.history-filters-card .builder-active-header {
+  margin-top: 0;
+  gap: 14px;
+}
+
 .ui-checkbox {
   display: flex;
   align-items: center;
