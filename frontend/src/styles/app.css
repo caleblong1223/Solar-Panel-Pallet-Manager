@@ -249,7 +249,8 @@ h1 {
   position: absolute;
   left: 0;
   right: 0;
-  margin-top: 4px;
+  top: calc(100% + 6px);
+  margin-top: 0;
   background: #fff;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
@@ -257,8 +258,8 @@ h1 {
   max-height: 0;
   opacity: 0;
   overflow: hidden;
-  transform-origin: top;
-  transform: scaleY(0.9);
+  transform-origin: top center;
+  transform: translateY(-4px);
   transition:
     max-height 220ms ease-out,
     opacity 220ms ease-out,
@@ -269,7 +270,7 @@ h1 {
 .animated-select__options--open {
   max-height: 220px;
   opacity: 1;
-  transform: scaleY(1);
+  transform: translateY(0);
   overflow-y: auto;
 }
 
@@ -358,7 +359,9 @@ h1 {
 }
 
 .builder-active-pill__number {
-  width: 100%;
+  min-width: 3ch;
+  max-width: 100%;
+  transition: width 220ms ease;
 }
 
 .builder-active-pill__number:focus,

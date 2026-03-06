@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import AppFrame from "../components/layout/AppFrame";
 import { useToast } from "../components/notifications/ToastProvider";
+import AnimatedSelect, { type AnimatedSelectOption } from "../components/ui/AnimatedSelect";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
@@ -27,82 +28,6 @@ const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 const ACCESS_TOKEN_KEY = "pm2_access_token";
 const PALLET_SIZES = [25, 26, 30, 35];
 const CUSTOMERS_CACHE_KEY = "pm2_cached_customers";
-
-type AnimatedSelectOption = {
-  value: string;
-  label: string;
-};
-
-type AnimatedSelectProps = {
-  label: string;
-  value: string;
-  placeholder?: string;
-  options: AnimatedSelectOption[];
-  onChange: (value: string) => void;
-  variant?: "default" | "pill";
-  className?: string;
-};
-
-function AnimatedSelect({
-  label,
-  value,
-  placeholder,
-  options,
-  onChange,
-  variant = "default",
-  className,
-}: AnimatedSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const currentLabel =
-    options.find((opt) => opt.value === value)?.label ?? (value ? value : placeholder ?? "Select...");
-
-  const handleSelect = (nextValue: string) => {
-    onChange(nextValue);
-    setIsOpen(false);
-  };
-
-  return (
-    <label
-      className={[
-        "ui-input-label",
-        "animated-select",
-        variant === "pill" ? "animated-select--pill builder-active-pill builder-active-pill--input" : "",
-        className ?? "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <span>{label}</span>
-      <button
-        type="button"
-        className="animated-select__control"
-        onClick={() => setIsOpen((open) => !open)}
-      >
-        <span className="animated-select__value">{currentLabel}</span>
-        <span className="animated-select__caret">{isOpen ? "▲" : "▼"}</span>
-      </button>
-      <div
-        className={
-          isOpen
-            ? "animated-select__options animated-select__options--open"
-            : "animated-select__options"
-        }
-      >
-        {options.map((opt) => (
-          <button
-            key={opt.value || opt.label}
-            type="button"
-            className="animated-select__option"
-            onClick={() => handleSelect(opt.value)}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-    </label>
-  );
-}
 
 function getEffectiveToken(contextToken: string | null): string | null {
   return contextToken ?? localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -337,6 +262,19 @@ export default function LiveBuilderPage() {
     }
   };
 
+  const handleActivePalletSizeChange = (nextSizeRaw: string) => {
+    const parsed = Number(nextSizeRaw);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    if (current && parsed < current.item_count) {
+      notify(`Pallet size cannot be lower than current panel count (${current.item_count})`, "warning");
+      return;
+    }
+    setNewPalletSize(parsed);
+    if (current) {
+      setCurrent({ ...current, max_panels: parsed });
+    }
+  };
+
   const commitPalletNumber = async () => {
     if (!current) return;
     const parsed = Number(palletNumberDraft);
@@ -363,6 +301,7 @@ export default function LiveBuilderPage() {
               type="number"
               min={1}
               value={palletNumberDraft}
+              style={{ width: `${Math.max(3, palletNumberDraft.length + 1)}ch` }}
               onChange={(event) => setPalletNumberDraft(event.target.value)}
               onBlur={() => void commitPalletNumber()}
               onKeyDown={(event) => {
@@ -412,7 +351,7 @@ export default function LiveBuilderPage() {
               value: String(size),
               label: `${size} panels`,
             }))}
-            onChange={(next) => setNewPalletSize(Number(next))}
+            onChange={handleActivePalletSizeChange}
             variant="pill"
             className="builder-active-control builder-active-control--size"
           />

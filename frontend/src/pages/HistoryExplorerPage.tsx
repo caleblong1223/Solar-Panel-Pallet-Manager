@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import AppFrame from "../components/layout/AppFrame";
 import { useToast } from "../components/notifications/ToastProvider";
+import AnimatedSelect from "../components/ui/AnimatedSelect";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
@@ -220,42 +221,37 @@ export default function HistoryExplorerPage() {
         <Card title="Pallet history filters">
           <form className="builder-form" onSubmit={runSearch}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
-              <label className="ui-input-label">
-                <span>Date</span>
-                <select
-                  className="ui-select"
-                  value={datePreset}
-                  onChange={(event) => setDatePreset(event.target.value as typeof datePreset)}
-                >
-                  <option value="all">All time</option>
-                  <option value="today">Today</option>
-                  <option value="week">This week</option>
-                  <option value="month">This month</option>
-                  <option value="year">This year</option>
-                </select>
-              </label>
-              <label className="ui-input-label">
-                <span>Customer</span>
-                <select
-                  className="ui-select"
-                  value={selectedCustomerId === "all" ? "" : String(selectedCustomerId)}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (!value) {
-                      setSelectedCustomerId("all");
-                    } else {
-                      setSelectedCustomerId(Number(value));
-                    }
-                  }}
-                >
-                  <option value="">All customers</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.display_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <AnimatedSelect
+                label="Date"
+                value={datePreset}
+                onChange={(next) => setDatePreset(next as typeof datePreset)}
+                options={[
+                  { value: "all", label: "All time" },
+                  { value: "today", label: "Today" },
+                  { value: "week", label: "This week" },
+                  { value: "month", label: "This month" },
+                  { value: "year", label: "This year" },
+                ]}
+              />
+              <AnimatedSelect
+                label="Customer"
+                value={selectedCustomerId === "all" ? "" : String(selectedCustomerId)}
+                placeholder="All customers"
+                onChange={(value) => {
+                  if (!value) {
+                    setSelectedCustomerId("all");
+                  } else {
+                    setSelectedCustomerId(Number(value));
+                  }
+                }}
+                options={[
+                  { value: "", label: "All customers" },
+                  ...customers.map((customer) => ({
+                    value: String(customer.id),
+                    label: customer.display_name,
+                  })),
+                ]}
+              />
               <div style={{ display: "grid", gap: "6px" }}>
                 <TextInput
                   label="Serial"
@@ -268,20 +264,18 @@ export default function HistoryExplorerPage() {
                   Exact match only
                 </label>
               </div>
-              <label className="ui-input-label">
-                <span>Sort</span>
-                <select
-                  className="ui-select"
-                  value={sortMode}
-                  onChange={(event) => setSortMode(event.target.value as typeof sortMode)}
-                >
-                  <option value="created_desc">Newest activity first</option>
-                  <option value="created_asc">Oldest activity first</option>
-                  <option value="serial_asc">Serial A–Z</option>
-                  <option value="serial_desc">Serial Z–A</option>
-                  <option value="source">Source then serial</option>
-                </select>
-              </label>
+              <AnimatedSelect
+                label="Sort"
+                value={sortMode}
+                onChange={(next) => setSortMode(next as typeof sortMode)}
+                options={[
+                  { value: "created_desc", label: "Newest activity first" },
+                  { value: "created_asc", label: "Oldest activity first" },
+                  { value: "serial_asc", label: "Serial A–Z" },
+                  { value: "serial_desc", label: "Serial Z–A" },
+                  { value: "source", label: "Source then serial" },
+                ]}
+              />
               <div style={{ display: "flex", alignItems: "flex-end" }}>
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Searching..." : "Search"}
