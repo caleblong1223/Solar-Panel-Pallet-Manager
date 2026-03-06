@@ -139,8 +139,6 @@ def test_e2e_file_monitoring():
     print("   ✅ New data immediately available after external update")
     print("   ✅ Performance impact: Negligible (< 0.1ms overhead)")
     print("\n💡 File monitoring is working perfectly in production scenario!")
-    
-    return True
 
 if __name__ == "__main__":
     try:
@@ -150,5 +148,4 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         exit(1)
-
 

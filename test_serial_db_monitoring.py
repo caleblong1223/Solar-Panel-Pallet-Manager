@@ -122,8 +122,6 @@ def test_serial_db_file_monitoring():
     print(f"   ✅ Performance impact: {avg_time:.4f}ms per validation")
     print(f"   ✅ Master file monitoring working")
     print("\n💡 The SerialDatabase file monitoring is ready for production!")
-    
-    return True
 
 if __name__ == "__main__":
     try:
@@ -133,4 +131,3 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         exit(1)
-

@@ -75,7 +75,7 @@ def test_simulator_import_all_roles_allowed(monkeypatch) -> None:
     csv_file = {"file": ("sim.csv", "SerialNo\nABC001\n", "text/csv")}
     for idx, role in enumerate(["purchasing_manager", "packout_operator", "admin"], start=10):
         with _client_for(DummyUser(user_id=idx, roles=[role])) as client:
-            response = client.post("/api/v1/simulator/imports", files=csv_file)
+            response = client.post("/api/v1/simulator/imports/anonymous", files=csv_file)
             assert response.status_code == 201
 
 

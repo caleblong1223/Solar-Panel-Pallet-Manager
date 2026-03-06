@@ -16,16 +16,13 @@ export type SimImportBatch = {
   completed_at: string | null;
 };
 
-export async function uploadSimulatorFile(token: string, file: File) {
+export async function uploadSimulatorFile(file: File) {
   const { apiBaseUrl } = loadRuntimeSettings();
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${apiBaseUrl}/simulator/imports`, {
+  const response = await fetch(`${apiBaseUrl}/simulator/imports/anonymous`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
     body: formData,
   });
 

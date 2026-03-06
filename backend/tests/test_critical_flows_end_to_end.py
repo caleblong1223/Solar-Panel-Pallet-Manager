@@ -156,7 +156,7 @@ def test_simulator_import_and_barcode_search_flow(monkeypatch) -> None:
 
         csv_content = "SerialNo,Result\nSN-E2E-001,PASS\n"
         import_response = client.post(
-            "/api/v1/simulator/imports",
+            "/api/v1/simulator/imports/anonymous",
             files={"file": ("sim.csv", csv_content, "text/csv")},
             headers=headers,
         )

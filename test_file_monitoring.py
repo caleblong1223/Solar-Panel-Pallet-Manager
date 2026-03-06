@@ -127,8 +127,6 @@ def test_file_monitoring():
     print(f"   ✅ Multiple changes tracked correctly")
     print(f"   ✅ Reset functionality working")
     print("\n💡 The file monitoring system is ready for production use!")
-    
-    return True
 
 if __name__ == "__main__":
     try:
@@ -138,4 +136,3 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         exit(1)
-

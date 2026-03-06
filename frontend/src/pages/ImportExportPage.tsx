@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import AppFrame from "../components/layout/AppFrame";
 import { useToast } from "../components/notifications/ToastProvider";
@@ -8,12 +8,18 @@ import TextInput from "../components/ui/TextInput";
 import { searchBarcodes, type BarcodeSearchResult } from "../features/barcodes";
 import { uploadSimulatorFile, type SimImportBatch } from "../features/simulator";
 
+type UploadResult = {
+  fileName: string;
+  batch?: SimImportBatch;
+  error?: string;
+};
+
 export default function ImportExportPage() {
   const { token } = useAuth();
   const { notify } = useToast();
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [latestBatch, setLatestBatch] = useState<SimImportBatch | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
   const [isBusy, setIsBusy] = useState(false);
 
   const [searchSerial, setSearchSerial] = useState("");
@@ -21,23 +27,43 @@ export default function ImportExportPage() {
   const [searchBusy, setSearchBusy] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  const handleUpload = async (event: FormEvent) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleUpload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!token || !selectedFile) {
-      notify("Choose a simulator file first", "warning");
+    if (selectedFiles.length === 0) {
+      notify("Choose at least one simulator file first", "warning");
       return;
     }
 
     setIsBusy(true);
-    setLatestBatch(null);
+    setUploadResults([]);
     try {
-      const batch = await uploadSimulatorFile(token, selectedFile);
-      setLatestBatch(batch);
-      notify(`Import batch #${batch.id} created`, "success");
-    } catch {
-      notify("Import upload failed", "error");
+      const summary: UploadResult[] = [];
+      for (const file of selectedFiles) {
+        try {
+          const batch = await uploadSimulatorFile(file);
+          summary.push({ fileName: file.name, batch });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Import upload failed";
+          summary.push({ fileName: file.name, error: message });
+        }
+      }
+      setUploadResults(summary);
+      const successCount = summary.filter((item) => item.batch).length;
+      const failureCount = summary.filter((item) => item.error).length;
+      if (successCount > 0) {
+        notify(`Imported ${successCount} ${successCount === 1 ? "file" : "files"}`, "success");
+      }
+      if (failureCount > 0) {
+        notify(`${failureCount} ${failureCount === 1 ? "file" : "files"} failed to import`, "error");
+      }
     } finally {
       setIsBusy(false);
+      setSelectedFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -72,36 +98,55 @@ export default function ImportExportPage() {
       <section className="builder-grid">
         <Card title="Import Sun Simulator data">
           <p style={{ marginBottom: "12px", color: "var(--color-text-secondary)" }}>
-            Upload a file (.csv, .xlsx, .xls) from the Sun Simulator to import panel test data into the database.
+            Upload one or more files (.csv, .xlsx, .xls) from the Sun Simulator to import panel test data into the database.
           </p>
           <form className="builder-form" onSubmit={handleUpload}>
             <label className="ui-input-label">
-              <span>Choose source file</span>
+              <span>Choose source file(s)</span>
               <input
                 className="ui-input"
                 type="file"
                 accept=".csv,.xlsx,.xls"
-                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                multiple
+                ref={fileInputRef}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  setSelectedFiles(event.target.files ? Array.from(event.target.files) : [])
+                }
               />
             </label>
-            <Button type="submit" disabled={isBusy || !selectedFile}>
+            <Button type="submit" disabled={isBusy || selectedFiles.length === 0}>
               Upload and Import
             </Button>
           </form>
+          {selectedFiles.length > 0 && (
+            <p className="builder-meta" style={{ marginTop: "12px" }}>
+              Selected {selectedFiles.length} file{selectedFiles.length === 1 ? "" : "s"}:{" "}
+              {selectedFiles.map((file) => file.name).join(", ")}
+            </p>
+          )}
 
-          {latestBatch ? (
+          {uploadResults.length > 0 && (
             <div className="builder-meta" style={{ marginTop: "16px" }}>
               <p>
-                <strong>Batch:</strong> #{latestBatch.id}
+                <strong>Import results</strong>
               </p>
-              <p>
-                <strong>Status:</strong> {latestBatch.status}
-              </p>
-              <p>
-                <strong>Rows:</strong> {latestBatch.rows_imported ?? 0} imported / {latestBatch.rows_rejected ?? 0} rejected / {latestBatch.rows_total ?? 0} total
-              </p>
+              <ul className="flat-list" style={{ marginTop: "8px" }}>
+                {uploadResults.map((result) => (
+                  <li key={result.fileName}>
+                    <strong>{result.fileName}</strong>
+                    {result.batch ? (
+                      <span>
+                        {` · batch #${result.batch.id} · ${result.batch.status} · `}
+                        {`${result.batch.rows_imported ?? 0} imported / ${result.batch.rows_rejected ?? 0} rejected / ${result.batch.rows_total ?? 0} total`}
+                      </span>
+                    ) : result.error ? (
+                      <span>{` · failed: ${result.error}`}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             </div>
-          ) : null}
+          )}
         </Card>
 
         <Card title="Search: is this panel in the database?">

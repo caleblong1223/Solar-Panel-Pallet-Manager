@@ -67,7 +67,7 @@ def test_simulator_import_csv_creates_completed_batch_and_fetchable_status(monke
             ),
         )
         response = client.post(
-            "/api/v1/simulator/imports",
+            "/api/v1/simulator/imports/anonymous",
             files={"file": ("sim.csv", csv_content, "text/csv")},
         )
         assert response.status_code == 201
@@ -98,7 +98,7 @@ def test_simulator_import_rejects_unsupported_file_types(monkeypatch) -> None:
             ),
         )
         response = client.post(
-            "/api/v1/simulator/imports",
+            "/api/v1/simulator/imports/anonymous",
             files={"file": ("sim.txt", "SerialNo\nX", "text/plain")},
         )
         assert response.status_code == 400
@@ -119,7 +119,7 @@ def test_simulator_import_captures_row_level_rejections(monkeypatch) -> None:
             ),
         )
         response = client.post(
-            "/api/v1/simulator/imports",
+            "/api/v1/simulator/imports/anonymous",
             files={"file": ("sim.csv", csv_content, "text/csv")},
         )
         assert response.status_code == 201
@@ -144,7 +144,7 @@ def test_simulator_import_returns_502_when_storage_upload_fails(monkeypatch) -> 
 
         monkeypatch.setattr(simulator_endpoint, "upload_import_source", _raise_storage_error)
         response = client.post(
-            "/api/v1/simulator/imports",
+            "/api/v1/simulator/imports/anonymous",
             files={"file": ("sim.csv", "SerialNo\nSIM001\n", "text/csv")},
         )
         assert response.status_code == 502

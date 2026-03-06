@@ -23,6 +23,8 @@ const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 const ACCESS_TOKEN_KEY = "pm2_access_token";
 const PALLET_SIZES = [25, 26, 30, 35];
 const CUSTOMERS_CACHE_KEY = "pm2_cached_customers";
+const SESSION_SELECTION_KEY = "pm2_builder_last_selection";
+const ACTIVE_PALLET_KEY = "pm2_builder_active_pallet";
 let draftPalletCounter = 1;
 let draftItemCounter = 1;
 
@@ -30,18 +32,94 @@ function getEffectiveToken(contextToken: string | null): string | null {
   return contextToken ?? localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
+type BuilderSelection = {
+  customerId: number | "none";
+  template: string;
+  size: number;
+};
+
+function loadLastBuilderSelection(): BuilderSelection | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = sessionStorage.getItem(SESSION_SELECTION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as BuilderSelection;
+    if (!parsed) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistLastBuilderSelection(value: BuilderSelection) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    sessionStorage.setItem(SESSION_SELECTION_KEY, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+function loadActivePallet(): Pallet | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_PALLET_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Pallet;
+  } catch {
+    return null;
+  }
+}
+
+function persistActivePallet(value: Pallet | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (value === null) {
+      sessionStorage.removeItem(ACTIVE_PALLET_KEY);
+    } else {
+      sessionStorage.setItem(ACTIVE_PALLET_KEY, JSON.stringify(value));
+    }
+  } catch {
+    // ignore storage failures
+  }
+}
+
 export default function LiveBuilderPage() {
   const { token: contextToken } = useAuth();
   const token = getEffectiveToken(contextToken);
   const { notify } = useToast();
 
-  const [current, setCurrent] = useState<Pallet | null>(null);
+  const [current, setCurrent] = useState<Pallet | null>(() => loadActivePallet());
   const [serial, setSerial] = useState("");
   const [isBusy, setIsBusy] = useState(false);
-  const [newPalletTemplate, setNewPalletTemplate] = useState(TEMPLATE_OPTIONS[0]);
-  const [newPalletSize, setNewPalletSize] = useState<number>(DEFAULT_MAX_PANELS);
+  const storedSelection = loadLastBuilderSelection();
+  const [newPalletTemplate, setNewPalletTemplate] = useState(
+    storedSelection && TEMPLATE_OPTIONS.includes(storedSelection.template)
+      ? storedSelection.template
+      : TEMPLATE_OPTIONS[0]
+  );
+  const [newPalletSize, setNewPalletSize] = useState<number>(
+    storedSelection && PALLET_SIZES.includes(storedSelection.size) ? storedSelection.size : DEFAULT_MAX_PANELS
+  );
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | "none">("none");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | "none">(
+    storedSelection ? storedSelection.customerId : "none"
+  );
+  useEffect(() => {
+    persistLastBuilderSelection({
+      customerId: selectedCustomerId,
+      template: newPalletTemplate,
+      size: newPalletSize,
+    });
+  }, [selectedCustomerId, newPalletTemplate, newPalletSize]);
   const [palletNumberDraft, setPalletNumberDraft] = useState<string>("");
   const [isPalletNumberAnimating, setIsPalletNumberAnimating] = useState(false);
   const [isPackoutDateAnimating, setIsPackoutDateAnimating] = useState(false);
@@ -73,10 +151,8 @@ export default function LiveBuilderPage() {
   }, [palletNumberDraft, current]);
 
   useEffect(() => {
-    // Start each app session with a clean Builder state instead of auto-resuming
-    // previously active pallets from local cache/server.
-    setCurrent(null);
-  }, []);
+    persistActivePallet(current);
+  }, [current]);
 
   useEffect(() => {
     // Seed from any cached customers first so offline builder still has a usable dropdown.
@@ -466,7 +542,7 @@ export default function LiveBuilderPage() {
               </p>
               <div style={{ display: "grid", gap: "8px", marginBottom: "8px" }}>
                 <AnimatedSelect
-                  label="Customer (optional)"
+                  label="Customer"
                   value={selectedCustomerId === "none" ? "" : String(selectedCustomerId)}
                   placeholder="No customer selected"
                   options={[

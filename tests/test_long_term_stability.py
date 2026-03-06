@@ -11,6 +11,8 @@ import time
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add app directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
 
@@ -32,8 +34,7 @@ def test_memory_stability(num_operations=1000):
     print("=" * 70)
     
     if not PSUTIL_AVAILABLE:
-        print("SKIP: psutil not available")
-        return True
+        pytest.skip("psutil not available")
     
     try:
         import os
@@ -42,8 +43,7 @@ def test_memory_stability(num_operations=1000):
         # Initialize database
         db_path = Path("PALLETS/serial_database.xlsx")
         if not db_path.exists():
-            print("SKIP: Database file not found")
-            return True
+            pytest.skip("Database file not found")
         
         db = SerialDatabase(db_path)
         
@@ -75,12 +75,13 @@ def test_memory_stability(num_operations=1000):
         print(f"Memory increase: {memory_increase:.2f} MB")
         
         # Check if memory increase is reasonable (< 50 MB for 1000 operations)
-        if memory_increase < 50:
-            print(f"✅ PASS - Memory increase within acceptable limits ({memory_increase:.2f} MB)")
-            return True
-        else:
-            print(f"❌ FAIL - Memory increase too large ({memory_increase:.2f} MB > 50 MB)")
-            return False
+        assert memory_increase < 50, f"Memory increase too large ({memory_increase:.2f} MB > 50 MB)"
+        print(f"✅ PASS - Memory increase within acceptable limits ({memory_increase:.2f} MB)")
+    except Exception as e:
+        print(f"❌ FAIL - Error: {e}")
+        import traceback
+        traceback.print_exc()
+        pytest.fail(f"Error during memory stability test: {e}")
             
     except Exception as e:
         print(f"❌ FAIL - Error: {e}")
@@ -98,8 +99,7 @@ def test_cache_limits():
     try:
         db_path = Path("PALLETS/serial_database.xlsx")
         if not db_path.exists():
-            print("SKIP: Database file not found")
-            return True
+            pytest.skip("Database file not found")
         
         db = SerialDatabase(db_path)
         
@@ -117,18 +117,16 @@ def test_cache_limits():
         print(f"Max cache size: {db._data_cache_max_size}")
         
         # Check if cache is within limits
-        if final_cache_size <= db._data_cache_max_size:
-            print(f"✅ PASS - Cache size within limits ({final_cache_size} <= {db._data_cache_max_size})")
-            return True
-        else:
-            print(f"❌ FAIL - Cache size exceeds limit ({final_cache_size} > {db._data_cache_max_size})")
-            return False
+        assert final_cache_size <= db._data_cache_max_size, (
+            f"Cache size exceeds limit ({final_cache_size} > {db._data_cache_max_size})"
+        )
+        print(f"✅ PASS - Cache size within limits ({final_cache_size} <= {db._data_cache_max_size})")
             
     except Exception as e:
         print(f"❌ FAIL - Error: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        pytest.fail(f"Error during cache limits test: {e}")
 
 
 def test_resource_cleanup():
@@ -140,8 +138,7 @@ def test_resource_cleanup():
     try:
         db_path = Path("PALLETS/serial_database.xlsx")
         if not db_path.exists():
-            print("SKIP: Database file not found")
-            return True
+            pytest.skip("Database file not found")
         
         # Create many database instances (should clean up properly)
         instances = []
@@ -156,13 +153,12 @@ def test_resource_cleanup():
         gc.collect()
         
         print("✅ PASS - Resources cleaned up properly")
-        return True
         
     except Exception as e:
         print(f"❌ FAIL - Error: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        pytest.fail(f"Error during resource cleanup test: {e}")
 
 
 def test_input_validation():
@@ -174,8 +170,7 @@ def test_input_validation():
     try:
         db_path = Path("PALLETS/serial_database.xlsx")
         if not db_path.exists():
-            print("SKIP: Database file not found")
-            return True
+            pytest.skip("Database file not found")
         
         db = SerialDatabase(db_path)
         
@@ -201,18 +196,14 @@ def test_input_validation():
                 print(f"  ❌ Failed: {repr(input_val)[:30]} - {e}")
                 all_passed = False
         
-        if all_passed:
-            print("✅ PASS - Input validation handles edge cases")
-            return True
-        else:
-            print("❌ FAIL - Some edge cases not handled")
-            return False
+        assert all_passed, "Some input validation edge cases are not handled"
+        print("✅ PASS - Input validation handles edge cases")
             
     except Exception as e:
         print(f"❌ FAIL - Error: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        pytest.fail(f"Error during input validation test: {e}")
 
 
 def test_error_recovery():
@@ -224,8 +215,7 @@ def test_error_recovery():
     try:
         db_path = Path("PALLETS/serial_database.xlsx")
         if not db_path.exists():
-            print("SKIP: Database file not found")
-            return True
+            pytest.skip("Database file not found")
         
         db = SerialDatabase(db_path)
         
@@ -238,13 +228,12 @@ def test_error_recovery():
             print(f"  ⚠️  Warning: Unexpected error: {e}")
         
         print("✅ PASS - Errors handled gracefully")
-        return True
         
     except Exception as e:
         print(f"❌ FAIL - Error: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        pytest.fail(f"Error during error recovery test: {e}")
 
 
 def main():
@@ -253,26 +242,34 @@ def main():
     print("LONG-TERM STABILITY TESTS")
     print("=" * 70)
     
+    tests = [
+        ("Memory Stability", lambda: test_memory_stability(500)),
+        ("Cache Limits", test_cache_limits),
+        ("Resource Cleanup", test_resource_cleanup),
+        ("Input Validation", test_input_validation),
+        ("Error Recovery", test_error_recovery),
+    ]
     results = []
-    
-    # Run tests
-    results.append(("Memory Stability", test_memory_stability(500)))
-    results.append(("Cache Limits", test_cache_limits()))
-    results.append(("Resource Cleanup", test_resource_cleanup()))
-    results.append(("Input Validation", test_input_validation()))
-    results.append(("Error Recovery", test_error_recovery()))
+
+    for test_name, test_func in tests:
+        try:
+            test_func()
+            results.append((test_name, True, None))
+        except Exception as exc:
+            results.append((test_name, False, str(exc)))
     
     # Print summary
     print("\n" + "=" * 70)
     print("TEST SUMMARY")
     print("=" * 70)
     
-    passed = sum(1 for _, result in results if result)
+    passed = sum(1 for _, result, _ in results if result)
     total = len(results)
-    
-    for test_name, result in results:
+
+    for test_name, result, message in results:
         status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} - {test_name}")
+        extra = f" ({message})" if message else ""
+        print(f"{status} - {test_name}{extra}")
     
     print("\n" + "=" * 70)
     print(f"Total Tests: {total}")
@@ -286,4 +283,3 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
-

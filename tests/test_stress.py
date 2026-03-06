@@ -146,7 +146,7 @@ class StressTestSuite:
                 if app:
                     app.root.destroy()
                 
-                return True
+                return
                 
             except Exception as e:
                 if app:
@@ -232,7 +232,7 @@ class StressTestSuite:
             print(f"  - Force refresh: {refresh_force_duration:.2f}s ({refresh_force_duration/5:.3f}s each)")
             print(f"  - Get operations: {get_duration:.2f}s ({get_duration/(count*10):.4f}s each)")
             
-            return True
+            return
         
         start_time = time.time()
         try:
@@ -317,7 +317,7 @@ class StressTestSuite:
             if app:
                 app.root.destroy()
             
-            return True
+            return
         
         except Exception as e:
             # Ensure the GUI is cleaned up if anything goes wrong inside run_test
@@ -855,4 +855,3 @@ if __name__ == "__main__":
     suite = StressTestSuite()
     success = suite.run_all_tests()
     sys.exit(0 if success else 1)
-

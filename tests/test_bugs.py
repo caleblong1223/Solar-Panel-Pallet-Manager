@@ -7,6 +7,8 @@ Tests critical functionality without requiring full GUI
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add app to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -43,7 +45,7 @@ def test_folder_creation():
             print(f"❌ {folder_name}: Error - {e}")
             all_ok = False
     
-    return all_ok
+    assert all_ok, "Folder creation failed for one or more directories"
 
 def test_pallet_manager():
     """Test PalletManager basic operations"""
@@ -76,8 +78,7 @@ def test_pallet_manager():
         if pallet:
             print(f"✅ Created/accessed pallet: #{pallet.get('pallet_number', 'N/A')}")
         else:
-            print("❌ Could not create/access pallet")
-            return False
+            pytest.fail("Could not create/access pallet")
         
         # Test adding serial
         if hasattr(pm, 'add_serial'):
@@ -95,8 +96,7 @@ def test_pallet_manager():
         if is_duplicate:
             print(f"✅ Duplicate detection works")
         else:
-            print(f"❌ Duplicate detection failed")
-            return False
+            pytest.fail("Duplicate detection failed")
         
         # Test pallet full check
         # Add 24 more to make it 25
@@ -110,8 +110,7 @@ def test_pallet_manager():
         if count == 25:
             print(f"✅ Pallet full check: {count}/25")
         else:
-            print(f"❌ Pallet count wrong: {count}/25")
-            return False
+            pytest.fail(f"Pallet count wrong: {count}/25")
         
         # Test export (just check it doesn't crash)
         if hasattr(pm, 'mark_pallet_complete'):
@@ -121,12 +120,12 @@ def test_pallet_manager():
             pallet['completed_at'] = "2026-01-06"
             print(f"✅ Marked pallet as complete (manual)")
         
-        return True
+        print("✅ PalletManager operations completed")
     except Exception as e:
         print(f"❌ PalletManager test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        pytest.fail(f"PalletManager test failed: {e}")
     finally:
         # Cleanup
         if temp_file.exists():
@@ -157,7 +156,7 @@ def test_barcode_validation():
             print(f"❌ {description}: {barcode} - Expected {should_be_valid}, got {is_valid}")
             all_ok = False
     
-    return all_ok
+    assert all_ok, "Barcode validation failed for one or more test cases"
 
 def test_path_resolution():
     """Test path resolution for packaged vs development"""
@@ -183,7 +182,7 @@ def test_path_resolution():
         print(f"✅ Resolved: {rel_path} → {full_path}")
         # Don't check if exists, just that path is valid
     
-    return all_ok
+    assert all_ok, "Path resolution test failed"
 
 def test_error_handling():
     """Test error handling for common scenarios"""
@@ -198,8 +197,7 @@ def test_error_handling():
         if result is None:
             print("✅ Missing file handled gracefully")
         else:
-            print("❌ Missing file not handled correctly")
-            return False
+            pytest.fail("Missing file not handled correctly")
     except Exception as e:
         print(f"✅ Missing file error handled: {type(e).__name__}")
     
@@ -219,7 +217,7 @@ def test_error_handling():
     except Exception as e:
         print(f"⚠️  Error in invalid data test: {e}")
     
-    return True
+    print("✅ Error handling tests completed")
 
 def main():
     """Run all tests"""
@@ -228,13 +226,20 @@ def main():
     print("=" * 70)
     print()
     
+    tests = [
+        ("Folder Creation", test_folder_creation),
+        ("PalletManager Operations", test_pallet_manager),
+        ("Barcode Validation", test_barcode_validation),
+        ("Path Resolution", test_path_resolution),
+        ("Error Handling", test_error_handling),
+    ]
     results = []
-    
-    results.append(("Folder Creation", test_folder_creation()))
-    results.append(("PalletManager Operations", test_pallet_manager()))
-    results.append(("Barcode Validation", test_barcode_validation()))
-    results.append(("Path Resolution", test_path_resolution()))
-    results.append(("Error Handling", test_error_handling()))
+    for test_name, test_func in tests:
+        try:
+            test_func()
+            results.append((test_name, True, None))
+        except Exception as exc:
+            results.append((test_name, False, str(exc)))
     
     print("\n" + "=" * 70)
     print("TEST RESULTS SUMMARY")
@@ -243,9 +248,10 @@ def main():
     passed = 0
     failed = 0
     
-    for test_name, result in results:
+    for test_name, result, message in results:
         status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status}: {test_name}")
+        extra = f" ({message})" if message else ""
+        print(f"{status}: {test_name}{extra}")
         if result:
             passed += 1
         else:
@@ -265,4 +271,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
