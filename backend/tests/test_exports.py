@@ -165,3 +165,45 @@ def test_export_download_url_endpoint(monkeypatch) -> None:
 
         missing = client.get("/api/v1/exports/999/download-url")
         assert missing.status_code == 404
+
+
+def test_replace_export_workbook_endpoint(monkeypatch) -> None:
+    with _client_with_pallet(DummyUser(user_id=6, roles=["packout_operator"])) as client:
+        from app.api.v1.endpoints import exports as exports_endpoint
+
+        monkeypatch.setattr(
+            exports_endpoint,
+            "upload_export_artifact",
+            lambda export_id, pallet_id, filename, content: (
+                f"exports/2026/03/{pallet_id}/{export_id}/{filename}",
+                f"checksum{export_id}",
+            ),
+        )
+        created = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
+        export_id = created.json()["id"]
+
+        captured: dict[str, object] = {}
+
+        def _upload_at_key(*, object_key: str, filename: str, content: bytes, content_type: str | None = None):
+            captured["object_key"] = object_key
+            captured["filename"] = filename
+            captured["content_type"] = content_type
+            captured["content_len"] = len(content)
+            return object_key, "updatedchecksum"
+
+        monkeypatch.setattr(exports_endpoint, "upload_export_artifact_at_key", _upload_at_key)
+        files = {
+            "file": (
+                "edited.xlsx",
+                b"edited-xlsx-bytes",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        }
+        replace = client.post(f"/api/v1/exports/{export_id}/replace", files=files)
+        assert replace.status_code == 200
+        payload = replace.json()
+        assert payload["id"] == export_id
+        assert captured["filename"] == payload["file_name"].replace(".pdf", ".xlsx")
+        assert str(captured["object_key"]).endswith(str(captured["filename"]))
+        assert captured["content_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        assert captured["content_len"] == len(b"edited-xlsx-bytes")

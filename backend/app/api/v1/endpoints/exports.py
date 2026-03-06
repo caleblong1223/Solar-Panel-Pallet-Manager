@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime, time, timezone
 from pathlib import PurePosixPath
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.deps import require_roles
 from app.db.session import get_db
-from app.models.pallet import Export, Pallet
+from app.models.pallet import AuditEvent, Export, Pallet
 from app.models.user import User
 from app.schemas.export import (
     ExportCreateRequest,
@@ -22,9 +22,43 @@ from app.services.object_storage import (
     StorageError,
     generate_export_download_url,
     upload_export_artifact,
+    upload_export_artifact_at_key,
 )
 
 router = APIRouter()
+
+XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _record_audit(
+    db: Session,
+    *,
+    actor_user_id: int | None,
+    event_type: str,
+    resource_type: str,
+    resource_id: str | None,
+    outcome: str,
+    message: str | None = None,
+    metadata_json: dict | None = None,
+) -> None:
+    db.add(
+        AuditEvent(
+            actor_user_id=actor_user_id,
+            event_type=event_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            outcome=outcome,
+            message=message,
+            metadata_json=metadata_json,
+        )
+    )
+
+
+def _xlsx_object_key(export: Export) -> tuple[str, str]:
+    pdf_path = PurePosixPath(export.object_key)
+    base_dir = str(pdf_path.parent)
+    xlsx_name = export.file_name[:-4] + ".xlsx" if export.file_name.lower().endswith(".pdf") else f"{export.file_name}.xlsx"
+    return f"{base_dir}/{xlsx_name}", xlsx_name
 
 
 @router.get("", response_model=ExportListResponse)
@@ -155,11 +189,7 @@ def get_export_download_url(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
     try:
         if format == "xlsx":
-            pdf_path = PurePosixPath(export.object_key)
-            base_dir = str(pdf_path.parent)
-            xlsx_name = export.file_name[:-4] + ".xlsx" if export.file_name.lower().endswith(".pdf") else f"{export.file_name}.xlsx"
-            object_key = f"{base_dir}/{xlsx_name}"
-            file_name = xlsx_name
+            object_key, file_name = _xlsx_object_key(export)
         else:
             object_key = export.object_key
             file_name = export.file_name
@@ -175,3 +205,53 @@ def get_export_download_url(
         download_url=url,
         expires_in_seconds=expires_in_seconds,
     )
+
+
+@router.post("/{export_id}/replace", response_model=ExportResponse)
+def replace_export_workbook(
+    export_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "packout_operator")),
+) -> ExportResponse:
+    export = db.query(Export).filter(Export.id == export_id).first()
+    if export is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+
+    filename = (file.filename or "").lower()
+    content_type = (file.content_type or "").lower()
+    if not filename.endswith(".xlsx") and content_type != XLSX_MIME_TYPE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .xlsx files are supported")
+
+    content = file.file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+
+    try:
+        object_key, xlsx_name = _xlsx_object_key(export)
+        _, checksum = upload_export_artifact_at_key(
+            object_key=object_key,
+            filename=xlsx_name,
+            content=content,
+            content_type=XLSX_MIME_TYPE,
+        )
+    except StorageError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    _record_audit(
+        db,
+        actor_user_id=current_user.id,
+        event_type="export.replaced",
+        resource_type="pallet",
+        resource_id=str(export.pallet_id),
+        outcome="success",
+        metadata_json={
+            "export_id": export.id,
+            "xlsx_object_key": object_key,
+            "xlsx_size_bytes": len(content),
+            "xlsx_checksum_sha256": checksum,
+        },
+    )
+    db.commit()
+    db.refresh(export)
+    return ExportResponse.model_validate(export)

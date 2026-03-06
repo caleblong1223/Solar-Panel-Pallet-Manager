@@ -1,4 +1,5 @@
 import { apiRequest } from "../lib/api";
+import { loadRuntimeSettings } from "../lib/runtimeConfig";
 
 export type ExportRecord = {
   id: number;
@@ -62,4 +63,37 @@ export async function getExportDownloadUrl(
     "GET",
     token
   );
+}
+
+export async function downloadExportWorkbook(token: string, exportId: number) {
+  const response = await getExportDownloadUrl(token, exportId, "xlsx");
+  const download = await fetch(response.download_url);
+  if (!download.ok) {
+    throw new Error(`Failed to download workbook (${download.status})`);
+  }
+  return await download.arrayBuffer();
+}
+
+export async function replaceExportWorkbook(
+  token: string,
+  exportId: number,
+  workbookBlob: Blob,
+  fileName: string
+) {
+  const { apiBaseUrl } = loadRuntimeSettings();
+  const formData = new FormData();
+  formData.append("file", workbookBlob, fileName);
+
+  const response = await fetch(`${apiBaseUrl}/exports/${exportId}/replace`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Upload failed with status ${response.status}`);
+  }
+  return (await response.json()) as ExportRecord;
 }

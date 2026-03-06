@@ -15,7 +15,9 @@
     "@tauri-apps/api": "^2.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.30.1"
+    "react-router-dom": "^6.30.1",
+    "react-spreadsheet": "^0.10.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

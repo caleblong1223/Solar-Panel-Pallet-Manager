@@ -613,6 +613,7 @@ h1 {
 .flat-list li {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
   border: 1px solid var(--color-border);
@@ -622,6 +623,57 @@ h1 {
 
 .flat-list small {
   color: var(--color-text-muted);
+}
+
+.history-editor-panel {
+  margin-top: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.history-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.history-editor-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.history-editor-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.history-editor-tab {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.history-editor-tab--active {
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface));
+  border-color: var(--color-accent);
+}
+
+.history-editor-grid {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
 }
 
 .sync-issue-actions {

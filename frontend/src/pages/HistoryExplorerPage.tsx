@@ -1,4 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Spreadsheet from "react-spreadsheet";
+import type { CellBase, Matrix } from "react-spreadsheet";
+import * as XLSX from "xlsx";
 import { useAuth } from "../auth/AuthContext";
 import AppFrame from "../components/layout/AppFrame";
 import { useToast } from "../components/notifications/ToastProvider";
@@ -9,8 +12,30 @@ import TextInput from "../components/ui/TextInput";
 import { getPalletHistory, type AuditEvent } from "../features/audit";
 import { searchBarcodes, type BarcodeSearchResult } from "../features/barcodes";
 import { deletePallet } from "../features/pallets";
-import { getExportDownloadUrl, listExportsByPallet, type ExportRecord } from "../features/exports";
+import {
+  downloadExportWorkbook,
+  getExportDownloadUrl,
+  listExportsByPallet,
+  replaceExportWorkbook,
+  type ExportRecord,
+} from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
+
+type SheetCell = CellBase<string>;
+type EditableSheet = {
+  name: string;
+  data: Matrix<SheetCell>;
+};
+
+function matrixFromRows(rows: unknown[][]): Matrix<SheetCell> {
+  const normalizedRows = rows.length > 0 ? rows : [[""]];
+  return normalizedRows.map((row) => {
+    const normalizedCols = row.length > 0 ? row : [""];
+    return normalizedCols.map((value) => ({
+      value: value == null ? "" : String(value),
+    }));
+  });
+}
 
 export default function HistoryExplorerPage() {
   const { token } = useAuth();
@@ -29,6 +54,12 @@ export default function HistoryExplorerPage() {
   const [selected, setSelected] = useState<BarcodeSearchResult | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [exports, setExports] = useState<ExportRecord[]>([]);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isEditorLoading, setIsEditorLoading] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editingExport, setEditingExport] = useState<ExportRecord | null>(null);
+  const [editableSheets, setEditableSheets] = useState<EditableSheet[]>([]);
+  const [activeSheetIndex, setActiveSheetIndex] = useState(0);
 
   const selectedPalletId = selected?.pallet_id ?? null;
 
@@ -235,6 +266,100 @@ const runSearch = async (event: FormEvent) => {
     }
   };
 
+  const closeEditor = () => {
+    setIsEditorOpen(false);
+    setIsEditorLoading(false);
+    setIsSavingEdit(false);
+    setEditingExport(null);
+    setEditableSheets([]);
+    setActiveSheetIndex(0);
+  };
+
+  const refreshPalletExports = async (palletId: number) => {
+    if (!token) {
+      return;
+    }
+    const exportRows = await listExportsByPallet(token, palletId);
+    setExports(exportRows.exports);
+  };
+
+  const handleEditExport = async (item: ExportRecord) => {
+    if (!token) {
+      return;
+    }
+    setIsEditorOpen(true);
+    setIsEditorLoading(true);
+    setEditingExport(item);
+    setEditableSheets([]);
+    setActiveSheetIndex(0);
+    try {
+      const workbookBuffer = await downloadExportWorkbook(token, item.id);
+      const workbook = XLSX.read(workbookBuffer, { type: "array" });
+      const sheetNames = workbook.SheetNames;
+      if (sheetNames.length === 0) {
+        throw new Error("Workbook contains no sheets");
+      }
+      const nextSheets: EditableSheet[] = sheetNames.map((name) => {
+        const worksheet = workbook.Sheets[name];
+        const rows = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          raw: false,
+          blankrows: true,
+          defval: "",
+        }) as unknown[][];
+        return {
+          name,
+          data: matrixFromRows(rows),
+        };
+      });
+      setEditableSheets(nextSheets);
+    } catch {
+      closeEditor();
+      notify("Failed to load export workbook for editing", "error");
+    } finally {
+      setIsEditorLoading(false);
+    }
+  };
+
+  const handleSheetDataChange = (nextData: Matrix<SheetCell>) => {
+    setEditableSheets((prev) =>
+      prev.map((sheet, index) => (index === activeSheetIndex ? { ...sheet, data: nextData } : sheet))
+    );
+  };
+
+  const handleSaveSpreadsheet = async () => {
+    if (!token || !editingExport || editableSheets.length === 0) {
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const workbook = XLSX.utils.book_new();
+      editableSheets.forEach((sheet) => {
+        const rowData = sheet.data.map((row) => row.map((cell) => cell?.value ?? ""));
+        const worksheet = XLSX.utils.aoa_to_sheet(rowData.length > 0 ? rowData : [[""]]);
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
+      });
+      const workbookBytes = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+      const blob = new Blob([workbookBytes], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const baseName = editingExport.file_name.toLowerCase().endsWith(".pdf")
+        ? editingExport.file_name.slice(0, -4)
+        : editingExport.file_name;
+      const fileName = baseName.toLowerCase().endsWith(".xlsx") ? baseName : `${baseName}.xlsx`;
+      await replaceExportWorkbook(token, editingExport.id, blob, fileName);
+      if (selectedPalletId) {
+        await refreshPalletExports(selectedPalletId);
+      }
+      closeEditor();
+      notify("Spreadsheet changes saved", "success");
+    } catch {
+      notify("Failed to save spreadsheet changes", "error");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const visibleResults = useMemo(() => applyFilters(results), [results, datePreset, selectedCustomerId]);
 
   return (
@@ -367,10 +492,55 @@ const runSearch = async (event: FormEvent) => {
                       <Button variant="secondary" onClick={() => void handleOpenExport(item.id)}>
                         Open
                       </Button>
+                      <Button variant="secondary" onClick={() => void handleEditExport(item)}>
+                        Edit Spreadsheet
+                      </Button>
                     </li>
                   ))}
                 </ul>
               )}
+
+              {isEditorOpen ? (
+                <section className="history-editor-panel">
+                  <div className="history-editor-header">
+                    <strong>Spreadsheet Editor</strong>
+                    <div className="history-editor-actions">
+                      <Button variant="secondary" onClick={closeEditor} disabled={isSavingEdit}>
+                        Exit
+                      </Button>
+                      <Button onClick={() => void handleSaveSpreadsheet()} disabled={isEditorLoading || isSavingEdit}>
+                        {isSavingEdit ? "Saving..." : "Save"}
+                      </Button>
+                    </div>
+                  </div>
+                  {isEditorLoading ? (
+                    <p>Loading spreadsheet...</p>
+                  ) : editableSheets.length === 0 ? (
+                    <p>No sheets available to edit.</p>
+                  ) : (
+                    <>
+                      <div className="history-editor-tabs">
+                        {editableSheets.map((sheet, index) => (
+                          <button
+                            type="button"
+                            key={sheet.name}
+                            className={index === activeSheetIndex ? "history-editor-tab history-editor-tab--active" : "history-editor-tab"}
+                            onClick={() => setActiveSheetIndex(index)}
+                          >
+                            {sheet.name}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="history-editor-grid">
+                        <Spreadsheet
+                          data={editableSheets[activeSheetIndex]?.data ?? []}
+                          onChange={handleSheetDataChange}
+                        />
+                      </div>
+                    </>
+                  )}
+                </section>
+              ) : null}
 
               <h3 className="subhead">Audit Trail</h3>
               {auditEvents.length === 0 ? (
