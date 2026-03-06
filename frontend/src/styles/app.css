@@ -320,6 +320,7 @@ h1 {
   flex-wrap: wrap;
   gap: 20px;
   align-items: end;
+  width: 100%;
 }
 
 .builder-active-pill {
@@ -329,7 +330,9 @@ h1 {
   padding: 10px 12px;
   display: grid;
   gap: 4px;
-  width: 130px;
+  width: auto;
+  min-width: 130px;
+  flex: 1 1 140px;
 }
 
 .builder-active-pill__label {
@@ -364,20 +367,31 @@ h1 {
 }
 
 .builder-active-control {
-  width: 160px;
+  width: auto;
+  min-width: 150px;
+  flex: 1 1 180px;
 }
 
 .builder-active-control--customer {
-  width: 220px;
+  min-width: 260px;
+  flex: 2 1 360px;
 }
 
 .builder-active-control--panel,
 .builder-active-control--size {
-  width: 140px;
+  min-width: 140px;
+  flex: 1 1 160px;
 }
 
 .builder-active-control--date {
-  width: 170px;
+  min-width: 170px;
+  flex: 1 1 190px;
+}
+
+.builder-active-control--customer .animated-select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .customers-layout {

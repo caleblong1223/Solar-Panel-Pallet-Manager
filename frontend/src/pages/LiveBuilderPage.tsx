@@ -5,10 +5,16 @@ import { useToast } from "../components/notifications/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
-import { createExport, updatePallet, type Pallet } from "../features/pallets";
+import {
+  addPalletItem as apiAddPalletItem,
+  completePallet as apiCompletePallet,
+  createExport,
+  createPallet as apiCreatePallet,
+  updatePallet,
+  type Pallet,
+} from "../features/pallets";
 import {
   repoAddPalletItem,
-  repoCompletePallet,
   repoCreatePallet,
   repoRemovePalletItem,
 } from "../features/palletRepo";
@@ -185,7 +191,8 @@ export default function LiveBuilderPage() {
   const handleStartNewPallet = async () => {
     setIsBusy(true);
     try {
-      const created = await repoCreatePallet(token, {
+      // Always start as a local draft; publish to server only at finalize/export.
+      const created = await repoCreatePallet(null, {
         max_panels: newPalletSize,
         template_type: newPalletTemplate,
         customer_id: selectedCustomerId === "none" ? undefined : selectedCustomerId,
@@ -218,7 +225,7 @@ export default function LiveBuilderPage() {
 
     setIsBusy(true);
     try {
-      const updated = await repoAddPalletItem(token, current.id, s);
+      const updated = await repoAddPalletItem(null, current.id, s);
       setCurrent(updated);
       setSerial("");
       notify("Added", "success");
@@ -230,7 +237,7 @@ export default function LiveBuilderPage() {
         );
         if (proceed) {
           try {
-            const updated = await repoAddPalletItem(token, current.id, s, { allowMissingSimData: true });
+            const updated = await repoAddPalletItem(null, current.id, s, { allowMissingSimData: true });
             setCurrent(updated);
             setSerial("");
             notify("Added with generated fallback simulator values", "warning");
@@ -257,7 +264,7 @@ export default function LiveBuilderPage() {
     if (!current) return;
     setIsBusy(true);
     try {
-      const updated = await repoRemovePalletItem(token, current.id, itemId);
+      const updated = await repoRemovePalletItem(null, current.id, itemId);
       setCurrent(updated);
       notify("Removed", "success");
     } catch (err) {
@@ -274,6 +281,10 @@ export default function LiveBuilderPage() {
       notify("Pallet must be full to complete", "warning");
       return;
     }
+    if (!token) {
+      notify("Server connection is required to finalize and export a pallet", "error");
+      return;
+    }
     const desiredTemplateType = newPalletTemplate;
     const desiredCustomerId = selectedCustomerId === "none" ? null : selectedCustomerId;
     const desiredMaxPanels = newPalletSize;
@@ -283,46 +294,32 @@ export default function LiveBuilderPage() {
 
     setIsBusy(true);
     try {
-      if (
-        token &&
-        (
-          workingPallet.template_type !== desiredTemplateType ||
-          workingPallet.customer_id !== desiredCustomerId ||
-          workingPallet.max_panels !== desiredMaxPanels ||
-          (Number.isFinite(desiredPalletNumber) && desiredPalletNumber > 0 && workingPallet.pallet_number !== desiredPalletNumber)
-        )
-      ) {
-        workingPallet = await updatePallet(token, workingPallet.id, {
-          template_type: desiredTemplateType,
-          customer_id: desiredCustomerId,
-          max_panels: desiredMaxPanels,
-          pallet_number: Number.isFinite(desiredPalletNumber) && desiredPalletNumber > 0 ? desiredPalletNumber : undefined,
-        });
-        setCurrent(workingPallet);
-      } else if (
-        !token &&
-        (
-          workingPallet.template_type !== desiredTemplateType ||
-          workingPallet.customer_id !== desiredCustomerId ||
-          workingPallet.max_panels !== desiredMaxPanels ||
-          (Number.isFinite(desiredPalletNumber) && desiredPalletNumber > 0 && workingPallet.pallet_number !== desiredPalletNumber)
-        )
-      ) {
-        workingPallet = {
-          ...workingPallet,
-          template_type: desiredTemplateType,
-          customer_id: desiredCustomerId,
-          max_panels: desiredMaxPanels,
-          pallet_number:
-            Number.isFinite(desiredPalletNumber) && desiredPalletNumber > 0
-              ? desiredPalletNumber
-              : workingPallet.pallet_number,
-        };
-        setCurrent(workingPallet);
+      const createdServerPallet = await apiCreatePallet(token, {
+        max_panels: desiredMaxPanels,
+        template_type: desiredTemplateType,
+        customer_id: desiredCustomerId ?? undefined,
+      });
+      workingPallet = createdServerPallet;
+
+      const draftItems = current.items
+        .slice()
+        .sort((a, b) => a.slot_index - b.slot_index);
+      for (const item of draftItems) {
+        workingPallet = await apiAddPalletItem(token, workingPallet.id, item.serial);
       }
 
-      const updated = await repoCompletePallet(token, workingPallet.id);
-      setCurrent(updated);
+      if (
+        Number.isFinite(desiredPalletNumber) &&
+        desiredPalletNumber > 0 &&
+        workingPallet.pallet_number !== desiredPalletNumber
+      ) {
+        workingPallet = await updatePallet(token, workingPallet.id, {
+          pallet_number: desiredPalletNumber,
+        });
+      }
+
+      workingPallet = await apiCompletePallet(token, workingPallet.id);
+      setCurrent(workingPallet);
       const created = await createExport(token ?? "", {
         pallet_id: workingPallet.id,
         template_type: desiredTemplateType,
@@ -350,21 +347,9 @@ export default function LiveBuilderPage() {
     }
     if (parsed === current.pallet_number) return;
 
-    if (token) {
-      try {
-        const updated = await updatePallet(token, current.id, { pallet_number: parsed });
-        setCurrent(updated);
-        notify(`Pallet number updated to #${updated.pallet_number}`, "success");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to update pallet number";
-        notify(message, "error");
-        setPalletNumberDraft(String(current.pallet_number));
-      }
-      return;
-    }
-
+    // Draft-only while building; server update happens at finalize/export.
     setCurrent({ ...current, pallet_number: parsed });
-    notify(`Pallet number updated to #${parsed} (offline pending sync)`, "warning");
+    notify(`Pallet number set to #${parsed}`, "success");
   };
 
   return (
