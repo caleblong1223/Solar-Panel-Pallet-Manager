@@ -220,13 +220,13 @@ export default function HistoryExplorerPage() {
       <section className="builder-grid">
         <Card title="Pallet History Filters">
           <form className="builder-form" onSubmit={runSearch}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "8px" }}>
+            <div className="builder-active-header">
               <AnimatedSelect
                 label="Date"
                 value={datePreset}
                 onChange={(next) => setDatePreset(next as typeof datePreset)}
                 variant="pill"
-                className="history-filter-select"
+                className="builder-active-control builder-active-control--date"
                 options={[
                   { value: "all", label: "All time" },
                   { value: "today", label: "Today" },
@@ -240,7 +240,7 @@ export default function HistoryExplorerPage() {
                 value={selectedCustomerId === "all" ? "" : String(selectedCustomerId)}
                 placeholder="All customers"
                 variant="pill"
-                className="history-filter-select"
+                className="builder-active-control builder-active-control--customer"
                 onChange={(value) => {
                   if (!value) {
                     setSelectedCustomerId("all");
@@ -256,7 +256,7 @@ export default function HistoryExplorerPage() {
                   })),
                 ]}
               />
-              <div style={{ display: "grid", gap: "6px" }}>
+              <div style={{ display: "grid", gap: "6px", minWidth: "220px", flex: "1 1 220px" }}>
                 <TextInput
                   label="Serial"
                   value={query}
@@ -273,7 +273,7 @@ export default function HistoryExplorerPage() {
                 value={sortMode}
                 onChange={(next) => setSortMode(next as typeof sortMode)}
                 variant="pill"
-                className="history-filter-select"
+                className="builder-active-control builder-active-control--size"
                 options={[
                   { value: "created_desc", label: "Newest activity first" },
                   { value: "created_asc", label: "Oldest activity first" },
@@ -282,7 +282,7 @@ export default function HistoryExplorerPage() {
                   { value: "source", label: "Source then serial" },
                 ]}
               />
-              <div style={{ display: "flex", alignItems: "flex-end" }}>
+              <div style={{ display: "flex", alignItems: "flex-end", minWidth: "120px" }}>
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Searching..." : "Search"}
                 </Button>

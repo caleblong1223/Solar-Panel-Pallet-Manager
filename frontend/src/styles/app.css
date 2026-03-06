@@ -467,30 +467,6 @@ h1 {
   white-space: nowrap;
 }
 
-.history-filter-select.builder-active-pill {
-  padding: 4px 8px !important;
-  gap: 0 !important;
-}
-
-.history-filter-select .builder-active-pill__label,
-.history-filter-select > span {
-  font-size: 0.7rem;
-  line-height: 1;
-  margin: 0 0 5px 0;
-}
-
-.history-filter-select .animated-select__control {
-  min-height: 20px !important;
-  height: 20px !important;
-  padding: 0 !important;
-  line-height: 1 !important;
-  align-items: center !important;
-}
-
-.history-filter-select .animated-select__value {
-  line-height: 1 !important;
-}
-
 .customers-layout {
   display: grid;
   gap: var(--space-4);
