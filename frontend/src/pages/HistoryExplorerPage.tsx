@@ -220,7 +220,7 @@ export default function HistoryExplorerPage() {
       <section className="builder-grid">
         <Card title="Pallet History Filters">
           <form className="builder-form" onSubmit={runSearch}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "8px" }}>
               <AnimatedSelect
                 label="Date"
                 value={datePreset}

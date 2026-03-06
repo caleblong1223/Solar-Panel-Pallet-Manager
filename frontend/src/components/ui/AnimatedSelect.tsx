@@ -71,6 +71,7 @@ export default function AnimatedSelect({
       className={[
         "ui-input-label",
         "animated-select",
+        isOpen ? "animated-select--open" : "",
         variant === "pill" ? "animated-select--pill builder-active-pill builder-active-pill--input" : "",
         className ?? "",
       ]
@@ -112,4 +113,3 @@ export default function AnimatedSelect({
     </label>
   );
 }
-

@@ -293,6 +293,10 @@ h1 {
   z-index: 1200;
 }
 
+.animated-select--open {
+  z-index: 1600;
+}
+
 .animated-select--pill > span {
   font-size: 0.78rem;
   text-transform: uppercase;
@@ -464,17 +468,24 @@ h1 {
 }
 
 .history-filter-select.builder-active-pill {
-  padding: 6px 10px;
-  gap: 2px;
+  padding: 4px 8px !important;
+  gap: 1px !important;
 }
 
 .history-filter-select .builder-active-pill__label,
 .history-filter-select > span {
+  font-size: 0.7rem;
   line-height: 1;
+  margin: 0;
 }
 
 .history-filter-select .animated-select__control {
-  min-height: 18px;
+  min-height: 14px !important;
+  padding: 0 !important;
+}
+
+.history-filter-select .animated-select__value {
+  line-height: 1.1;
 }
 
 .customers-layout {
