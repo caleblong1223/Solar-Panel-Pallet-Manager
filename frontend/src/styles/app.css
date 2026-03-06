@@ -303,6 +303,7 @@ h1 {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 10px 12px;
+  min-height: 40px;
 }
 
 .builder-grid {
@@ -314,9 +315,9 @@ h1 {
 
 .builder-active-header {
   margin-top: var(--space-4);
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   align-items: end;
 }
 
@@ -327,6 +328,7 @@ h1 {
   padding: 10px 12px;
   display: grid;
   gap: 4px;
+  width: 130px;
 }
 
 .builder-active-pill__label {
@@ -358,6 +360,23 @@ h1 {
 .builder-active-pill__number:focus,
 .builder-active-pill__date:focus {
   outline: none;
+}
+
+.builder-active-control {
+  width: 160px;
+}
+
+.builder-active-control--customer {
+  width: 220px;
+}
+
+.builder-active-control--panel,
+.builder-active-control--size {
+  width: 140px;
+}
+
+.builder-active-control--date {
+  width: 170px;
 }
 
 .customers-layout {

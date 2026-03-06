@@ -34,6 +34,7 @@ type AnimatedSelectProps = {
   options: AnimatedSelectOption[];
   onChange: (value: string) => void;
   variant?: "default" | "pill";
+  className?: string;
 };
 
 function AnimatedSelect({
@@ -43,6 +44,7 @@ function AnimatedSelect({
   options,
   onChange,
   variant = "default",
+  className,
 }: AnimatedSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -56,11 +58,14 @@ function AnimatedSelect({
 
   return (
     <label
-      className={
-        variant === "pill"
-          ? "ui-input-label animated-select animated-select--pill"
-          : "ui-input-label animated-select"
-      }
+      className={[
+        "ui-input-label",
+        "animated-select",
+        variant === "pill" ? "animated-select--pill" : "",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <span>{label}</span>
       <button
@@ -402,6 +407,7 @@ export default function LiveBuilderPage() {
               }
             }}
             variant="pill"
+            className="builder-active-control builder-active-control--customer"
           />
           <AnimatedSelect
             label="Panel Type"
@@ -412,6 +418,7 @@ export default function LiveBuilderPage() {
             }))}
             onChange={(next) => setNewPalletTemplate(next)}
             variant="pill"
+            className="builder-active-control builder-active-control--panel"
           />
           <AnimatedSelect
             label="Pallet Size"
@@ -422,14 +429,18 @@ export default function LiveBuilderPage() {
             }))}
             onChange={(next) => setNewPalletSize(Number(next))}
             variant="pill"
+            className="builder-active-control builder-active-control--size"
           />
-          <label className="builder-active-pill builder-active-pill--input">
+          <label className="builder-active-pill builder-active-pill--input builder-active-control builder-active-control--date">
             <span className="builder-active-pill__label">Packout date</span>
             <input
               className="builder-active-pill__date"
               type="date"
               value={packoutDate}
-              onChange={(event) => setPackoutDate(event.target.value)}
+              onChange={(event) => {
+                setPackoutDate(event.target.value);
+                event.currentTarget.blur();
+              }}
             />
           </label>
         </section>
