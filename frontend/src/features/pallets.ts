@@ -33,6 +33,7 @@ export type UpdatePalletPayload = {
   template_type?: string;
   customer_id?: number | null;
   max_panels?: number;
+  pallet_number?: number;
 };
 
 export async function listPallets(token: string, status = "active") {

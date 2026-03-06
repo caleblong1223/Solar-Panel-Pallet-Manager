@@ -33,9 +33,17 @@ type AnimatedSelectProps = {
   placeholder?: string;
   options: AnimatedSelectOption[];
   onChange: (value: string) => void;
+  variant?: "default" | "pill";
 };
 
-function AnimatedSelect({ label, value, placeholder, options, onChange }: AnimatedSelectProps) {
+function AnimatedSelect({
+  label,
+  value,
+  placeholder,
+  options,
+  onChange,
+  variant = "default",
+}: AnimatedSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const currentLabel =
@@ -47,7 +55,13 @@ function AnimatedSelect({ label, value, placeholder, options, onChange }: Animat
   };
 
   return (
-    <label className="ui-input-label animated-select">
+    <label
+      className={
+        variant === "pill"
+          ? "ui-input-label animated-select animated-select--pill"
+          : "ui-input-label animated-select"
+      }
+    >
       <span>{label}</span>
       <button
         type="button"
@@ -95,6 +109,7 @@ export default function LiveBuilderPage() {
   const [newPalletSize, setNewPalletSize] = useState<number>(DEFAULT_MAX_PANELS);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | "none">("none");
+  const [palletNumberDraft, setPalletNumberDraft] = useState<string>("");
   const [packoutDate, setPackoutDate] = useState<string>(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -105,6 +120,14 @@ export default function LiveBuilderPage() {
   const serialInputRef = useRef<HTMLInputElement | null>(null);
 
   const remaining = current ? current.max_panels - current.item_count : 0;
+
+  useEffect(() => {
+    if (current) {
+      setPalletNumberDraft(String(current.pallet_number));
+    } else {
+      setPalletNumberDraft("");
+    }
+  }, [current]);
 
   useEffect(() => {
     // Start each app session with a clean Builder state instead of auto-resuming
@@ -249,6 +272,7 @@ export default function LiveBuilderPage() {
     const desiredTemplateType = newPalletTemplate;
     const desiredCustomerId = selectedCustomerId === "none" ? null : selectedCustomerId;
     const desiredMaxPanels = newPalletSize;
+    const desiredPalletNumber = Number(palletNumberDraft);
     let workingPallet = current;
     const palletNumber = current.pallet_number;
 
@@ -259,13 +283,15 @@ export default function LiveBuilderPage() {
         (
           workingPallet.template_type !== desiredTemplateType ||
           workingPallet.customer_id !== desiredCustomerId ||
-          workingPallet.max_panels !== desiredMaxPanels
+          workingPallet.max_panels !== desiredMaxPanels ||
+          (Number.isFinite(desiredPalletNumber) && desiredPalletNumber > 0 && workingPallet.pallet_number !== desiredPalletNumber)
         )
       ) {
         workingPallet = await updatePallet(token, workingPallet.id, {
           template_type: desiredTemplateType,
           customer_id: desiredCustomerId,
           max_panels: desiredMaxPanels,
+          pallet_number: Number.isFinite(desiredPalletNumber) && desiredPalletNumber > 0 ? desiredPalletNumber : undefined,
         });
         setCurrent(workingPallet);
       } else if (
@@ -273,7 +299,8 @@ export default function LiveBuilderPage() {
         (
           workingPallet.template_type !== desiredTemplateType ||
           workingPallet.customer_id !== desiredCustomerId ||
-          workingPallet.max_panels !== desiredMaxPanels
+          workingPallet.max_panels !== desiredMaxPanels ||
+          (Number.isFinite(desiredPalletNumber) && desiredPalletNumber > 0 && workingPallet.pallet_number !== desiredPalletNumber)
         )
       ) {
         workingPallet = {
@@ -281,6 +308,10 @@ export default function LiveBuilderPage() {
           template_type: desiredTemplateType,
           customer_id: desiredCustomerId,
           max_panels: desiredMaxPanels,
+          pallet_number:
+            Number.isFinite(desiredPalletNumber) && desiredPalletNumber > 0
+              ? desiredPalletNumber
+              : workingPallet.pallet_number,
         };
         setCurrent(workingPallet);
       }
@@ -304,14 +335,54 @@ export default function LiveBuilderPage() {
     }
   };
 
+  const commitPalletNumber = async () => {
+    if (!current) return;
+    const parsed = Number(palletNumberDraft);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setPalletNumberDraft(String(current.pallet_number));
+      notify("Pallet number must be a positive whole number", "warning");
+      return;
+    }
+    if (parsed === current.pallet_number) return;
+
+    if (token) {
+      try {
+        const updated = await updatePallet(token, current.id, { pallet_number: parsed });
+        setCurrent(updated);
+        notify(`Pallet number updated to #${updated.pallet_number}`, "success");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to update pallet number";
+        notify(message, "error");
+        setPalletNumberDraft(String(current.pallet_number));
+      }
+      return;
+    }
+
+    setCurrent({ ...current, pallet_number: parsed });
+    notify(`Pallet number updated to #${parsed} (offline pending sync)`, "warning");
+  };
+
   return (
     <AppFrame title="Builder">
       {current ? (
         <section className="builder-active-header">
-          <div className="builder-active-pill">
+          <label className="builder-active-pill builder-active-pill--input">
             <span className="builder-active-pill__label">Pallet</span>
-            <strong>#{current.pallet_number}</strong>
-          </div>
+            <input
+              className="builder-active-pill__number"
+              type="number"
+              min={1}
+              value={palletNumberDraft}
+              onChange={(event) => setPalletNumberDraft(event.target.value)}
+              onBlur={() => void commitPalletNumber()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void commitPalletNumber();
+                }
+              }}
+            />
+          </label>
           <AnimatedSelect
             label="Customer"
             value={selectedCustomerId === "none" ? "" : String(selectedCustomerId)}
@@ -330,6 +401,7 @@ export default function LiveBuilderPage() {
                 setSelectedCustomerId(Number(next));
               }
             }}
+            variant="pill"
           />
           <AnimatedSelect
             label="Panel Type"
@@ -339,6 +411,7 @@ export default function LiveBuilderPage() {
               label: t,
             }))}
             onChange={(next) => setNewPalletTemplate(next)}
+            variant="pill"
           />
           <AnimatedSelect
             label="Pallet Size"
@@ -348,27 +421,27 @@ export default function LiveBuilderPage() {
               label: `${size} panels`,
             }))}
             onChange={(next) => setNewPalletSize(Number(next))}
+            variant="pill"
           />
-          <label className="ui-input-label">
-            <span>Packout date</span>
+          <label className="builder-active-pill builder-active-pill--input">
+            <span className="builder-active-pill__label">Packout date</span>
             <input
-              className="ui-input"
+              className="builder-active-pill__date"
               type="date"
               value={packoutDate}
               onChange={(event) => setPackoutDate(event.target.value)}
             />
           </label>
-          <div className="builder-active-pill">
-            <span className="builder-active-pill__label">Panels</span>
-            <strong>
-              {current.item_count}/{current.max_panels}
-              {remaining > 0 ? ` · ${remaining} remaining` : ""}
-            </strong>
-          </div>
         </section>
       ) : null}
       <section className="builder-grid">
-        <Card title={current ? "Active pallet" : "No active pallet"}>
+        <Card
+          title={
+            current
+              ? `Active pallet · ${current.item_count}/${current.max_panels}${remaining > 0 ? ` · ${remaining} remaining` : ""}`
+              : "No active pallet"
+          }
+        >
           {current ? (
             <>
               <form className="builder-form" onSubmit={handleAddSerial} style={{ marginTop: "12px" }}>

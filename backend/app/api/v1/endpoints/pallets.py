@@ -273,6 +273,24 @@ def update_pallet(
         if payload.max_panels != pallet.max_panels:
             changes["max_panels"] = {"old": pallet.max_panels, "new": payload.max_panels}
             pallet.max_panels = payload.max_panels
+    if payload.pallet_number is not None and payload.pallet_number != pallet.pallet_number:
+        number_taken = (
+            db.query(Pallet.id)
+            .filter(
+                Pallet.deleted_at.is_(None),
+                Pallet.id != pallet.id,
+                Pallet.pallet_number == payload.pallet_number,
+            )
+            .first()
+        )
+        if number_taken is not None:
+            raise _error(
+                status.HTTP_409_CONFLICT,
+                "PALLET_NUMBER_ALREADY_EXISTS",
+                "Pallet number already exists",
+            )
+        changes["pallet_number"] = {"old": pallet.pallet_number, "new": payload.pallet_number}
+        pallet.pallet_number = payload.pallet_number
 
     _record_audit(
         db,

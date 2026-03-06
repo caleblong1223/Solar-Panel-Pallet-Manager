@@ -217,6 +217,7 @@ h1 {
 
 .animated-select {
   position: relative;
+  z-index: 1;
 }
 
 .animated-select__control {
@@ -286,6 +287,24 @@ h1 {
   background: color-mix(in srgb, var(--color-surface-alt) 70%, transparent);
 }
 
+.animated-select:focus-within {
+  z-index: 40;
+}
+
+.animated-select--pill > span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.animated-select--pill .animated-select__control {
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
 .builder-grid {
   display: grid;
   gap: var(--space-4);
@@ -298,6 +317,7 @@ h1 {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
 }
 
 .builder-active-pill {
@@ -314,6 +334,30 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
+}
+
+.builder-active-pill--input {
+  gap: 6px;
+}
+
+.builder-active-pill__number,
+.builder-active-pill__date {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.builder-active-pill__number {
+  width: 100%;
+}
+
+.builder-active-pill__number:focus,
+.builder-active-pill__date:focus {
+  outline: none;
 }
 
 .customers-layout {

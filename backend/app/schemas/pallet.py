@@ -19,6 +19,7 @@ class PalletUpdate(BaseModel):
     template_type: str | None = Field(default=None, max_length=32)
     customer_id: int | None = None
     max_panels: int | None = Field(default=None, ge=1, le=500)
+    pallet_number: int | None = Field(default=None, ge=1, le=1000000)
 
 
 class PalletItemResponse(BaseModel):
