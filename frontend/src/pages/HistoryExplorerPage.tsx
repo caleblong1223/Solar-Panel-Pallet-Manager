@@ -220,7 +220,7 @@ export default function HistoryExplorerPage() {
       <section className="builder-grid">
         <Card title="Pallet History Filters" className="history-filters-card">
           <form className="builder-form" onSubmit={runSearch}>
-            <div className="builder-active-header">
+            <div className="history-filter-grid">
               <AnimatedSelect
                 label="Date"
                 value={datePreset}
@@ -256,18 +256,6 @@ export default function HistoryExplorerPage() {
                   })),
                 ]}
               />
-              <div style={{ display: "grid", gap: "6px", minWidth: "220px", flex: "1 1 220px" }}>
-                <TextInput
-                  label="Serial"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value.toUpperCase())}
-                  placeholder="Enter full or partial serial"
-                />
-                <label className="ui-checkbox">
-                  <input type="checkbox" checked={exact} onChange={(event) => setExact(event.target.checked)} />
-                  Exact match only
-                </label>
-              </div>
               <AnimatedSelect
                 label="Sort"
                 value={sortMode}
@@ -282,11 +270,23 @@ export default function HistoryExplorerPage() {
                   { value: "source", label: "Source then serial" },
                 ]}
               />
-              <div style={{ display: "flex", alignItems: "flex-end", minWidth: "120px" }}>
+              <div className="history-button-wrapper">
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Searching..." : "Search"}
                 </Button>
               </div>
+            </div>
+            <div style={{ display: "grid", gap: "6px" }}>
+              <TextInput
+                label="Serial"
+                value={query}
+                onChange={(event) => setQuery(event.target.value.toUpperCase())}
+                placeholder="Enter full or partial serial"
+              />
+              <label className="ui-checkbox">
+                <input type="checkbox" checked={exact} onChange={(event) => setExact(event.target.checked)} />
+                Exact match only
+              </label>
             </div>
           </form>
         </Card>
