@@ -74,9 +74,22 @@ fn start_bundled_backend(app: &tauri::App) {
   }
 }
 
+#[tauri::command]
+fn open_with_system(target: String) -> Result<(), String> {
+  if target.trim().is_empty() {
+    return Err("Target cannot be empty".to_string());
+  }
+  Command::new("open")
+    .arg(target)
+    .spawn()
+    .map_err(|err| format!("Failed to open with system default app: {err}"))?;
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .invoke_handler(tauri::generate_handler![open_with_system])
     .setup(|app| {
       start_bundled_backend(app);
       if cfg!(debug_assertions) {

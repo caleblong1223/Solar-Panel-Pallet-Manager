@@ -20,6 +20,7 @@ import {
 import { getExportDownloadEndpoint } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
 import { searchBarcodes } from "../features/barcodes";
+import { openWithSystem } from "../lib/systemOpen";
 
 const DEFAULT_MAX_PANELS = 25;
 const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
@@ -444,7 +445,7 @@ export default function LiveBuilderPage() {
         packout_date: packoutDate || undefined,
       });
       const downloadEndpoint = getExportDownloadEndpoint(created.id, "xlsx");
-      window.open(downloadEndpoint, "_blank", "noopener,noreferrer");
+      await openWithSystem(downloadEndpoint);
       notify(`Pallet #${palletNumber} completed · export ready`, "success");
       setCurrent(null);
       setFallbackSerials([]);

@@ -6,6 +6,7 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
 import { getExportDownloadEndpoint, listExports, type ExportRecord } from "../features/exports";
+import { openWithSystem } from "../lib/systemOpen";
 
 const TEMPLATE_OPTIONS = ["", "200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 
@@ -63,9 +64,14 @@ export default function ExportsPage() {
     }
   };
 
-  const handleOpen = (exportId: number) => {
+  const handleOpen = async (exportId: number) => {
     const endpoint = getExportDownloadEndpoint(exportId, "pdf");
-    window.open(endpoint, "_blank", "noopener,noreferrer");
+    try {
+      await openWithSystem(endpoint);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to open export";
+      notify(message, "error");
+    }
   };
 
   return (

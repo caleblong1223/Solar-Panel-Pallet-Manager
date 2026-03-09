@@ -135,7 +135,6 @@ def _resolve_sim_columns(sheet) -> dict[str, int]:
         "voc": ("voc", "vocv"),
         "ipm": ("ipm", "impp", "imp", "impa", "ipma"),
         "vpm": ("vpm", "vpmv", "vmp", "vmpv", "vmpp", "vpma"),
-        "ff": ("ff", "ffpercent", "fillfactor"),
     }
     resolved: dict[str, int] = {}
     for col in range(1, 32):
@@ -174,6 +173,8 @@ def generate_export_workbook_bytes(
 
         # 1.1 compatibility cells.
         sheet["B1"] = panel_type
+        sheet["B2"] = len(pallet.items)
+        sheet["D2"] = len(pallet.items) * 40
         sheet["G3"] = excel_when
         sheet["B3"] = _build_b3_value(panel_type, pallet.pallet_number, when)
 
@@ -219,8 +220,6 @@ def generate_export_workbook_bytes(
                 sheet.cell(row=idx, column=sim_columns["ipm"]).value = _round_electrical(values.get("ipm"))
             if "vpm" in sim_columns:
                 sheet.cell(row=idx, column=sim_columns["vpm"]).value = _round_electrical(values.get("vpm"))
-            if "ff" in sim_columns:
-                sheet.cell(row=idx, column=sim_columns["ff"]).value = _round_electrical(values.get("ff"))
 
         out = BytesIO()
         workbook.save(out)

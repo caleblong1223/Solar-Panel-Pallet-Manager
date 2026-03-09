@@ -18,6 +18,7 @@ import {
   type ExportRecord,
 } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
+import { openWithSystem } from "../lib/systemOpen";
 
 type SheetCell = CellBase<string>;
 type EditableSheet = {
@@ -58,6 +59,7 @@ export default function HistoryExplorerPage() {
   const [editingExport, setEditingExport] = useState<ExportRecord | null>(null);
   const [editableSheets, setEditableSheets] = useState<EditableSheet[]>([]);
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+  const [detailsTab, setDetailsTab] = useState<"pallet" | "editor">("pallet");
 
   const selectedPallet = useMemo(
     () => pallets.find((pallet) => pallet.id === selectedPalletId) ?? null,
@@ -255,9 +257,14 @@ export default function HistoryExplorerPage() {
     }
   };
 
-  const handleOpenExport = (exportId: number, format: "pdf" | "xlsx") => {
+  const handleOpenExport = async (exportId: number, format: "pdf" | "xlsx") => {
     const endpoint = getExportDownloadEndpoint(exportId, format);
-    window.open(endpoint, "_blank", "noopener,noreferrer");
+    try {
+      await openWithSystem(endpoint);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Failed to open ${format.toUpperCase()}`;
+      notify(message, "error");
+    }
   };
 
   const handleDeletePallet = async () => {
@@ -278,8 +285,9 @@ export default function HistoryExplorerPage() {
       setSelectedPalletId(null);
       setExports([]);
       notify("Pallet deleted", "success");
-    } catch {
-      notify("Failed to delete pallet", "error");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete pallet";
+      notify(message, "error");
     }
   };
 
@@ -290,6 +298,7 @@ export default function HistoryExplorerPage() {
     setEditingExport(null);
     setEditableSheets([]);
     setActiveSheetIndex(0);
+    setDetailsTab("pallet");
   };
 
   const refreshPalletExports = async (palletId: number) => {
@@ -298,6 +307,7 @@ export default function HistoryExplorerPage() {
   };
 
   const handleEditExport = async (item: ExportRecord) => {
+    setDetailsTab("editor");
     setIsEditorOpen(true);
     setIsEditorLoading(true);
     setEditingExport(item);
@@ -493,6 +503,26 @@ export default function HistoryExplorerPage() {
 
           {selectedPallet ? (
             <>
+              <div className="history-editor-tabs" style={{ marginBottom: "10px" }}>
+                <button
+                  type="button"
+                  className={detailsTab === "pallet" ? "history-editor-tab history-editor-tab--active" : "history-editor-tab"}
+                  onClick={() => setDetailsTab("pallet")}
+                >
+                  Pallet Details
+                </button>
+                <button
+                  type="button"
+                  className={detailsTab === "editor" ? "history-editor-tab history-editor-tab--active" : "history-editor-tab"}
+                  onClick={() => setDetailsTab("editor")}
+                  disabled={!isEditorOpen}
+                >
+                  Spreadsheet Editor
+                </button>
+              </div>
+
+              {detailsTab === "pallet" ? (
+                <>
               <div style={{ marginBottom: "8px" }}>
                 <Button variant="danger" onClick={() => void handleDeletePallet()}>
                   Delete pallet
@@ -549,8 +579,10 @@ export default function HistoryExplorerPage() {
                   ))}
                 </ul>
               )}
+                </>
+              ) : null}
 
-              {isEditorOpen ? (
+              {isEditorOpen && detailsTab === "editor" ? (
                 <section className="history-editor-panel">
                   <div className="history-editor-header">
                     <strong>Spreadsheet Editor</strong>
