@@ -1,0 +1,63 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - paragraph [ref=e5]: Pallet Manager 2.0
+      - navigation [ref=e6]:
+        - link "Builder" [ref=e7] [cursor=pointer]:
+          - /url: /builder
+        - link "History" [ref=e8] [cursor=pointer]:
+          - /url: /history
+        - link "Import" [ref=e9] [cursor=pointer]:
+          - /url: /imports-exports
+        - link "Customer Management" [ref=e10] [cursor=pointer]:
+          - /url: /customers
+        - link "Settings" [ref=e11] [cursor=pointer]:
+          - /url: /settings
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - heading "Builder" [level=1] [ref=e14]
+        - generic [ref=e15]:
+          - paragraph [ref=e16]:
+            - text: "Connection:"
+            - strong [ref=e17]: Online
+          - paragraph [ref=e18]: "Sync: Idle | Pending: 0 | Review: 0"
+      - article [ref=e20]:
+        - heading "No active pallet" [level=2] [ref=e21]
+        - paragraph [ref=e22]: Start a new pallet to begin scanning. Choose the customer, panel type, and pallet size you need.
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - generic [ref=e25]: Customer
+            - button "Customer No customer selected Josh Atwood" [ref=e26] [cursor=pointer]:
+              - generic [ref=e27]: Josh Atwood
+              - generic [ref=e28]: ▼
+            - generic [ref=e29]:
+              - button "No customer selected" [ref=e30] [cursor=pointer]
+              - button "Josh Atwood" [ref=e31] [cursor=pointer]
+          - generic [ref=e32]:
+            - generic [ref=e33]: Panel type
+            - button "Panel type 200WT 220WT 220M6 330WT 450WT 450BT" [ref=e34] [cursor=pointer]:
+              - generic [ref=e35]: 200WT
+              - generic [ref=e36]: ▼
+            - generic [ref=e37]:
+              - button "200WT" [ref=e38] [cursor=pointer]
+              - button "220WT" [ref=e39] [cursor=pointer]
+              - button "220M6" [ref=e40] [cursor=pointer]
+              - button "330WT" [ref=e41] [cursor=pointer]
+              - button "450WT" [ref=e42] [cursor=pointer]
+              - button "450BT" [ref=e43] [cursor=pointer]
+          - generic [ref=e44]:
+            - generic [ref=e45]: Pallet size
+            - button "Pallet size 25 panels 26 panels 30 panels 35 panels" [ref=e46] [cursor=pointer]:
+              - generic [ref=e47]: 25 panels
+              - generic [ref=e48]: ▼
+            - generic [ref=e49]:
+              - button "25 panels" [ref=e50] [cursor=pointer]
+              - button "26 panels" [ref=e51] [cursor=pointer]
+              - button "30 panels" [ref=e52] [cursor=pointer]
+              - button "35 panels" [ref=e53] [cursor=pointer]
+        - button "Start new pallet" [ref=e54] [cursor=pointer]
+  - generic "Notifications"
+```

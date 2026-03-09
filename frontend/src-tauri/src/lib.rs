@@ -99,8 +99,29 @@ fn open_with_system(target: String) -> Result<(), String> {
   if target.trim().is_empty() {
     return Err("Target cannot be empty".to_string());
   }
-  Command::new("open")
-    .arg(target)
+
+  #[cfg(target_os = "macos")]
+  let mut command = {
+    let mut cmd = Command::new("open");
+    cmd.arg(&target);
+    cmd
+  };
+
+  #[cfg(target_os = "windows")]
+  let mut command = {
+    let mut cmd = Command::new("cmd");
+    cmd.arg("/C").arg("start").arg("").arg(&target);
+    cmd
+  };
+
+  #[cfg(all(unix, not(target_os = "macos")))]
+  let mut command = {
+    let mut cmd = Command::new("xdg-open");
+    cmd.arg(&target);
+    cmd
+  };
+
+  command
     .spawn()
     .map_err(|err| format!("Failed to open with system default app: {err}"))?;
   Ok(())
