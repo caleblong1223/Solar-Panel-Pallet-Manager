@@ -29,6 +29,18 @@ export default function ImportExportPage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const formatSimTimestamp = (value: string | null | undefined) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleString();
+  };
+
+  const formatElectrical = (label: string, value: number | null | undefined, digits = 2) => {
+    if (value == null) return null;
+    return `${label}: ${value.toFixed(digits)}`;
+  };
+
   const handleUpload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (selectedFiles.length === 0) {
@@ -70,7 +82,7 @@ export default function ImportExportPage() {
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
     const serial = searchSerial.trim();
-    if (!token || !serial) {
+    if (!serial) {
       notify("Enter a serial to search", "warning");
       return;
     }
@@ -86,8 +98,9 @@ export default function ImportExportPage() {
       if (simOnly.length === 0) {
         notify("No Sun Simulator data found for this serial", "warning");
       }
-    } catch {
-      notify("Search failed", "error");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      notify(`Search failed: ${detail}`, "error");
     } finally {
       setSearchBusy(false);
     }
@@ -175,11 +188,19 @@ export default function ImportExportPage() {
                   <li key={`${r.sim_panel_id ?? 0}-${r.serial}-${r.sim_test_timestamp ?? ""}`}>
                     <span>
                       {r.serial}
-                      {r.sim_panel_type != null ? ` · ${r.sim_panel_type}` : ""}
-                      {r.sim_result != null ? ` · ${r.sim_result}` : ""}
-                      {r.sim_test_timestamp != null ? ` · ${r.sim_test_timestamp}` : ""}
-                      {r.sim_batch_id != null ? ` (batch #${r.sim_batch_id})` : ""}
+                      {r.sim_test_timestamp != null ? ` · ${formatSimTimestamp(r.sim_test_timestamp)}` : ""}
                     </span>
+                    <div style={{ marginTop: "4px", color: "var(--color-text-secondary)", fontSize: "0.9rem" }}>
+                      {[
+                        formatElectrical("Pm", r.sim_watts),
+                        formatElectrical("Isc", r.sim_isc),
+                        formatElectrical("Voc(V)", r.sim_voc),
+                        formatElectrical("Ipm", r.sim_imp),
+                        formatElectrical("Vpm(V)", r.sim_vmp),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
                   </li>
                 ))}
               </ul>

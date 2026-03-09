@@ -14,7 +14,7 @@ from app.api.v1.endpoints.auth import get_current_user
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.pallet import Export, Pallet, PalletItem
+from app.models.pallet import Export, Pallet, PalletItem, SimImportBatch, SimPanel
 
 
 class DummyRole:
@@ -29,7 +29,12 @@ class DummyUser:
 
 
 @contextmanager
-def _client_with_pallet(user: DummyUser, *, pallet_status: str = "completed") -> Generator[TestClient, None, None]:
+def _client_with_pallet(
+    user: DummyUser,
+    *,
+    pallet_status: str = "completed",
+    max_panels: int = 2,
+) -> Generator[TestClient, None, None]:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -43,7 +48,7 @@ def _client_with_pallet(user: DummyUser, *, pallet_status: str = "completed") ->
         pallet = Pallet(
             pallet_number=9,
             status=pallet_status,
-            max_panels=2,
+            max_panels=max_panels,
             created_by=user.id,
             completed_at=datetime.now(timezone.utc) if pallet_status == "completed" else None,
         )
@@ -53,6 +58,33 @@ def _client_with_pallet(user: DummyUser, *, pallet_status: str = "completed") ->
             [
                 PalletItem(pallet_id=pallet.id, serial="EXP001", slot_index=1, added_by=user.id),
                 PalletItem(pallet_id=pallet.id, serial="EXP002", slot_index=2, added_by=user.id),
+            ]
+        )
+        batch = SimImportBatch(source_filename="sim.csv", status="completed")
+        seed_db.add(batch)
+        seed_db.flush()
+        seed_db.add_all(
+            [
+                SimPanel(
+                    batch_id=batch.id,
+                    serial="EXP001",
+                    watts=450.12,
+                    isc=11.234,
+                    voc=49.321,
+                    imp=10.456,
+                    vmp=40.111,
+                    ff=0.812,
+                ),
+                SimPanel(
+                    batch_id=batch.id,
+                    serial="EXP002",
+                    watts=451.01,
+                    isc=11.101,
+                    voc=49.101,
+                    imp=10.300,
+                    vmp=40.000,
+                    ff=0.800,
+                ),
             ]
         )
         seed_db.commit()
@@ -207,3 +239,37 @@ def test_replace_export_workbook_endpoint(monkeypatch) -> None:
         assert str(captured["object_key"]).endswith(str(captured["filename"]))
         assert captured["content_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         assert captured["content_len"] == len(b"edited-xlsx-bytes")
+
+
+def test_create_export_populates_sim_values_in_workbook(monkeypatch) -> None:
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    with _client_with_pallet(DummyUser(user_id=7, roles=["packout_operator"]), max_panels=25) as client:
+        from app.api.v1.endpoints import exports as exports_endpoint
+
+        captured: dict[str, bytes] = {}
+
+        def _upload_capture(export_id: int, pallet_id: int, filename: str, content: bytes):
+            if filename.lower().endswith(".xlsx"):
+                captured["xlsx"] = content
+            return f"exports/2026/03/{pallet_id}/{export_id}/{filename}", "checksum123"
+
+        monkeypatch.setattr(exports_endpoint, "upload_export_artifact", _upload_capture)
+        response = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
+        assert response.status_code == 201
+        assert "xlsx" in captured
+
+        workbook = load_workbook(BytesIO(captured["xlsx"]))
+        try:
+            sheet = workbook["PALLET SHEET"]
+            # Row 5 corresponds to EXP001 in seeded pallet items.
+            assert sheet["B5"].value == "EXP001"
+            assert float(sheet["C5"].value) == 450.12
+            assert float(sheet["D5"].value) == 11.23
+            assert float(sheet["E5"].value) == 49.32
+            assert float(sheet["F5"].value) == 10.46
+            assert float(sheet["G5"].value) == 40.11
+        finally:
+            workbook.close()

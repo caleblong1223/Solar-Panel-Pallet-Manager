@@ -4,6 +4,7 @@ from datetime import datetime
 from io import BytesIO
 import os
 from pathlib import Path
+import re
 
 from openpyxl import load_workbook
 
@@ -121,12 +122,49 @@ def _build_b3_value(panel_type: str, pallet_number: int, export_dt: datetime) ->
     return f"{panel_type}{date_mdyyyy}-{pallet_number}"
 
 
+def _normalize_header(value: object) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
+
+
+def _resolve_sim_columns(sheet) -> dict[str, int]:
+    header_aliases: dict[str, tuple[str, ...]] = {
+        "pm": ("pm", "pmw", "pmax", "pmaxw", "watts", "watt"),
+        "isc": ("isc", "isca"),
+        "voc": ("voc", "vocv"),
+        "ipm": ("ipm", "impp", "imp", "impa", "ipma"),
+        "vpm": ("vpm", "vpmv", "vmp", "vmpv", "vmpp", "vpma"),
+        "ff": ("ff", "ffpercent", "fillfactor"),
+    }
+    resolved: dict[str, int] = {}
+    for col in range(1, 32):
+        key = _normalize_header(sheet.cell(row=4, column=col).value)
+        if not key:
+            continue
+        for field, aliases in header_aliases.items():
+            if field in resolved:
+                continue
+            if key in aliases:
+                resolved[field] = col
+                break
+    return resolved
+
+
+def _round_electrical(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 2)
+
+
 def generate_export_workbook_bytes(
     pallet: Pallet,
     panel_type: str,
     export_dt: datetime | None = None,
+    sim_values_by_serial: dict[str, dict[str, float | None]] | None = None,
 ) -> bytes:
     when = export_dt or datetime.now()
+    excel_when = when.replace(tzinfo=None) if when.tzinfo is not None else when
     template_path = _template_path_for_capacity(pallet.max_panels)
     workbook = load_workbook(template_path)
     try:
@@ -136,7 +174,7 @@ def generate_export_workbook_bytes(
 
         # 1.1 compatibility cells.
         sheet["B1"] = panel_type
-        sheet["G3"] = when
+        sheet["G3"] = excel_when
         sheet["B3"] = _build_b3_value(panel_type, pallet.pallet_number, when)
 
         # Default customer block in A3, matching 1.1 layout.
@@ -155,13 +193,34 @@ def generate_export_workbook_bytes(
         )
         sheet["A3"] = customer_block
 
+        sim_values_by_serial = sim_values_by_serial or {}
+        sim_columns = _resolve_sim_columns(sheet)
+
         # Clear serial slots then write current pallet serials into B5..B30
         for row in range(5, 31):
             sheet.cell(row=row, column=2).value = None
+            for col in sim_columns.values():
+                sheet.cell(row=row, column=col).value = None
         for idx, item in enumerate(sorted(pallet.items, key=lambda value: value.slot_index), start=5):
             if idx > 30:
                 break
             sheet.cell(row=idx, column=2).value = item.serial
+            serial_key = (item.serial or "").strip().upper()
+            values = sim_values_by_serial.get(serial_key)
+            if not values:
+                continue
+            if "pm" in sim_columns:
+                sheet.cell(row=idx, column=sim_columns["pm"]).value = _round_electrical(values.get("pm"))
+            if "isc" in sim_columns:
+                sheet.cell(row=idx, column=sim_columns["isc"]).value = _round_electrical(values.get("isc"))
+            if "voc" in sim_columns:
+                sheet.cell(row=idx, column=sim_columns["voc"]).value = _round_electrical(values.get("voc"))
+            if "ipm" in sim_columns:
+                sheet.cell(row=idx, column=sim_columns["ipm"]).value = _round_electrical(values.get("ipm"))
+            if "vpm" in sim_columns:
+                sheet.cell(row=idx, column=sim_columns["vpm"]).value = _round_electrical(values.get("vpm"))
+            if "ff" in sim_columns:
+                sheet.cell(row=idx, column=sim_columns["ff"]).value = _round_electrical(values.get("ff"))
 
         out = BytesIO()
         workbook.save(out)
