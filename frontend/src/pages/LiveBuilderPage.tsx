@@ -449,8 +449,9 @@ export default function LiveBuilderPage() {
       setCurrent(null);
       setFallbackSerials([]);
       serialInputRef.current?.focus();
-    } catch {
-      notify("Failed to complete or export pallet", "error");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to complete or export pallet";
+      notify(message, "error");
     } finally {
       setIsBusy(false);
     }
