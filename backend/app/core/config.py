@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     minio_bucket_imports: str = "simulator-imports"
     minio_secure: bool = False
     local_import_root: str | None = None
+    local_export_root: str | None = None
 
 
 settings = Settings()

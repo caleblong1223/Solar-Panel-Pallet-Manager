@@ -11,10 +11,12 @@ import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
 import { deletePallet, getPallet, listPallets, type Pallet } from "../features/pallets";
 import {
+  applyExportWorkbookEdits,
   downloadExportWorkbook,
   getExportDownloadEndpoint,
+  getMergedExportsPdfEndpoint,
+  getExportDownloadUrl,
   listExportsByPallet,
-  replaceExportWorkbook,
   type ExportRecord,
 } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
@@ -59,7 +61,8 @@ export default function HistoryExplorerPage() {
   const [editingExport, setEditingExport] = useState<ExportRecord | null>(null);
   const [editableSheets, setEditableSheets] = useState<EditableSheet[]>([]);
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
-  const [detailsTab, setDetailsTab] = useState<"pallet" | "editor">("pallet");
+  const [selectedPalletIds, setSelectedPalletIds] = useState<number[]>([]);
+  const [isMerging, setIsMerging] = useState(false);
 
   const selectedPallet = useMemo(
     () => pallets.find((pallet) => pallet.id === selectedPalletId) ?? null,
@@ -81,32 +84,22 @@ export default function HistoryExplorerPage() {
     try {
       let response = await listPallets(apiToken, "completed", { timeoutMs: 10000 });
       if (response.total === 0) {
-        // Some deployments keep historical pallets in non-completed states.
         response = await listPallets(apiToken, "active", { timeoutMs: 10000 });
       }
       setPallets(response.pallets);
-      setSelectedPalletId((previous) => {
-        if (previous && response.pallets.some((pallet) => pallet.id === previous)) {
-          return previous;
-        }
-        return response.pallets[0]?.id ?? null;
-      });
+      setSelectedPalletIds((previous) => previous.filter((id) => response.pallets.some((pallet) => pallet.id === id)));
+      setSelectedPalletId((previous) => (previous && response.pallets.some((pallet) => pallet.id === previous) ? previous : null));
       if (response.total === 0) {
         notify("No history records found", "warning");
       }
       return response.pallets;
     } catch {
-      // Retry once after short delay to handle bundled backend warm-up.
       await new Promise((resolve) => window.setTimeout(resolve, 800));
       try {
         const retry = await listPallets(apiToken, "completed", { timeoutMs: 10000 });
         setPallets(retry.pallets);
-        setSelectedPalletId((previous) => {
-          if (previous && retry.pallets.some((pallet) => pallet.id === previous)) {
-            return previous;
-          }
-          return retry.pallets[0]?.id ?? null;
-        });
+        setSelectedPalletIds((previous) => previous.filter((id) => retry.pallets.some((pallet) => pallet.id === id)));
+        setSelectedPalletId((previous) => (previous && retry.pallets.some((pallet) => pallet.id === previous) ? previous : null));
         if (retry.total === 0) {
           notify("No history records found", "warning");
         }
@@ -134,7 +127,6 @@ export default function HistoryExplorerPage() {
   const applyFilters = (rows: Pallet[]) => {
     let filtered = [...rows];
 
-    // Date preset filter on created_at / sim_test_timestamp
     if (datePreset !== "all") {
       const now = new Date();
       let from: Date | null = null;
@@ -147,33 +139,30 @@ export default function HistoryExplorerPage() {
         }
         case "week": {
           const start = new Date(now);
-          const day = start.getDay() || 7; // Monday as start of week
+          const day = start.getDay() || 7;
           start.setDate(start.getDate() - (day - 1));
           start.setHours(0, 0, 0, 0);
           from = start;
           break;
         }
         case "month": {
-          const start = new Date(now.getFullYear(), now.getMonth(), 1);
-          from = start;
+          from = new Date(now.getFullYear(), now.getMonth(), 1);
           break;
         }
         case "year": {
-          const start = new Date(now.getFullYear(), 0, 1);
-          from = start;
+          from = new Date(now.getFullYear(), 0, 1);
           break;
         }
       }
       if (from) {
         filtered = filtered.filter((pallet) => {
           const raw = pallet.completed_at ? new Date(pallet.completed_at) : new Date(pallet.created_at);
-          if (!raw || Number.isNaN(raw.getTime())) return false;
+          if (Number.isNaN(raw.getTime())) return false;
           return raw >= from;
         });
       }
     }
 
-    // Customer filter for pallet-item rows
     if (selectedCustomerId !== "all") {
       filtered = filtered.filter((pallet) => pallet.customer_id === selectedCustomerId);
     }
@@ -200,11 +189,7 @@ export default function HistoryExplorerPage() {
 
     switch (sortMode) {
       case "completed_asc":
-        filtered.sort((a, b) => {
-          const aTime = new Date(a.completed_at ?? a.created_at).getTime();
-          const bTime = new Date(b.completed_at ?? b.created_at).getTime();
-          return aTime - bTime;
-        });
+        filtered.sort((a, b) => new Date(a.completed_at ?? a.created_at).getTime() - new Date(b.completed_at ?? b.created_at).getTime());
         break;
       case "number_asc":
         filtered.sort((a, b) => a.pallet_number - b.pallet_number);
@@ -217,11 +202,7 @@ export default function HistoryExplorerPage() {
         break;
       case "completed_desc":
       default:
-        filtered.sort((a, b) => {
-          const aTime = new Date(a.completed_at ?? a.created_at).getTime();
-          const bTime = new Date(b.completed_at ?? b.created_at).getTime();
-          return bTime - aTime;
-        });
+        filtered.sort((a, b) => new Date(b.completed_at ?? b.created_at).getTime() - new Date(a.completed_at ?? a.created_at).getTime());
         break;
     }
 
@@ -248,9 +229,7 @@ export default function HistoryExplorerPage() {
         getPallet(apiToken, palletId),
         listExportsByPallet(apiToken, palletId),
       ]);
-      setPallets((previous) =>
-        previous.map((entry) => (entry.id === palletId ? palletRow : entry))
-      );
+      setPallets((previous) => previous.map((entry) => (entry.id === palletId ? palletRow : entry)));
       setExports(exportRows.exports);
     } catch {
       notify("Failed to load pallet details", "error");
@@ -258,8 +237,13 @@ export default function HistoryExplorerPage() {
   };
 
   const handleOpenExport = async (exportId: number, format: "pdf" | "xlsx") => {
-    const endpoint = getExportDownloadEndpoint(exportId, format);
     try {
+      if (format === "xlsx") {
+        const response = await getExportDownloadUrl(apiToken, exportId, "xlsx");
+        await openWithSystem(response.download_url);
+        return;
+      }
+      const endpoint = getExportDownloadEndpoint(exportId, "pdf");
       await openWithSystem(endpoint);
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to open ${format.toUpperCase()}`;
@@ -271,19 +255,13 @@ export default function HistoryExplorerPage() {
     if (!selectedPalletId) {
       return;
     }
-    const palletNumber = selectedPallet?.pallet_number;
-    const confirmText =
-      palletNumber != null
-        ? `Delete pallet #${palletNumber}? This will free its serials for reuse but cannot be undone.`
-        : "Delete this pallet? This will free its serials for reuse but cannot be undone.";
-    if (!window.confirm(confirmText)) {
-      return;
-    }
     try {
       await deletePallet(apiToken, selectedPalletId);
       setPallets((prev) => prev.filter((row) => row.id !== selectedPalletId));
+      setSelectedPalletIds((prev) => prev.filter((id) => id !== selectedPalletId));
       setSelectedPalletId(null);
       setExports([]);
+      closeEditor();
       notify("Pallet deleted", "success");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to delete pallet";
@@ -298,7 +276,6 @@ export default function HistoryExplorerPage() {
     setEditingExport(null);
     setEditableSheets([]);
     setActiveSheetIndex(0);
-    setDetailsTab("pallet");
   };
 
   const refreshPalletExports = async (palletId: number) => {
@@ -307,7 +284,6 @@ export default function HistoryExplorerPage() {
   };
 
   const handleEditExport = async (item: ExportRecord) => {
-    setDetailsTab("editor");
     setIsEditorOpen(true);
     setIsEditorLoading(true);
     setEditingExport(item);
@@ -328,6 +304,17 @@ export default function HistoryExplorerPage() {
           blankrows: true,
           defval: "",
         }) as unknown[][];
+        // Keep editor aligned with required export layout by hiding FF column text.
+        if (rows.length >= 4 && Array.isArray(rows[3])) {
+          const ffIndex = rows[3].findIndex((value) => String(value ?? "").trim().toUpperCase().startsWith("FF"));
+          if (ffIndex >= 0) {
+            rows[3][ffIndex] = "";
+            for (let rowIndex = 4; rowIndex < rows.length; rowIndex += 1) {
+              if (!Array.isArray(rows[rowIndex])) continue;
+              rows[rowIndex][ffIndex] = "";
+            }
+          }
+        }
         return {
           name,
           data: matrixFromRows(rows),
@@ -355,21 +342,11 @@ export default function HistoryExplorerPage() {
     }
     setIsSavingEdit(true);
     try {
-      const workbook = XLSX.utils.book_new();
-      editableSheets.forEach((sheet) => {
-        const rowData = sheet.data.map((row) => row.map((cell) => cell?.value ?? ""));
-        const worksheet = XLSX.utils.aoa_to_sheet(rowData.length > 0 ? rowData : [[""]]);
-        XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
-      });
-      const workbookBytes = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
-      const blob = new Blob([workbookBytes], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const baseName = editingExport.file_name.toLowerCase().endsWith(".pdf")
-        ? editingExport.file_name.slice(0, -4)
-        : editingExport.file_name;
-      const fileName = baseName.toLowerCase().endsWith(".xlsx") ? baseName : `${baseName}.xlsx`;
-      await replaceExportWorkbook(apiToken, editingExport.id, blob, fileName);
+      const sheets = editableSheets.map((sheet) => ({
+        name: sheet.name,
+        data: sheet.data.map((row) => row.map((cell) => (cell?.value ?? ""))),
+      }));
+      await applyExportWorkbookEdits(apiToken, editingExport.id, sheets);
       if (selectedPalletId) {
         await refreshPalletExports(selectedPalletId);
       }
@@ -379,6 +356,47 @@ export default function HistoryExplorerPage() {
       notify("Failed to save spreadsheet changes", "error");
     } finally {
       setIsSavingEdit(false);
+    }
+  };
+
+  const togglePalletSelection = (palletId: number, checked: boolean) => {
+    setSelectedPalletIds((previous) => {
+      if (checked) {
+        if (previous.includes(palletId)) return previous;
+        return [...previous, palletId];
+      }
+      return previous.filter((id) => id !== palletId);
+    });
+  };
+
+  useEffect(() => {
+    if (selectedPalletIds.length > 1) {
+      closeEditor();
+    }
+  }, [selectedPalletIds.length]);
+
+  const handleMergeSelectedPallets = async () => {
+    if (selectedPalletIds.length < 2) {
+      notify("Select at least 2 pallets", "warning");
+      return;
+    }
+    setIsMerging(true);
+    try {
+      const exportsByPallet = await Promise.all(selectedPalletIds.map((palletId) => listExportsByPallet(apiToken, palletId)));
+      const exportIds = exportsByPallet
+        .map((result) => result.exports[0]?.id)
+        .filter((value): value is number => typeof value === "number");
+      if (exportIds.length < 2) {
+        notify("Need at least 2 pallets with exports to merge", "warning");
+        return;
+      }
+      const endpoint = getMergedExportsPdfEndpoint(exportIds);
+      await openWithSystem(endpoint);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to merge selected pallets";
+      notify(message, "error");
+    } finally {
+      setIsMerging(false);
     }
   };
 
@@ -472,6 +490,7 @@ export default function HistoryExplorerPage() {
             <table className="items-table">
               <thead>
                 <tr>
+                  <th>Select</th>
                   <th>Pallet</th>
                   <th>Panel Type</th>
                   <th>Panels</th>
@@ -486,6 +505,14 @@ export default function HistoryExplorerPage() {
                     className={selectedPalletId === row.id ? "row-selected" : ""}
                     onClick={() => void loadDetails(row.id)}
                   >
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedPalletIds.includes(row.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => togglePalletSelection(row.id, event.target.checked)}
+                      />
+                    </td>
                     <td>{row.pallet_number}</td>
                     <td>{row.template_type ?? "-"}</td>
                     <td>{row.item_count}</td>
@@ -501,28 +528,15 @@ export default function HistoryExplorerPage() {
         <Card title="Details">
           <p>{matchedSummary}</p>
 
-          {selectedPallet ? (
+          {selectedPalletIds.length > 1 ? (
             <>
-              <div className="history-editor-tabs" style={{ marginBottom: "10px" }}>
-                <button
-                  type="button"
-                  className={detailsTab === "pallet" ? "history-editor-tab history-editor-tab--active" : "history-editor-tab"}
-                  onClick={() => setDetailsTab("pallet")}
-                >
-                  Pallet Details
-                </button>
-                <button
-                  type="button"
-                  className={detailsTab === "editor" ? "history-editor-tab history-editor-tab--active" : "history-editor-tab"}
-                  onClick={() => setDetailsTab("editor")}
-                  disabled={!isEditorOpen}
-                >
-                  Spreadsheet Editor
-                </button>
-              </div>
-
-              {detailsTab === "pallet" ? (
-                <>
+              <p>{selectedPalletIds.length} pallets selected.</p>
+              <Button onClick={() => void handleMergeSelectedPallets()} disabled={isMerging}>
+                {isMerging ? "Merging..." : "Merge Selected XLSX To Printable PDF"}
+              </Button>
+            </>
+          ) : selectedPallet ? (
+            <>
               <div style={{ marginBottom: "8px" }}>
                 <Button variant="danger" onClick={() => void handleDeletePallet()}>
                   Delete pallet
@@ -579,57 +593,55 @@ export default function HistoryExplorerPage() {
                   ))}
                 </ul>
               )}
-                </>
-              ) : null}
-
-              {isEditorOpen && detailsTab === "editor" ? (
-                <section className="history-editor-panel">
-                  <div className="history-editor-header">
-                    <strong>Spreadsheet Editor</strong>
-                    <div className="history-editor-actions">
-                      <Button variant="secondary" onClick={closeEditor} disabled={isSavingEdit}>
-                        Exit
-                      </Button>
-                      <Button onClick={() => void handleSaveSpreadsheet()} disabled={isEditorLoading || isSavingEdit}>
-                        {isSavingEdit ? "Saving..." : "Save"}
-                      </Button>
-                    </div>
-                  </div>
-                  {isEditorLoading ? (
-                    <p>Loading spreadsheet...</p>
-                  ) : editableSheets.length === 0 ? (
-                    <p>No sheets available to edit.</p>
-                  ) : (
-                    <>
-                      <div className="history-editor-tabs">
-                        {editableSheets.map((sheet, index) => (
-                          <button
-                            type="button"
-                            key={sheet.name}
-                            className={index === activeSheetIndex ? "history-editor-tab history-editor-tab--active" : "history-editor-tab"}
-                            onClick={() => setActiveSheetIndex(index)}
-                          >
-                            {sheet.name}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="history-editor-grid">
-                        <Spreadsheet
-                          data={editableSheets[activeSheetIndex]?.data ?? []}
-                          onChange={handleSheetDataChange}
-                        />
-                      </div>
-                    </>
-                  )}
-                </section>
-              ) : null}
-
             </>
           ) : (
             <p>Select a pallet to load panel details and export actions.</p>
           )}
         </Card>
       </section>
+
+      {isEditorOpen ? (
+        <section className="builder-grid" style={{ marginTop: "12px" }}>
+          <Card title="Spreadsheet Editor">
+            <section className="history-editor-panel">
+              <div className="history-editor-header">
+                <strong>{editingExport?.file_name ?? "Spreadsheet"}</strong>
+                <div className="history-editor-actions">
+                  <Button variant="secondary" onClick={closeEditor} disabled={isSavingEdit}>
+                    Exit
+                  </Button>
+                  <Button onClick={() => void handleSaveSpreadsheet()} disabled={isEditorLoading || isSavingEdit}>
+                    {isSavingEdit ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </div>
+              {isEditorLoading ? (
+                <p>Loading spreadsheet...</p>
+              ) : editableSheets.length === 0 ? (
+                <p>No sheets available to edit.</p>
+              ) : (
+                <>
+                  <div className="history-editor-tabs">
+                    {editableSheets.map((sheet, index) => (
+                      <button
+                        type="button"
+                        key={sheet.name}
+                        className={index === activeSheetIndex ? "history-editor-tab history-editor-tab--active" : "history-editor-tab"}
+                        onClick={() => setActiveSheetIndex(index)}
+                      >
+                        {sheet.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="history-editor-grid">
+                    <Spreadsheet data={editableSheets[activeSheetIndex]?.data ?? []} onChange={handleSheetDataChange} />
+                  </div>
+                </>
+              )}
+            </section>
+          </Card>
+        </section>
+      ) : null}
     </AppFrame>
   );
 }

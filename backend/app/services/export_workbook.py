@@ -150,6 +150,15 @@ def _resolve_sim_columns(sheet) -> dict[str, int]:
     return resolved
 
 
+def _resolve_ff_column(sheet) -> int | None:
+    ff_aliases = {"ff", "ffpercent", "fillfactor"}
+    for col in range(1, 32):
+        key = _normalize_header(sheet.cell(row=4, column=col).value)
+        if key in ff_aliases:
+            return col
+    return None
+
+
 def _round_electrical(value: float | None) -> float | None:
     if value is None:
         return None
@@ -196,12 +205,17 @@ def generate_export_workbook_bytes(
 
         sim_values_by_serial = sim_values_by_serial or {}
         sim_columns = _resolve_sim_columns(sheet)
+        ff_col = _resolve_ff_column(sheet)
 
         # Clear serial slots then write current pallet serials into B5..B30
         for row in range(5, 31):
             sheet.cell(row=row, column=2).value = None
             for col in sim_columns.values():
                 sheet.cell(row=row, column=col).value = None
+            if ff_col is not None:
+                sheet.cell(row=row, column=ff_col).value = None
+        if ff_col is not None:
+            sheet.cell(row=4, column=ff_col).value = None
         for idx, item in enumerate(sorted(pallet.items, key=lambda value: value.slot_index), start=5):
             if idx > 30:
                 break

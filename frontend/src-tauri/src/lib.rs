@@ -58,6 +58,23 @@ fn start_bundled_backend(app: &tauri::App) {
     }
   };
 
+  let app_data_dir = match app.path().app_data_dir() {
+    Ok(path) => path,
+    Err(err) => {
+      eprintln!("Failed to resolve app data dir: {err}");
+      return;
+    }
+  };
+  let import_root = app_data_dir.join("IMPORTED DATA").join("LOCAL_IMPORTS");
+  let export_root = app_data_dir.join("EXPORTS").join("LOCAL_EXPORTS");
+  if let Err(err) = std::fs::create_dir_all(&import_root) {
+    eprintln!("Failed to create import directory {}: {err}", import_root.display());
+  }
+  if let Err(err) = std::fs::create_dir_all(&export_root) {
+    eprintln!("Failed to create export directory {}: {err}", export_root.display());
+  }
+  let database_url = format!("sqlite+pysqlite:///{}", app_data_dir.join("pallet_manager.db").display());
+
   let spawn_result = Command::new(python)
     .arg("-m")
     .arg("uvicorn")
@@ -66,6 +83,9 @@ fn start_bundled_backend(app: &tauri::App) {
     .arg("127.0.0.1")
     .arg("--port")
     .arg("8000")
+    .env("DATABASE_URL", database_url)
+    .env("LOCAL_IMPORT_ROOT", import_root.as_os_str())
+    .env("LOCAL_EXPORT_ROOT", export_root.as_os_str())
     .current_dir(&backend_dir)
     .spawn();
 

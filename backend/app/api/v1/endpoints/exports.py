@@ -6,7 +6,9 @@ from pathlib import Path
 from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
+from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.deps import require_roles
@@ -19,11 +21,16 @@ from app.schemas.export import (
     ExportListResponse,
     ExportResponse,
 )
-from app.services.export_generator import generate_export_pdf_bytes
+from app.services.export_generator import (
+    convert_workbook_bytes_to_pdf_bytes,
+    generate_export_pdf_bytes,
+    generate_merged_pdf_from_workbook_pages,
+)
 from app.services.export_workbook import ExportWorkbookError, generate_export_workbook_bytes
 from app.services.object_storage import (
     StorageError,
     generate_export_download_url,
+    read_export_artifact,
     upload_export_artifact,
     upload_export_artifact_at_key,
 )
@@ -31,6 +38,15 @@ from app.services.object_storage import (
 router = APIRouter()
 
 XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+class WorkbookSheetEdit(BaseModel):
+    name: str
+    data: list[list[str | None]]
+
+
+class WorkbookEditRequest(BaseModel):
+    sheets: list[WorkbookSheetEdit]
 
 
 def _record_audit(
@@ -67,21 +83,23 @@ def _xlsx_object_key(export: Export) -> tuple[str, str]:
 def _latest_sim_values_for_serials(db: Session, serials: list[str]) -> dict[str, dict[str, float | None]]:
     values: dict[str, dict[str, float | None]] = {}
     for serial in serials:
+        normalized = serial.strip().upper()
+        if not normalized:
+            continue
         latest = (
             db.query(SimPanel)
-            .filter(SimPanel.serial == serial)
+            .filter(func.upper(func.trim(SimPanel.serial)) == normalized)
             .order_by(SimPanel.test_timestamp.desc(), SimPanel.id.desc())
             .first()
         )
         if latest is None:
             continue
-        values[serial] = {
+        values[normalized] = {
             "pm": float(latest.watts) if latest.watts is not None else None,
             "isc": float(latest.isc) if latest.isc is not None else None,
             "voc": float(latest.voc) if latest.voc is not None else None,
             "ipm": float(latest.imp) if latest.imp is not None else None,
             "vpm": float(latest.vmp) if latest.vmp is not None else None,
-            "ff": float(latest.ff) if latest.ff is not None else None,
         }
     return values
 
@@ -251,16 +269,37 @@ def download_export(
     if format == "xlsx":
         object_key, file_name = _xlsx_object_key(export)
     else:
+        # Prefer PDF generated from the current workbook so "Open PDF"
+        # reflects spreadsheet edits.
+        xlsx_key, _ = _xlsx_object_key(export)
+        try:
+            workbook_bytes = read_export_artifact(xlsx_key)
+            generated_pdf = convert_workbook_bytes_to_pdf_bytes(workbook_bytes)
+            pdf_name = export.file_name if export.file_name.lower().endswith(".pdf") else f"{export.file_name}.pdf"
+            return Response(
+                content=generated_pdf,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'inline; filename="{pdf_name}"'},
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to generate PDF from XLSX: {exc}",
+            ) from exc
         object_key = export.object_key
         file_name = export.file_name
 
     local_path = Path(object_key)
     if local_path.exists():
         media_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+        headers: dict[str, str] | None = None
+        if format == "pdf":
+            headers = {"Content-Disposition": f'inline; filename="{file_name}"'}
         return FileResponse(
             path=str(local_path),
             media_type=media_type,
             filename=file_name,
+            headers=headers,
         )
 
     try:
@@ -318,3 +357,104 @@ def replace_export_workbook(
     db.commit()
     db.refresh(export)
     return ExportResponse.model_validate(export)
+
+
+@router.post("/{export_id}/apply-edits", response_model=ExportResponse)
+def apply_export_workbook_edits(
+    export_id: int,
+    payload: WorkbookEditRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "packout_operator")),
+) -> ExportResponse:
+    export = db.query(Export).filter(Export.id == export_id).first()
+    if export is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+
+    object_key, xlsx_name = _xlsx_object_key(export)
+    try:
+        existing_bytes = read_export_artifact(object_key)
+    except StorageError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    from io import BytesIO
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(BytesIO(existing_bytes))
+    try:
+        for sheet_edit in payload.sheets:
+            if sheet_edit.name not in workbook.sheetnames:
+                continue
+            ws = workbook[sheet_edit.name]
+            for row_index, row in enumerate(sheet_edit.data, start=1):
+                for col_index, value in enumerate(row, start=1):
+                    ws.cell(row=row_index, column=col_index).value = value if value not in (None, "") else None
+
+        output = BytesIO()
+        workbook.save(output)
+        edited_bytes = output.getvalue()
+    finally:
+        workbook.close()
+
+    try:
+        _, checksum = upload_export_artifact_at_key(
+            object_key=object_key,
+            filename=xlsx_name,
+            content=edited_bytes,
+            content_type=XLSX_MIME_TYPE,
+        )
+    except StorageError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    _record_audit(
+        db,
+        actor_user_id=current_user.id,
+        event_type="export.edits_applied",
+        resource_type="pallet",
+        resource_id=str(export.pallet_id),
+        outcome="success",
+        metadata_json={
+            "export_id": export.id,
+            "xlsx_object_key": object_key,
+            "xlsx_size_bytes": len(edited_bytes),
+            "xlsx_checksum_sha256": checksum,
+            "sheet_count": len(payload.sheets),
+        },
+    )
+    db.commit()
+    db.refresh(export)
+    return ExportResponse.model_validate(export)
+
+
+@router.get("/merge-pdf")
+def merge_exports_pdf(
+    export_id: list[int] = Query(default=[]),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
+):
+    del current_user
+    export_ids = [value for value in export_id if value > 0]
+    if len(export_ids) < 2:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least 2 exports to merge")
+
+    pages: list[tuple[str, bytes]] = []
+    for export_id_value in export_ids:
+        export = db.query(Export).filter(Export.id == export_id_value).first()
+        if export is None:
+            continue
+        xlsx_key, xlsx_name = _xlsx_object_key(export)
+        try:
+            workbook_bytes = read_export_artifact(xlsx_key)
+        except StorageError:
+            continue
+        pages.append((xlsx_name, workbook_bytes))
+
+    if len(pages) < 2:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unable to load selected export workbooks")
+
+    merged = generate_merged_pdf_from_workbook_pages(pages)
+    file_name = f"merged-pallet-exports-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.pdf"
+    return Response(
+        content=merged,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename=\"{file_name}\"'},
+    )

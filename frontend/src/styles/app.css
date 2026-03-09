@@ -470,7 +470,7 @@ h1 {
 .customers-layout {
   display: grid;
   gap: var(--space-4);
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(520px, 1.1fr);
   margin-top: var(--space-4);
 }
 
@@ -770,6 +770,10 @@ h1 {
   }
 
   .history-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .customers-layout {
     grid-template-columns: 1fr;
   }
 }

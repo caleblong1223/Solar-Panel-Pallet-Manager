@@ -72,6 +72,13 @@ export function getExportDownloadEndpoint(exportId: number, format: "pdf" | "xls
   return `${apiBaseUrl}/exports/${exportId}/download?${query}`;
 }
 
+export function getMergedExportsPdfEndpoint(exportIds: number[]) {
+  const { apiBaseUrl } = loadRuntimeSettings();
+  const params = new URLSearchParams();
+  exportIds.forEach((id) => params.append("export_id", String(id)));
+  return `${apiBaseUrl}/exports/merge-pdf?${params.toString()}`;
+}
+
 export async function downloadExportWorkbook(token: string, exportId: number) {
   const endpoint = getExportDownloadEndpoint(exportId, "xlsx");
   const headers: Record<string, string> = {};
@@ -108,4 +115,17 @@ export async function replaceExportWorkbook(
     throw new Error(text || `Upload failed with status ${response.status}`);
   }
   return (await response.json()) as ExportRecord;
+}
+
+export async function applyExportWorkbookEdits(
+  token: string,
+  exportId: number,
+  sheets: Array<{ name: string; data: string[][] }>
+) {
+  return apiRequest<ExportRecord>(
+    `/exports/${exportId}/apply-edits`,
+    "POST",
+    token,
+    { sheets }
+  );
 }

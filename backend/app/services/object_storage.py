@@ -29,6 +29,8 @@ def _default_local_root() -> Path:
 
 
 def _default_local_export_root() -> Path:
+    if settings.local_export_root:
+        return Path(settings.local_export_root)
     repo_root = Path(__file__).resolve().parents[3]
     return repo_root / "data" / "EXPORTS" / "LOCAL_EXPORTS"
 
@@ -164,3 +166,24 @@ def generate_export_download_url(object_key: str, expires_in_seconds: int = 900)
         )
     except (BotoCoreError, ClientError) as exc:
         raise StorageError(f"Failed to generate export download URL: {exc}") from exc
+
+
+def read_export_artifact(object_key: str) -> bytes:
+    local_path = Path(object_key)
+    if local_path.exists():
+        return local_path.read_bytes()
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=f"http{'s' if settings.minio_secure else ''}://{settings.minio_endpoint}",
+        aws_access_key_id=settings.minio_access_key,
+        aws_secret_access_key=settings.minio_secret_key,
+    )
+    try:
+        response = client.get_object(Bucket=settings.minio_bucket_exports, Key=object_key)
+        body = response.get("Body")
+        if body is None:
+            raise StorageError("Export object body missing")
+        return body.read()
+    except (BotoCoreError, ClientError) as exc:
+        raise StorageError(f"Failed to read export artifact: {exc}") from exc
