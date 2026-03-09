@@ -5,6 +5,7 @@ export type ExportRecord = {
   id: number;
   pallet_id: number;
   template_type: string;
+  packout_date: string | null;
   object_key: string;
   file_name: string;
   mime_type: string;

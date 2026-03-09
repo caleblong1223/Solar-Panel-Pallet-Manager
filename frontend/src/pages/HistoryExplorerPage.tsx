@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Spreadsheet from "react-spreadsheet";
 import type { CellBase, Matrix } from "react-spreadsheet";
 import * as XLSX from "xlsx";
@@ -10,8 +10,7 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
 import { getPalletHistory, type AuditEvent } from "../features/audit";
-import { searchBarcodes, type BarcodeSearchResult } from "../features/barcodes";
-import { deletePallet } from "../features/pallets";
+import { deletePallet, getPallet, listPallets, type Pallet } from "../features/pallets";
 import {
   downloadExportWorkbook,
   getExportDownloadUrl,
@@ -47,12 +46,12 @@ export default function HistoryExplorerPage() {
   const [datePreset, setDatePreset] = useState<"all" | "today" | "week" | "month" | "year">("all");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | "all">("all");
-  const [sortMode, setSortMode] = useState<"created_desc" | "created_asc" | "serial_asc" | "serial_desc" | "source">(
-    "created_desc"
+  const [sortMode, setSortMode] = useState<"completed_desc" | "completed_asc" | "number_desc" | "number_asc" | "items_desc">(
+    "completed_desc"
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [results, setResults] = useState<BarcodeSearchResult[]>([]);
-  const [selected, setSelected] = useState<BarcodeSearchResult | null>(null);
+  const [pallets, setPallets] = useState<Pallet[]>([]);
+  const [selectedPalletId, setSelectedPalletId] = useState<number | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [exports, setExports] = useState<ExportRecord[]>([]);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -62,7 +61,10 @@ export default function HistoryExplorerPage() {
   const [editableSheets, setEditableSheets] = useState<EditableSheet[]>([]);
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
 
-  const selectedPalletId = selected?.pallet_id ?? null;
+  const selectedPallet = useMemo(
+    () => pallets.find((pallet) => pallet.id === selectedPalletId) ?? null,
+    [pallets, selectedPalletId]
+  );
 
   useEffect(() => {
     void listCustomers(apiToken, { isActive: true })
@@ -74,34 +76,42 @@ export default function HistoryExplorerPage() {
       });
   }, [apiToken]);
 
-  const matchedSummary = useMemo(() => {
-    if (!selected) {
-      return "Select a result to view details.";
-    }
-    if (selected.source === "pallet_item") {
-      return `Pallet #${selected.pallet_number ?? "-"} | Slot ${selected.slot_index ?? "-"}`;
-    }
-    return `Simulator batch ${selected.sim_batch_id ?? "-"} | ${selected.sim_result ?? "-"}`;
-  }, [selected]);
-
-  const sortToParams = () => {
-    switch (sortMode) {
-      case "created_asc":
-        return { sort: "created_at" as const, order: "asc" as const };
-      case "serial_asc":
-        return { sort: "serial" as const, order: "asc" as const };
-      case "serial_desc":
-        return { sort: "serial" as const, order: "desc" as const };
-      case "source":
-        return { sort: "source" as const, order: "asc" as const };
-      case "created_desc":
-      default:
-        return { sort: "created_at" as const, order: "desc" as const };
+  const loadHistory = async () => {
+    setIsLoading(true);
+    try {
+      const response = await listPallets(apiToken, "completed");
+      setPallets(response.pallets);
+      setSelectedPalletId((previous) => {
+        if (previous && response.pallets.some((pallet) => pallet.id === previous)) {
+          return previous;
+        }
+        return response.pallets[0]?.id ?? null;
+      });
+      if (response.total === 0) {
+        notify("No completed pallets found", "warning");
+      }
+      return response.pallets;
+    } catch {
+      notify("Failed to load history", "error");
+      return [];
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const applyFilters = (rows: BarcodeSearchResult[]) => {
-    let filtered = rows;
+  useEffect(() => {
+    void loadHistory();
+  }, [apiToken]);
+
+  const matchedSummary = useMemo(() => {
+    if (!selectedPallet) {
+      return "Select a pallet to view details.";
+    }
+    return `Pallet #${selectedPallet.pallet_number} | ${selectedPallet.template_type ?? "Unknown type"} | ${selectedPallet.item_count} panel${selectedPallet.item_count === 1 ? "" : "s"}`;
+  }, [selectedPallet]);
+
+  const applyFilters = (rows: Pallet[]) => {
+    let filtered = [...rows];
 
     // Date preset filter on created_at / sim_test_timestamp
     if (datePreset !== "all") {
@@ -134,10 +144,8 @@ export default function HistoryExplorerPage() {
         }
       }
       if (from) {
-        filtered = filtered.filter((row) => {
-          const raw =
-            (row.created_at ? new Date(row.created_at) : null) ??
-            (row.sim_test_timestamp ? new Date(row.sim_test_timestamp) : null);
+        filtered = filtered.filter((pallet) => {
+          const raw = pallet.completed_at ? new Date(pallet.completed_at) : new Date(pallet.created_at);
           if (!raw || Number.isNaN(raw.getTime())) return false;
           return raw >= from;
         });
@@ -146,87 +154,84 @@ export default function HistoryExplorerPage() {
 
     // Customer filter for pallet-item rows
     if (selectedCustomerId !== "all") {
-      filtered = filtered.filter((row) => {
-        if (row.source !== "pallet_item") return false;
-        return row.customer_id === selectedCustomerId;
+      filtered = filtered.filter((pallet) => pallet.customer_id === selectedCustomerId);
+    }
+
+    const normalizedQuery = query.trim().toUpperCase();
+    if (normalizedQuery) {
+      filtered = filtered.filter((pallet) => {
+        const panelType = (pallet.template_type ?? "").toUpperCase();
+        const palletNumber = String(pallet.pallet_number);
+        if (exact) {
+          return (
+            pallet.items.some((item) => item.serial.toUpperCase() === normalizedQuery) ||
+            palletNumber === normalizedQuery ||
+            panelType === normalizedQuery
+          );
+        }
+        return (
+          pallet.items.some((item) => item.serial.toUpperCase().includes(normalizedQuery)) ||
+          palletNumber.includes(normalizedQuery) ||
+          panelType.includes(normalizedQuery)
+        );
       });
+    }
+
+    switch (sortMode) {
+      case "completed_asc":
+        filtered.sort((a, b) => {
+          const aTime = new Date(a.completed_at ?? a.created_at).getTime();
+          const bTime = new Date(b.completed_at ?? b.created_at).getTime();
+          return aTime - bTime;
+        });
+        break;
+      case "number_asc":
+        filtered.sort((a, b) => a.pallet_number - b.pallet_number);
+        break;
+      case "number_desc":
+        filtered.sort((a, b) => b.pallet_number - a.pallet_number);
+        break;
+      case "items_desc":
+        filtered.sort((a, b) => b.item_count - a.item_count);
+        break;
+      case "completed_desc":
+      default:
+        filtered.sort((a, b) => {
+          const aTime = new Date(a.completed_at ?? a.created_at).getTime();
+          const bTime = new Date(b.completed_at ?? b.created_at).getTime();
+          return bTime - aTime;
+        });
+        break;
     }
 
     return filtered;
   };
 
-  const doSearch = useCallback(async () => {
-    if (!query.trim()) {
-      return;
+  const runSearch = async (event: FormEvent) => {
+    event.preventDefault();
+    const latest = await loadHistory();
+    const visible = applyFilters(latest);
+    if (visible.length === 0) {
+      notify("No matching pallets found", "warning");
+    } else {
+      notify(`Showing ${visible.length} pallet${visible.length === 1 ? "" : "s"}`, "success");
     }
+  };
 
-    setIsLoading(true);
-    try {
-      const { sort, order } = sortToParams();
-      const response = await searchBarcodes(apiToken, {
-        q: query.trim(),
-        exact,
-        limit: 100,
-        sort,
-        order,
-      });
-      setResults(response.results);
-      setSelected(response.results[0] ?? null);
-      setAuditEvents([]);
-      setExports([]);
-      if (response.total === 0) {
-        notify("No matches found", "warning");
-      } else {
-        notify(`Found ${response.total} matches`, "success");
-      }
-    } catch {
-      notify("Search failed", "error");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [apiToken, query, exact, notify, sortToParams]);
-
-const runSearch = async (event: FormEvent) => {
-  event.preventDefault();
-  if (!query.trim()) {
-    notify("Enter a serial to search history", "warning");
-    return;
-  }
-  await doSearch();
-};
-
-  const autoSearchTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (!query.trim()) {
-      return;
-    }
-    if (autoSearchTimer.current) {
-      window.clearTimeout(autoSearchTimer.current);
-    }
-    autoSearchTimer.current = window.setTimeout(() => {
-      void doSearch();
-    }, 400);
-    return () => {
-      if (autoSearchTimer.current) {
-        window.clearTimeout(autoSearchTimer.current);
-      }
-    };
-  }, [query, doSearch]);
-
-  const loadDetails = async (row: BarcodeSearchResult) => {
-    setSelected(row);
+  const loadDetails = async (palletId: number) => {
+    setSelectedPalletId(palletId);
     setAuditEvents([]);
     setExports([]);
 
-    if (!row.pallet_id) {
-      return;
-    }
-
     try {
-      const [historyRows, exportRows] = await Promise.all([
-        getPalletHistory(apiToken, row.pallet_id),
-        listExportsByPallet(apiToken, row.pallet_id),
+      const [palletRow, historyRows, exportRows] = await Promise.all([
+        getPallet(apiToken, palletId),
+        getPalletHistory(apiToken, palletId),
+        listExportsByPallet(apiToken, palletId),
       ]);
+      setPallets((previous) =>
+        previous.map((entry) => (entry.id === palletId ? palletRow : entry))
+      );
       setAuditEvents(historyRows);
       setExports(exportRows.exports);
     } catch {
@@ -234,9 +239,9 @@ const runSearch = async (event: FormEvent) => {
     }
   };
 
-  const handleOpenExport = async (exportId: number) => {
+  const handleOpenExport = async (exportId: number, format: "pdf" | "xlsx") => {
     try {
-      const response = await getExportDownloadUrl(apiToken, exportId);
+      const response = await getExportDownloadUrl(apiToken, exportId, format);
       window.open(response.download_url, "_blank", "noopener,noreferrer");
     } catch {
       notify("Failed to generate export URL", "error");
@@ -247,7 +252,7 @@ const runSearch = async (event: FormEvent) => {
     if (!selectedPalletId) {
       return;
     }
-    const palletNumber = selected?.pallet_number;
+    const palletNumber = selectedPallet?.pallet_number;
     const confirmText =
       palletNumber != null
         ? `Delete pallet #${palletNumber}? This will free its serials for reuse but cannot be undone.`
@@ -257,8 +262,8 @@ const runSearch = async (event: FormEvent) => {
     }
     try {
       await deletePallet(apiToken, selectedPalletId);
-      setResults((prev) => prev.filter((row) => row.pallet_id !== selectedPalletId));
-      setSelected(null);
+      setPallets((prev) => prev.filter((row) => row.id !== selectedPalletId));
+      setSelectedPalletId(null);
       setAuditEvents([]);
       setExports([]);
       notify("Pallet deleted", "success");
@@ -355,7 +360,10 @@ const runSearch = async (event: FormEvent) => {
     }
   };
 
-  const visibleResults = useMemo(() => applyFilters(results), [results, datePreset, selectedCustomerId]);
+  const visiblePallets = useMemo(
+    () => applyFilters(pallets),
+    [pallets, datePreset, selectedCustomerId, query, exact, sortMode]
+  );
 
   return (
     <AppFrame title="History Explorer">
@@ -405,25 +413,25 @@ const runSearch = async (event: FormEvent) => {
                 variant="pill"
                 className="builder-active-control builder-active-control--size"
                 options={[
-                  { value: "created_desc", label: "Newest activity first" },
-                  { value: "created_asc", label: "Oldest activity first" },
-                  { value: "serial_asc", label: "Serial A–Z" },
-                  { value: "serial_desc", label: "Serial Z–A" },
-                  { value: "source", label: "Source then serial" },
+                  { value: "completed_desc", label: "Newest packout first" },
+                  { value: "completed_asc", label: "Oldest packout first" },
+                  { value: "number_asc", label: "Pallet number low-high" },
+                  { value: "number_desc", label: "Pallet number high-low" },
+                  { value: "items_desc", label: "Most panels first" },
                 ]}
               />
               <div className="history-button-wrapper">
                 <Button type="submit" disabled={isLoading}>
-                  {isLoading ? "Searching..." : "Search"}
+                  {isLoading ? "Refreshing..." : "Search"}
                 </Button>
               </div>
             </div>
             <div style={{ display: "grid", gap: "6px" }}>
               <TextInput
-                label="Serial"
+                label="Serial / Pallet / Panel Type"
                 value={query}
                 onChange={(event) => setQuery(event.target.value.toUpperCase())}
-                placeholder="Enter full or partial serial"
+                placeholder="Filter completed pallets"
               />
               <label className="ui-checkbox">
                 <input type="checkbox" checked={exact} onChange={(event) => setExact(event.target.checked)} />
@@ -436,29 +444,31 @@ const runSearch = async (event: FormEvent) => {
 
       <section className="history-layout">
         <Card title="Results">
-          {visibleResults.length === 0 ? (
-            <p>No results yet.</p>
+          {visiblePallets.length === 0 ? (
+            <p>No pallets found.</p>
           ) : (
             <table className="items-table">
               <thead>
                 <tr>
-                  <th>Source</th>
-                  <th>Serial</th>
                   <th>Pallet</th>
+                  <th>Panel Type</th>
+                  <th>Panels</th>
+                  <th>Packout Date</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleResults.map((row, index) => (
+                {visiblePallets.map((row) => (
                   <tr
-                    key={`${row.source}-${row.serial}-${index}`}
-                    className={selected === row ? "row-selected" : ""}
-                    onClick={() => void loadDetails(row)}
+                    key={row.id}
+                    className={selectedPalletId === row.id ? "row-selected" : ""}
+                    onClick={() => void loadDetails(row.id)}
                   >
-                    <td>{row.source}</td>
-                    <td className="mono">{row.serial}</td>
-                    <td>{row.pallet_number ?? "-"}</td>
-                    <td>{row.pallet_status ?? row.sim_result ?? "-"}</td>
+                    <td>{row.pallet_number}</td>
+                    <td>{row.template_type ?? "-"}</td>
+                    <td>{row.item_count}</td>
+                    <td>{row.completed_at ? new Date(row.completed_at).toLocaleDateString() : "-"}</td>
+                    <td>{row.status}</td>
                   </tr>
                 ))}
               </tbody>
@@ -469,13 +479,37 @@ const runSearch = async (event: FormEvent) => {
         <Card title="Details">
           <p>{matchedSummary}</p>
 
-          {selectedPalletId ? (
+          {selectedPallet ? (
             <>
               <div style={{ marginBottom: "8px" }}>
                 <Button variant="danger" onClick={() => void handleDeletePallet()}>
                   Delete pallet
                 </Button>
               </div>
+              <h3 className="subhead">Panels on Pallet</h3>
+              {selectedPallet.items.length === 0 ? (
+                <p>No panels on this pallet.</p>
+              ) : (
+                <table className="items-table">
+                  <thead>
+                    <tr>
+                      <th>Slot</th>
+                      <th>Serial</th>
+                      <th>Added</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedPallet.items.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.slot_index}</td>
+                        <td className="mono">{item.serial}</td>
+                        <td>{new Date(item.added_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
               <h3 className="subhead">Exports</h3>
               {exports.length === 0 ? (
                 <p>No exports found for this pallet.</p>
@@ -483,9 +517,18 @@ const runSearch = async (event: FormEvent) => {
                 <ul className="flat-list">
                   {exports.map((item) => (
                     <li key={item.id}>
-                      <span>{item.file_name}</span>
-                      <Button variant="secondary" onClick={() => void handleOpenExport(item.id)}>
-                        Open
+                      <span>
+                        {item.file_name}
+                        {" | "}
+                        {item.template_type}
+                        {" | Packout: "}
+                        {item.packout_date ? new Date(item.packout_date).toLocaleDateString() : "-"}
+                      </span>
+                      <Button variant="secondary" onClick={() => void handleOpenExport(item.id, "pdf")}>
+                        Open PDF
+                      </Button>
+                      <Button variant="secondary" onClick={() => void handleOpenExport(item.id, "xlsx")}>
+                        Open XLSX
                       </Button>
                       <Button variant="secondary" onClick={() => void handleEditExport(item)}>
                         Edit Spreadsheet
@@ -552,7 +595,7 @@ const runSearch = async (event: FormEvent) => {
               )}
             </>
           ) : (
-            <p>Select a pallet-item result to load pallet details and actions.</p>
+            <p>Select a pallet to load panel details and export actions.</p>
           )}
         </Card>
       </section>
