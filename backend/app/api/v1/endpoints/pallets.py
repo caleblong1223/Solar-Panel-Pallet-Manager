@@ -8,7 +8,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.deps import require_roles
-from app.api.v1.endpoints.auth import get_current_user
 from app.db.session import get_db
 from app.models.pallet import AuditEvent, ClientOperation, Customer, Export, Pallet, PalletItem, SimImportBatch, SimPanel
 from app.models.user import User
@@ -163,7 +162,7 @@ def list_pallets(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> PalletListResponse:
     del current_user
     base_query = db.query(Pallet).options(selectinload(Pallet.items))
@@ -241,7 +240,7 @@ def create_pallet(
 def get_pallet(
     pallet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> PalletResponse:
     del current_user
     pallet = _get_pallet_or_404(db, pallet_id)
@@ -611,7 +610,7 @@ def delete_pallet(
 def pallet_history(
     pallet_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> list[AuditEventResponse]:
     del current_user
     _get_pallet_or_404(db, pallet_id)

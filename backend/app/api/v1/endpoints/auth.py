@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -90,5 +92,15 @@ def login_json(payload: LoginRequest, db: Session = Depends(get_db)) -> Token:
 
 
 @router.get("/me", response_model=MeResponse)
-def me(current_user: User = Depends(get_current_user)) -> MeResponse:
+def me(current_user: User | None = Depends(get_current_user_optional)) -> MeResponse:
+    if current_user is None:
+        now = datetime.now(timezone.utc)
+        return MeResponse(
+            id=0,
+            username="anonymous",
+            email=None,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
     return MeResponse.model_validate(current_user)
