@@ -72,6 +72,12 @@ def _client_with_seed_data(user: DummyUser) -> Generator[TestClient, None, None]
                     test_timestamp=datetime(2026, 3, 2, 12, 0, tzinfo=timezone.utc),
                     panel_type="450WT",
                     result="PASS",
+                    watts=450.12,
+                    voc=49.321,
+                    isc=11.234,
+                    vmp=40.111,
+                    imp=10.456,
+                    ff=0.812,
                 ),
                 SimPanel(
                     batch_id=batch.id,
@@ -125,3 +131,19 @@ def test_barcode_search_exact_and_pagination() -> None:
         paged_payload = paged_response.json()
         assert paged_payload["total"] == 3
         assert len(paged_payload["results"]) == 1
+
+
+def test_barcode_search_includes_sim_electrical_values() -> None:
+    with _client_with_seed_data(DummyUser(user_id=3, roles=["admin"])) as client:
+        response = client.get("/api/v1/barcodes/search?q=SN-ABC-001&exact=true")
+        assert response.status_code == 200
+        payload = response.json()
+        sim_rows = [row for row in payload["results"] if row["source"] == "sim_panel"]
+        assert len(sim_rows) == 1
+        sim_row = sim_rows[0]
+        assert sim_row["sim_watts"] == 450.12
+        assert sim_row["sim_voc"] == 49.321
+        assert sim_row["sim_isc"] == 11.234
+        assert sim_row["sim_vmp"] == 40.111
+        assert sim_row["sim_imp"] == 10.456
+        assert sim_row["sim_ff"] == 0.812

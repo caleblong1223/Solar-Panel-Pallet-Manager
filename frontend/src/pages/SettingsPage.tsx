@@ -15,6 +15,8 @@ export default function SettingsPage() {
   const [isTesting, setIsTesting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusKind, setStatusKind] = useState<"success" | "warning" | "error" | null>(null);
+  const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
+  const [backendMessage, setBackendMessage] = useState<string>("Checking local backend...");
   const [syncState, setSyncState] = useState<SyncState>(() => getSyncState());
 
   useEffect(() => {
@@ -27,6 +29,29 @@ export default function SettingsPage() {
       window.clearInterval(id);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkBackend = async () => {
+      const localApi = (fallbackApiBaseUrl || "http://127.0.0.1:8000/api/v1").trim();
+      const result = await testServerConnectionNamed("Local backend", localApi);
+      if (cancelled) {
+        return;
+      }
+      setBackendHealthy(result.ok);
+      setBackendMessage(result.message);
+    };
+
+    void checkBackend();
+    const id = window.setInterval(() => {
+      void checkBackend();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [fallbackApiBaseUrl]);
 
   const handleSave = (event: FormEvent) => {
     event.preventDefault();
@@ -59,6 +84,9 @@ export default function SettingsPage() {
       <main className="settings-page">
         <section className="settings-wrap">
           <Card title="Server Settings">
+            <p className={`settings-status settings-status--${backendHealthy ? "success" : "warning"}`}>
+              {backendHealthy === null ? "Backend status: checking..." : backendMessage}
+            </p>
             <form className="builder-form" onSubmit={handleSave}>
               <TextInput
                 label="Primary API Base URL (Central Server)"

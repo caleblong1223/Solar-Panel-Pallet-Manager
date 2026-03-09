@@ -1,6 +1,0 @@
-Pallet Manager
-
-Copyright (c) 2024 Crossroads Solar
-
-This software is provided as-is for use with solar panel
-pallet management. All rights reserved.

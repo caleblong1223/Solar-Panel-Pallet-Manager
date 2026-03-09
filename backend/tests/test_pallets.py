@@ -76,9 +76,6 @@ def test_pallet_lifecycle_and_history() -> None:
         duplicate = client.post(f"/api/v1/pallets/{pallet_id}/items", json={"serial": "ABC123"})
         assert duplicate.status_code == 409
 
-        incomplete_complete = client.post(f"/api/v1/pallets/{pallet_id}/complete")
-        assert incomplete_complete.status_code == 409
-
         add_2 = client.post(
             f"/api/v1/pallets/{pallet_id}/items",
             json={"serial": "abc124", "allow_missing_sim_data": True},
@@ -99,6 +96,27 @@ def test_pallet_lifecycle_and_history() -> None:
         assert "pallet.created" in event_types
         assert "pallet.item_added" in event_types
         assert "pallet.completed" in event_types
+
+
+def test_partial_pallet_can_be_completed() -> None:
+    user = DummyUser(user_id=151, roles=["packout_operator"])
+    with _make_test_client(user) as client:
+        create_response = client.post("/api/v1/pallets", json={"max_panels": 2, "template_type": "450WT"})
+        assert create_response.status_code == 201
+        pallet_id = create_response.json()["id"]
+
+        add_1 = client.post(
+            f"/api/v1/pallets/{pallet_id}/items",
+            json={"serial": "PARTIAL-001", "allow_missing_sim_data": True},
+        )
+        assert add_1.status_code == 200
+        assert add_1.json()["item_count"] == 1
+
+        complete_response = client.post(f"/api/v1/pallets/{pallet_id}/complete")
+        assert complete_response.status_code == 200
+        payload = complete_response.json()
+        assert payload["status"] == "completed"
+        assert payload["item_count"] == 1
 
 
 def test_reset_and_delete_allowed_for_all_roles() -> None:

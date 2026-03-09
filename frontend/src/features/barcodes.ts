@@ -14,6 +14,12 @@ export type BarcodeSearchResult = {
   sim_test_timestamp?: string | null;
   sim_panel_type?: string | null;
   sim_result?: string | null;
+  sim_watts?: number | null;
+  sim_voc?: number | null;
+  sim_isc?: number | null;
+  sim_vmp?: number | null;
+  sim_imp?: number | null;
+  sim_ff?: number | null;
   created_at?: string | null;
 };
 
@@ -25,7 +31,7 @@ type BarcodeSearchResponse = {
 };
 
 export async function searchBarcodes(
-  token: string,
+  token: string | null | undefined,
   params: { q: string; exact?: boolean; limit?: number; offset?: number; sort?: string; order?: string }
 ) {
   const query = new URLSearchParams({
@@ -37,5 +43,5 @@ export async function searchBarcodes(
     order: params.order ?? "desc",
   }).toString();
 
-  return apiRequest<BarcodeSearchResponse>(`/barcodes/search?${query}`, "GET", token);
+  return apiRequest<BarcodeSearchResponse>(`/barcodes/search?${query}`, "GET", token ?? undefined);
 }

@@ -228,9 +228,6 @@ export async function repoCompletePallet(token: string | null, palletId: number)
   if (!local) {
     throw new Error("Pallet not found");
   }
-  if (local.item_count !== local.max_panels) {
-    throw new Error("Pallet must be full before completion");
-  }
   const updated: Pallet = {
     ...local,
     status: "completed",

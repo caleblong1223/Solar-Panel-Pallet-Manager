@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -38,7 +39,8 @@ class SimulatorParseResult:
 
 
 def _normalize_key(value: str) -> str:
-    return value.strip().lower().replace(" ", "").replace("_", "")
+    # Normalize varied Sun Simulator headers like "Pmax(W)", "Date/Time", "Voc (V)".
+    return re.sub(r"[^a-z0-9]+", "", value.strip().lower())
 
 
 def _normalize_serial(value: object) -> str:
@@ -49,6 +51,14 @@ def _find_column(headers: list[str], aliases: set[str]) -> int | None:
     normalized = [_normalize_key(h) for h in headers]
     for idx, key in enumerate(normalized):
         if key in aliases:
+            return idx
+    return None
+
+
+def _find_column_contains(headers: list[str], fragments: tuple[str, ...]) -> int | None:
+    normalized = [_normalize_key(h) for h in headers]
+    for idx, key in enumerate(normalized):
+        if any(fragment in key for fragment in fragments):
             return idx
     return None
 
@@ -69,12 +79,45 @@ def _parse_datetime(value: object) -> datetime | None:
     return None
 
 
+def _parse_datetime_from_date_time(date_value: object, time_value: object) -> datetime | None:
+    date_text = str(date_value).strip() if date_value is not None else ""
+    time_text = str(time_value).strip() if time_value is not None else ""
+    if not date_text and not time_text:
+        return None
+
+    combined = f"{date_text} {time_text}".strip()
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%Y-%m-%d %I:%M:%S %p",
+        "%m/%d/%Y %I:%M:%S %p",
+        "%Y-%m-%d %I:%M %p",
+        "%m/%d/%Y %I:%M %p",
+    ):
+        try:
+            return datetime.strptime(combined, fmt)
+        except ValueError:
+            continue
+
+    return _parse_datetime(combined)
+
+
 def _parse_float(value: object) -> float | None:
     if value is None:
         return None
     text = str(value).strip()
     if not text:
         return None
+    # Accept values like "49.321V", "0.812%", "1,234.56", etc.
+    cleaned = text.replace(",", "")
+    match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", cleaned)
+    if match:
+        try:
+            return float(match.group(0))
+        except ValueError:
+            pass
     try:
         return float(text)
     except ValueError:
@@ -84,17 +127,39 @@ def _parse_float(value: object) -> float | None:
 def _build_result(headers: list[str], rows: list[list[object]]) -> SimulatorParseResult:
     serial_col = _find_column(
         headers,
-        aliases={"serial", "serialno", "serialnumber", "barcode", "barcodeno"},
+        aliases={"serial", "serialno", "serialnumber", "barcodeserial", "barcode", "barcodeno", "modulesn"},
     )
     panel_type_col = _find_column(headers, aliases={"paneltype", "type", "moduletype"})
     result_col = _find_column(headers, aliases={"result", "status", "passfail"})
-    ts_col = _find_column(headers, aliases={"testtimestamp", "timestamp", "testtime", "datetime"})
-    watts_col = _find_column(headers, aliases={"watts", "watt", "pm", "pmax"})
-    voc_col = _find_column(headers, aliases={"voc"})
-    isc_col = _find_column(headers, aliases={"isc"})
-    vmp_col = _find_column(headers, aliases={"vmp", "vmpp", "vpm"})
-    imp_col = _find_column(headers, aliases={"imp", "impp", "ipm"})
+    ts_col = _find_column(headers, aliases={"testtimestamp", "timestamp", "testtime", "datetime", "dateandtime"})
+    if ts_col is None:
+        ts_col = _find_column_contains(headers, ("timestamp", "datetime", "date", "time"))
+    date_col = _find_column(headers, aliases={"date", "testdate"})
+    time_col = _find_column(headers, aliases={"time", "testtime", "testhour"})
+
+    watts_col = _find_column(headers, aliases={"watts", "watt", "pm", "pmax", "pmaxw"})
+    if watts_col is None:
+        watts_col = _find_column_contains(headers, ("pmax", "watts", "watt", "power", "pm"))
+
+    voc_col = _find_column(headers, aliases={"voc", "vocv"})
+    if voc_col is None:
+        voc_col = _find_column_contains(headers, ("voc",))
+
+    isc_col = _find_column(headers, aliases={"isc", "isca"})
+    if isc_col is None:
+        isc_col = _find_column_contains(headers, ("isc",))
+
+    vmp_col = _find_column(headers, aliases={"vmp", "vmpp", "vpm", "vmpv", "vpmv"})
+    if vmp_col is None:
+        vmp_col = _find_column_contains(headers, ("vmp", "vmpp", "vpm"))
+
+    imp_col = _find_column(headers, aliases={"imp", "impp", "ipm", "impa"})
+    if imp_col is None:
+        imp_col = _find_column_contains(headers, ("imp", "impp"))
+
     ff_col = _find_column(headers, aliases={"ff", "fillfactor"})
+    if ff_col is None:
+        ff_col = _find_column_contains(headers, ("fillfactor", "ff"))
 
     accepted: list[ParsedSimRow] = []
     rejected: list[RejectedSimRow] = []
@@ -107,6 +172,13 @@ def _build_result(headers: list[str], rows: list[list[object]]) -> SimulatorPars
             rejected.append(RejectedSimRow(row_number=idx, reason="Empty serial", raw_serial=None))
             continue
         test_ts = _parse_datetime(row[ts_col]) if ts_col is not None and ts_col < len(row) else None
+        should_prefer_date_time = ts_col is None or ts_col == date_col or ts_col == time_col
+        if (test_ts is None or should_prefer_date_time) and (date_col is not None or time_col is not None):
+            date_value = row[date_col] if date_col is not None and date_col < len(row) else None
+            time_value = row[time_col] if time_col is not None and time_col < len(row) else None
+            combined_ts = _parse_datetime_from_date_time(date_value, time_value)
+            if combined_ts is not None:
+                test_ts = combined_ts
         panel_type = (
             str(row[panel_type_col]).strip() if panel_type_col is not None and panel_type_col < len(row) and row[panel_type_col] is not None else None
         )

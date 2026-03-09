@@ -52,7 +52,6 @@ def _process_simulator_file(db: Session, batch: SimImportBatch, filename: str, c
         exists = (
             db.query(SimPanel.id)
             .filter(
-                SimPanel.batch_id == batch.id,
                 SimPanel.serial == parsed_row.serial,
                 SimPanel.test_timestamp == panel_ts,
             )
@@ -94,6 +93,8 @@ def _process_simulator_file(db: Session, batch: SimImportBatch, filename: str, c
 
 
 def _fail_batch(db: Session, batch: SimImportBatch, message: str) -> None:
+    # Any failed flush/commit leaves SQLAlchemy in a rollback-required state.
+    db.rollback()
     batch.status = "failed"
     batch.error_summary = message
     batch.completed_at = datetime.now(timezone.utc)

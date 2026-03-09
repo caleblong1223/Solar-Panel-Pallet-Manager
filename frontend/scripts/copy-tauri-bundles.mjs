@@ -24,6 +24,9 @@ async function copyInstallers() {
           continue;
         }
         const fileName = entry.name.toLowerCase();
+        if (fileName.startsWith("rw.")) {
+          continue;
+        }
         if (installerExtensions.some((ext) => fileName.endsWith(ext))) {
           candidates.push(path.join(directory, entry.name));
         }

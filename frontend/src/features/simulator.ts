@@ -1,5 +1,5 @@
 import { apiRequest } from "../lib/api";
-import { loadRuntimeSettings } from "../lib/runtimeConfig";
+import { getApiBaseCandidates } from "../lib/runtimeConfig";
 
 export type SimImportBatch = {
   id: number;
@@ -17,21 +17,44 @@ export type SimImportBatch = {
 };
 
 export async function uploadSimulatorFile(file: File) {
-  const { apiBaseUrl } = loadRuntimeSettings();
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const response = await fetch(`${apiBaseUrl}/simulator/imports/anonymous`, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Upload failed with status ${response.status}`);
+  const candidates = getApiBaseCandidates();
+  if (candidates.length === 0) {
+    throw new Error("No API base URL configured for simulator import");
   }
 
-  return (await response.json()) as SimImportBatch;
+  const endpointPath = "/simulator/imports/anonymous";
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < candidates.length; attempt += 1) {
+    const baseUrl = candidates[attempt];
+    const url = `${baseUrl}${endpointPath}`;
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        const statusMessage = text || response.statusText || `status ${response.status}`;
+      throw new Error(`Upload failed (${statusMessage}) at ${url}`);
+    }
+    return (await response.json()) as SimImportBatch;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    lastError = new Error(`Simulator upload attempt ${attempt + 1} to ${url} failed: ${detail}`);
+    if (attempt === candidates.length - 1) {
+      break;
+    }
+      continue;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error("Simulator import upload failed");
 }
 
 export async function getImportBatch(token: string, batchId: number) {

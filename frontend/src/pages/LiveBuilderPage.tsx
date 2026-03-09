@@ -6,17 +6,20 @@ import AnimatedSelect, { type AnimatedSelectOption } from "../components/ui/Anim
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
+import { ApiError } from "../lib/api";
 import {
   addPalletItem as apiAddPalletItem,
   completePallet as apiCompletePallet,
   createExport,
   createPallet as apiCreatePallet,
+  deletePallet,
   updatePallet,
   type PalletItem,
   type Pallet,
 } from "../features/pallets";
 import { getExportDownloadUrl } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
+import { searchBarcodes } from "../features/barcodes";
 
 const DEFAULT_MAX_PANELS = 25;
 const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
@@ -24,7 +27,7 @@ const ACCESS_TOKEN_KEY = "pm2_access_token";
 const PALLET_SIZES = [25, 26, 30, 35];
 const CUSTOMERS_CACHE_KEY = "pm2_cached_customers";
 const SESSION_SELECTION_KEY = "pm2_builder_last_selection";
-const ACTIVE_PALLET_KEY = "pm2_builder_active_pallet";
+const ACTIVE_PALLET_SESSION_KEY = "pm2_builder_active_pallet";
 let draftPalletCounter = 1;
 let draftItemCounter = 1;
 
@@ -69,7 +72,7 @@ function loadActivePallet(): Pallet | null {
     return null;
   }
   try {
-    const raw = sessionStorage.getItem(ACTIVE_PALLET_KEY);
+    const raw = sessionStorage.getItem(ACTIVE_PALLET_SESSION_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as Pallet;
   } catch {
@@ -83,9 +86,10 @@ function persistActivePallet(value: Pallet | null) {
   }
   try {
     if (value === null) {
-      sessionStorage.removeItem(ACTIVE_PALLET_KEY);
+      sessionStorage.removeItem(ACTIVE_PALLET_SESSION_KEY);
     } else {
-      sessionStorage.setItem(ACTIVE_PALLET_KEY, JSON.stringify(value));
+      const serialized = JSON.stringify(value);
+      sessionStorage.setItem(ACTIVE_PALLET_SESSION_KEY, serialized);
     }
   } catch {
     // ignore storage failures
@@ -123,6 +127,7 @@ export default function LiveBuilderPage() {
   const [palletNumberDraft, setPalletNumberDraft] = useState<string>("");
   const [isPalletNumberAnimating, setIsPalletNumberAnimating] = useState(false);
   const [isPackoutDateAnimating, setIsPackoutDateAnimating] = useState(false);
+  const [fallbackSerials, setFallbackSerials] = useState<string[]>([]);
   const [packoutDate, setPackoutDate] = useState<string>(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -216,6 +221,7 @@ export default function LiveBuilderPage() {
       };
       draftPalletCounter += 1;
       setCurrent(created);
+      setFallbackSerials([]);
       setSerial("");
       notify(`Pallet #${created.pallet_number} started`, "success");
       serialInputRef.current?.focus();
@@ -233,7 +239,7 @@ export default function LiveBuilderPage() {
       notify("Start a pallet first", "warning");
       return;
     }
-    const s = serial.trim();
+    const s = serial.trim().toUpperCase();
     if (!s) return;
 
     if (remaining <= 0) {
@@ -246,6 +252,30 @@ export default function LiveBuilderPage() {
       if (current.items.some((item) => item.serial === s)) {
         notify("Serial already on pallet", "warning");
         return;
+      }
+      let shouldUseFallback = false;
+      try {
+        const lookup = await searchBarcodes(token, { q: s, exact: true, limit: 200, offset: 0 });
+        const hasSimData = lookup.results.some((result) => result.source === "sim_panel" && result.serial === s);
+        if (!hasSimData) {
+          const useFallback = window.confirm(
+            [
+              "No sun simulator information exists in the database for this panel.",
+              "",
+              `Serial: ${s}`,
+              "",
+              "Select OK to add it with generated theoretical values.",
+              "Select Cancel to keep it off the pallet.",
+            ].join("\n")
+          );
+          if (!useFallback) {
+            notify(`Panel ${s} not added: no sun simulator data in database`, "warning");
+            return;
+          }
+          shouldUseFallback = true;
+        }
+      } catch {
+        notify("Could not validate simulator data right now; you can still continue.", "warning");
       }
       const nextSlot = current.items.length + 1;
       const item: PalletItem = {
@@ -262,6 +292,9 @@ export default function LiveBuilderPage() {
         items: [...current.items, item],
       };
       setCurrent(updated);
+      if (shouldUseFallback) {
+        setFallbackSerials((prev) => (prev.includes(s) ? prev : [...prev, s]));
+      }
       setSerial("");
       notify("Added", "success");
       serialInputRef.current?.focus();
@@ -286,6 +319,8 @@ export default function LiveBuilderPage() {
         items: remainingItems,
       };
       setCurrent(updated);
+      const remainingSerials = new Set(remainingItems.map((item) => item.serial));
+      setFallbackSerials((prev) => prev.filter((serial) => remainingSerials.has(serial)));
       notify("Removed", "success");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to remove";
@@ -297,10 +332,6 @@ export default function LiveBuilderPage() {
 
   const handleComplete = async () => {
     if (!current) return;
-    if (remaining !== 0) {
-      notify("Pallet must be full to complete", "warning");
-      return;
-    }
     if (!token) {
       notify("Server connection is required to finalize and export a pallet", "error");
       return;
@@ -324,8 +355,61 @@ export default function LiveBuilderPage() {
       const draftItems = current.items
         .slice()
         .sort((a, b) => a.slot_index - b.slot_index);
+      const skippedSerials: string[] = [];
       for (const item of draftItems) {
-        workingPallet = await apiAddPalletItem(token, workingPallet.id, item.serial);
+        try {
+          workingPallet = await apiAddPalletItem(token, workingPallet.id, item.serial, undefined, {
+            allowMissingSimData: fallbackSerials.includes(item.serial),
+          });
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.errorCode !== "SIM_DATA_REQUIRED") {
+            throw error;
+          }
+          const useFallback = window.confirm(
+            [
+              "No sun simulator information exists in the database for this panel.",
+              "",
+              `Serial: ${item.serial}`,
+              "",
+              "Select OK to add it with generated theoretical values.",
+              "Select Cancel to skip it and keep building this pallet.",
+            ].join("\n")
+          );
+          if (useFallback) {
+            workingPallet = await apiAddPalletItem(token, workingPallet.id, item.serial, undefined, {
+              allowMissingSimData: true,
+            });
+            setFallbackSerials((prev) => (prev.includes(item.serial) ? prev : [...prev, item.serial]));
+          } else {
+            skippedSerials.push(item.serial);
+          }
+        }
+      }
+
+      if (skippedSerials.length > 0) {
+        try {
+          await deletePallet(token, workingPallet.id);
+        } catch {
+          // Best effort cleanup; keep operator flow moving.
+        }
+        const skipped = new Set(skippedSerials);
+        const keptItems = current.items
+          .filter((item) => !skipped.has(item.serial))
+          .map((item, index) => ({ ...item, slot_index: index + 1 }));
+        setCurrent({
+          ...current,
+          item_count: keptItems.length,
+          items: keptItems,
+        });
+        const keptSerials = new Set(keptItems.map((item) => item.serial));
+        setFallbackSerials((prev) => prev.filter((serial) => keptSerials.has(serial)));
+        notify(
+          skippedSerials.length === 1
+            ? `Skipped 1 panel without database data. Add a replacement to complete the pallet.`
+            : `Skipped ${skippedSerials.length} panels without database data. Add replacements to complete the pallet.`,
+          "warning"
+        );
+        return;
       }
 
       if (
@@ -349,6 +433,7 @@ export default function LiveBuilderPage() {
       window.open(download_url, "_blank", "noopener,noreferrer");
       notify(`Pallet #${palletNumber} completed · export ready`, "success");
       setCurrent(null);
+      setFallbackSerials([]);
       serialInputRef.current?.focus();
     } catch {
       notify("Failed to complete or export pallet", "error");

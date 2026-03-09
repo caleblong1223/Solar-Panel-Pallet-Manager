@@ -1,13 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCurrentUser, login as apiLogin } from "./authApi";
-import { getTokenExpiryMs } from "./jwt";
 import type { User } from "./types";
 
 const ACCESS_TOKEN_KEY = "pm2_access_token";
 const CACHED_USER_KEY = "pm2_cached_user";
-const REFRESH_WINDOW_MS = 5 * 60 * 1000;
-const SHARED_USERNAME = import.meta.env.VITE_SHARED_USERNAME ?? "critical_e2e_user";
-const SHARED_PASSWORD = import.meta.env.VITE_SHARED_PASSWORD ?? "critical-e2e-password";
 type SessionMode = "anonymous" | "authenticated" | "offline";
 
 type AuthContextValue = {
@@ -38,7 +34,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [sessionMode, setSessionMode] = useState<SessionMode>("anonymous");
   const [isInitializing, setIsInitializing] = useState(true);
-  const [hasTriedAutoLogin, setHasTriedAutoLogin] = useState(false);
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -103,35 +98,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (!hasTriedAutoLogin) {
-        try {
-          const result = await apiLogin(SHARED_USERNAME, SHARED_PASSWORD);
-          localStorage.setItem(ACCESS_TOKEN_KEY, result.access_token);
-          setAccessToken(result.access_token);
-          await refreshSession(result.access_token);
-        } catch {
-          const cachedRaw = localStorage.getItem(CACHED_USER_KEY);
-          if (cachedRaw) {
-            try {
-              setUser(JSON.parse(cachedRaw) as User);
-              setSessionMode("offline");
-            } catch {
-              localStorage.removeItem(CACHED_USER_KEY);
-              setUser(null);
-              setSessionMode("anonymous");
-            }
-          } else {
-            setSessionMode("anonymous");
-          }
-        } finally {
-          if (!cancelled) {
-            setHasTriedAutoLogin(true);
-            setIsInitializing(false);
-          }
-        }
-        return;
-      }
-
       if (!cancelled) {
         setIsInitializing(false);
       }
@@ -142,32 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, hasTriedAutoLogin, refreshSession]);
-
-  useEffect(() => {
-    if (!accessToken) {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      const expiryMs = getTokenExpiryMs(accessToken);
-      if (!expiryMs) {
-        return;
-      }
-
-      const msUntilExpiry = expiryMs - Date.now();
-      if (msUntilExpiry <= 0) {
-        clearSession();
-        return;
-      }
-
-      if (msUntilExpiry <= REFRESH_WINDOW_MS) {
-        void refreshSession(accessToken);
-      }
-    }, 60_000);
-
-    return () => window.clearInterval(interval);
-  }, [accessToken, clearSession, refreshSession]);
+  }, [accessToken, refreshSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

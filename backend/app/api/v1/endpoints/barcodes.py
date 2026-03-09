@@ -1,12 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.v1.deps import require_roles
 from app.db.session import get_db
 from app.models.pallet import Pallet, PalletItem, SimPanel
-from app.models.user import User
 from app.schemas.barcode import BarcodeSearchResponse, BarcodeSearchResult
 
 router = APIRouter()
@@ -21,9 +19,7 @@ def search_barcodes(
     sort: str = Query(default="created_at"),
     order: str = Query(default="desc"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
 ) -> BarcodeSearchResponse:
-    del current_user
     search_term = q.strip().upper()
     if exact:
         pallet_serial_filter = PalletItem.serial == search_term
@@ -67,6 +63,12 @@ def search_barcodes(
                 sim_test_timestamp=panel.test_timestamp,
                 sim_panel_type=panel.panel_type,
                 sim_result=panel.result,
+                sim_watts=float(panel.watts) if panel.watts is not None else None,
+                sim_voc=float(panel.voc) if panel.voc is not None else None,
+                sim_isc=float(panel.isc) if panel.isc is not None else None,
+                sim_vmp=float(panel.vmp) if panel.vmp is not None else None,
+                sim_imp=float(panel.imp) if panel.imp is not None else None,
+                sim_ff=float(panel.ff) if panel.ff is not None else None,
                 created_at=panel.created_at,
             )
         )
@@ -77,9 +79,16 @@ def search_barcodes(
     elif sort == "source":
         results.sort(key=lambda x: (x.source, x.serial), reverse=reverse)
     else:
-        def _created_key(result: BarcodeSearchResult) -> tuple[datetime, str]:
-            timestamp = result.created_at or result.sim_test_timestamp or datetime.min
-            return (timestamp, result.serial)
+        def _epoch_seconds(value: datetime | None) -> float:
+            if value is None:
+                return float("-inf")
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc).timestamp()
+            return value.astimezone(timezone.utc).timestamp()
+
+        def _created_key(result: BarcodeSearchResult) -> tuple[float, str]:
+            timestamp = result.created_at or result.sim_test_timestamp
+            return (_epoch_seconds(timestamp), result.serial)
 
         results.sort(key=_created_key, reverse=reverse)
 

@@ -29,7 +29,7 @@ function getDefaultSettings(): RuntimeSettings {
   const normalized = ensureApiV1Path(envValue);
   return {
     primaryApiBaseUrl: normalized,
-    fallbackApiBaseUrl: "",
+    fallbackApiBaseUrl: LOOPBACK_API_BASE_URL,
     apiBaseUrl: normalized,
   };
 }

@@ -17,6 +17,12 @@ class BarcodeSearchResult(BaseModel):
     sim_test_timestamp: datetime | None = None
     sim_panel_type: str | None = None
     sim_result: str | None = None
+    sim_watts: float | None = None
+    sim_voc: float | None = None
+    sim_isc: float | None = None
+    sim_vmp: float | None = None
+    sim_imp: float | None = None
+    sim_ff: float | None = None
     created_at: datetime | None = None
 
 

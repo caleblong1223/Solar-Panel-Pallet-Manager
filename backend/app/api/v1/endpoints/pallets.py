@@ -536,8 +536,6 @@ def complete_pallet(
     pallet = _get_pallet_or_404(db, pallet_id)
     if pallet.status != "active":
         raise _error(status.HTTP_409_CONFLICT, "PALLET_NOT_ACTIVE", "Only active pallets can be completed")
-    if len(pallet.items) != pallet.max_panels:
-        raise _error(status.HTTP_409_CONFLICT, "PALLET_NOT_FULL", "Pallet must be full before completion")
     pallet.status = "completed"
     pallet.completed_at = _now_utc()
     pallet.completed_by = current_user.id

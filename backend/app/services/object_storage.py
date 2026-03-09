@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import mimetypes
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -19,6 +21,20 @@ def _build_import_object_key(batch_id: int, filename: str, now: datetime | None 
     current = now or datetime.now(timezone.utc)
     safe_name = os.path.basename(filename) or f"batch-{batch_id}.bin"
     return f"imports/{current.year:04d}/{current.month:02d}/{batch_id}/{safe_name}"
+
+
+def _default_local_root() -> Path:
+    repo_root = Path(__file__).resolve().parents[3]
+    return repo_root / "data" / "IMPORTED DATA" / "LOCAL_IMPORTS"
+
+
+def _write_import_locally(batch_id: int, filename: str, content: bytes, checksum: str) -> tuple[str, str]:
+    root = Path(settings.local_import_root) if settings.local_import_root else _default_local_root()
+    batch_dir = root / str(batch_id)
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    target = batch_dir / filename
+    target.write_bytes(content)
+    return str(target), checksum
 
 
 def upload_import_source(batch_id: int, filename: str, content: bytes) -> tuple[str, str]:
@@ -41,10 +57,10 @@ def upload_import_source(batch_id: int, filename: str, content: bytes) -> tuple[
             ContentType=content_type,
             Metadata={"checksum-sha256": checksum},
         )
+        return object_key, checksum
     except (BotoCoreError, ClientError) as exc:
-        raise StorageError(f"Failed to upload import source: {exc}") from exc
-
-    return object_key, checksum
+        logging.warning("MinIO unavailable (%s); storing %s locally", exc, filename)
+        return _write_import_locally(batch_id, filename, content, checksum)
 
 
 def upload_export_artifact(

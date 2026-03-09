@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.security import hash_password
-from app.db.session import SessionLocal
+from app.db.base import Base
+from app.db.session import SessionLocal, engine
+from app.models.pallet import Customer
 from app.models.user import Role, User
 from app.services.export_workbook import verify_core_export_templates
 
@@ -48,35 +50,52 @@ def validate_templates_and_seed_e2e_user() -> None:
 
     Controlled by ENABLE_E2E_SEED=1 to avoid impacting normal environments.
     """
+    # Ensure the schema exists so the standalone desktop backend can run without running migrations first.
+    Base.metadata.create_all(bind=engine)
     # First, verify that core Excel templates exist and look correct.
     verify_core_export_templates()
 
-    # Optionally seed the E2E user for QA/test environments.
-    if not os.getenv("ENABLE_E2E_SEED"):
-        return
-
     db: Session = SessionLocal()
     try:
-        role = db.query(Role).filter(Role.name == "packout_operator").first()
-        if role is None:
-            role = Role(name="packout_operator", description="E2E test role")
-            db.add(role)
-            db.flush()
-
-        user = db.query(User).filter(User.username == "critical_e2e_user").first()
-        if user is None:
-            user = User(
-                username="critical_e2e_user",
-                email="critical-e2e@example.com",
-                password_hash=hash_password("critical-e2e-password"),
+        default_customer = (
+            db.query(Customer)
+            .filter(Customer.display_name == "Josh Atwood")
+            .first()
+        )
+        if default_customer is None:
+            default_customer = Customer(
+                display_name="Josh Atwood",
+                contact_name="Josh Atwood",
+                business_name="Future Solutions Inc",
+                address="2616 Glenview Dr",
+                city="Elkhart",
+                state="IN",
+                zip_code="46514",
                 is_active=True,
             )
-            user.roles.append(role)
-            db.add(user)
-        else:
-            user.is_active = True
-            if role not in user.roles:
+            db.add(default_customer)
+
+        if os.getenv("ENABLE_E2E_SEED"):
+            role = db.query(Role).filter(Role.name == "packout_operator").first()
+            if role is None:
+                role = Role(name="packout_operator", description="E2E test role")
+                db.add(role)
+                db.flush()
+
+            user = db.query(User).filter(User.username == "critical_e2e_user").first()
+            if user is None:
+                user = User(
+                    username="critical_e2e_user",
+                    email="critical-e2e@example.com",
+                    password_hash=hash_password("critical-e2e-password"),
+                    is_active=True,
+                )
                 user.roles.append(role)
+                db.add(user)
+            else:
+                user.is_active = True
+                if role not in user.roles:
+                    user.roles.append(role)
 
         db.commit()
     finally:

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.deps import require_roles
 from app.db.session import get_db
-from app.models.pallet import AuditEvent, Export, Pallet
+from app.models.pallet import AuditEvent, Export, Pallet, SimPanel
 from app.models.user import User
 from app.schemas.export import (
     ExportCreateRequest,
@@ -59,6 +59,28 @@ def _xlsx_object_key(export: Export) -> tuple[str, str]:
     base_dir = str(pdf_path.parent)
     xlsx_name = export.file_name[:-4] + ".xlsx" if export.file_name.lower().endswith(".pdf") else f"{export.file_name}.xlsx"
     return f"{base_dir}/{xlsx_name}", xlsx_name
+
+
+def _latest_sim_values_for_serials(db: Session, serials: list[str]) -> dict[str, dict[str, float | None]]:
+    values: dict[str, dict[str, float | None]] = {}
+    for serial in serials:
+        latest = (
+            db.query(SimPanel)
+            .filter(SimPanel.serial == serial)
+            .order_by(SimPanel.test_timestamp.desc(), SimPanel.id.desc())
+            .first()
+        )
+        if latest is None:
+            continue
+        values[serial] = {
+            "pm": float(latest.watts) if latest.watts is not None else None,
+            "isc": float(latest.isc) if latest.isc is not None else None,
+            "voc": float(latest.voc) if latest.voc is not None else None,
+            "ipm": float(latest.imp) if latest.imp is not None else None,
+            "vpm": float(latest.vmp) if latest.vmp is not None else None,
+            "ff": float(latest.ff) if latest.ff is not None else None,
+        }
+    return values
 
 
 @router.get("", response_model=ExportListResponse)
@@ -129,10 +151,13 @@ def create_export(
     pdf_file_name = f"pallet-{payload.template_type}-{effective_packout_date.isoformat()}-{pallet.pallet_number}{duplicate_suffix}.pdf"
     workbook_artifact: bytes | None
     try:
+        serials = [item.serial.strip().upper() for item in pallet.items if item.serial]
+        sim_values_by_serial = _latest_sim_values_for_serials(db, serials)
         workbook_artifact = generate_export_workbook_bytes(
             pallet,
             payload.template_type,
             export_dt=export_dt,
+            sim_values_by_serial=sim_values_by_serial,
         )
     except ExportWorkbookError:
         # For unsupported capacities or missing templates, continue with PDF-only export.
