@@ -5,10 +5,11 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
 import { testServerConnectionNamed } from "../features/health";
-import { loadRuntimeSettings, saveRuntimeSettings } from "../lib/runtimeConfig";
+import { isRuntimeSettingsLocked, loadRuntimeSettings, saveRuntimeSettings } from "../lib/runtimeConfig";
 import { SYNC_STATE_EVENT, getSyncState, type SyncState } from "../sync/syncState";
 
 export default function SettingsPage() {
+  const settingsLocked = isRuntimeSettingsLocked();
   const initial = useMemo(() => loadRuntimeSettings(), []);
   const [primaryApiBaseUrl, setPrimaryApiBaseUrl] = useState(initial.primaryApiBaseUrl);
   const [fallbackApiBaseUrl, setFallbackApiBaseUrl] = useState(initial.fallbackApiBaseUrl);
@@ -94,15 +95,22 @@ export default function SettingsPage() {
                 onChange={(event) => setPrimaryApiBaseUrl(event.target.value)}
                 placeholder="http://192.168.1.20:8000/api/v1"
                 required
+                disabled={settingsLocked}
               />
               <TextInput
                 label="Fallback API Base URL (Local Device)"
                 value={fallbackApiBaseUrl}
                 onChange={(event) => setFallbackApiBaseUrl(event.target.value)}
                 placeholder="http://localhost:8000/api/v1"
+                disabled={settingsLocked}
               />
+              {settingsLocked ? (
+                <p className="settings-status settings-status--warning">
+                  API URLs are locked to the local bundled backend.
+                </p>
+              ) : null}
               <div className="settings-actions">
-                <Button type="submit">Save Settings</Button>
+                <Button type="submit" disabled={settingsLocked}>Save Settings</Button>
                 <Button
                   type="button"
                   variant="secondary"

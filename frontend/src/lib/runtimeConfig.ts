@@ -1,6 +1,7 @@
-const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
-const LOOPBACK_API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+const LOOPBACK_API_BASE_URL = "http://localhost:8000/api/v1";
 const SETTINGS_KEY = "pm2_runtime_settings";
+const LOCK_TO_LOCAL_BACKEND = true;
 
 export type RuntimeSettings = {
   primaryApiBaseUrl: string;
@@ -25,7 +26,9 @@ function ensureApiV1Path(value: string): string {
 }
 
 function getDefaultSettings(): RuntimeSettings {
-  const envValue = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? DEFAULT_API_BASE_URL;
+  const envValue = LOCK_TO_LOCAL_BACKEND
+    ? DEFAULT_API_BASE_URL
+    : (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? DEFAULT_API_BASE_URL;
   const normalized = ensureApiV1Path(envValue);
   return {
     primaryApiBaseUrl: normalized,
@@ -36,6 +39,9 @@ function getDefaultSettings(): RuntimeSettings {
 
 export function loadRuntimeSettings(): RuntimeSettings {
   const defaults = getDefaultSettings();
+  if (LOCK_TO_LOCAL_BACKEND) {
+    return defaults;
+  }
   const raw = localStorage.getItem(SETTINGS_KEY);
   if (!raw) {
     return defaults;
@@ -56,6 +62,11 @@ export function loadRuntimeSettings(): RuntimeSettings {
 }
 
 export function saveRuntimeSettings(next: RuntimeSettings): RuntimeSettings {
+  if (LOCK_TO_LOCAL_BACKEND) {
+    const locked = getDefaultSettings();
+    localStorage.removeItem(SETTINGS_KEY);
+    return locked;
+  }
   const primary = ensureApiV1Path(next.primaryApiBaseUrl || next.apiBaseUrl);
   const fallback = ensureApiV1Path(next.fallbackApiBaseUrl ?? "");
   const normalized = {
@@ -76,4 +87,8 @@ export function getApiBaseCandidates(): string[] {
     LOOPBACK_API_BASE_URL,
   ].filter(Boolean);
   return [...new Set(candidates)];
+}
+
+export function isRuntimeSettingsLocked(): boolean {
+  return LOCK_TO_LOCAL_BACKEND;
 }
