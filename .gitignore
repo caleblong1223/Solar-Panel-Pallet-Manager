@@ -43,6 +43,8 @@ dist/
 *.spec.bak
 *.spec~
 *.dist-info/
+frontend/node_modules/.vite/
+frontend/test-results/
 
 # PyInstaller
 *.spec.bak
