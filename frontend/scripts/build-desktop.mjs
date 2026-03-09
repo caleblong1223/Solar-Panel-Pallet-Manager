@@ -13,7 +13,7 @@ function runOrThrow(command, args, cwd) {
   const result = spawnSync(command, args, {
     cwd,
     stdio: "inherit",
-    shell: false,
+    shell: process.platform === "win32",
     env: process.env,
   });
   if (result.error) {
@@ -95,7 +95,12 @@ function buildMacDmg() {
 }
 
 function main() {
-  runOrThrow("npx", ["tauri", "build", "--bundles", "app"], frontendDir);
+  const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
+  if (process.platform === "win32") {
+    runOrThrow(npxCmd, ["tauri", "build", "--bundles", "msi", "nsis"], frontendDir);
+  } else {
+    runOrThrow(npxCmd, ["tauri", "build"], frontendDir);
+  }
 
   if (process.platform === "darwin") {
     buildMacDmg();
