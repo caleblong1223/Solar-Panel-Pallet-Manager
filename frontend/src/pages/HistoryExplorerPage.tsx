@@ -9,11 +9,10 @@ import AnimatedSelect from "../components/ui/AnimatedSelect";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
-import { getPalletHistory, type AuditEvent } from "../features/audit";
 import { deletePallet, getPallet, listPallets, type Pallet } from "../features/pallets";
 import {
   downloadExportWorkbook,
-  getExportDownloadUrl,
+  getExportDownloadEndpoint,
   listExportsByPallet,
   replaceExportWorkbook,
   type ExportRecord,
@@ -43,7 +42,7 @@ export default function HistoryExplorerPage() {
 
   const [query, setQuery] = useState("");
   const [exact, setExact] = useState(false);
-  const [datePreset, setDatePreset] = useState<"all" | "today" | "week" | "month" | "year">("all");
+  const [datePreset, setDatePreset] = useState<"all" | "today" | "week" | "month" | "year">("today");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | "all">("all");
   const [sortMode, setSortMode] = useState<"completed_desc" | "completed_asc" | "number_desc" | "number_asc" | "items_desc">(
@@ -52,7 +51,6 @@ export default function HistoryExplorerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [pallets, setPallets] = useState<Pallet[]>([]);
   const [selectedPalletId, setSelectedPalletId] = useState<number | null>(null);
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [exports, setExports] = useState<ExportRecord[]>([]);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isEditorLoading, setIsEditorLoading] = useState(false);
@@ -79,7 +77,11 @@ export default function HistoryExplorerPage() {
   const loadHistory = async () => {
     setIsLoading(true);
     try {
-      const response = await listPallets(apiToken, "completed");
+      let response = await listPallets(apiToken, "completed", { timeoutMs: 10000 });
+      if (response.total === 0) {
+        // Some deployments keep historical pallets in non-completed states.
+        response = await listPallets(apiToken, "active", { timeoutMs: 10000 });
+      }
       setPallets(response.pallets);
       setSelectedPalletId((previous) => {
         if (previous && response.pallets.some((pallet) => pallet.id === previous)) {
@@ -88,11 +90,28 @@ export default function HistoryExplorerPage() {
         return response.pallets[0]?.id ?? null;
       });
       if (response.total === 0) {
-        notify("No completed pallets found", "warning");
+        notify("No history records found", "warning");
       }
       return response.pallets;
     } catch {
-      notify("Failed to load history", "error");
+      // Retry once after short delay to handle bundled backend warm-up.
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
+      try {
+        const retry = await listPallets(apiToken, "completed", { timeoutMs: 10000 });
+        setPallets(retry.pallets);
+        setSelectedPalletId((previous) => {
+          if (previous && retry.pallets.some((pallet) => pallet.id === previous)) {
+            return previous;
+          }
+          return retry.pallets[0]?.id ?? null;
+        });
+        if (retry.total === 0) {
+          notify("No history records found", "warning");
+        }
+        return retry.pallets;
+      } catch {
+        notify("Failed to load history", "error");
+      }
       return [];
     } finally {
       setIsLoading(false);
@@ -220,32 +239,25 @@ export default function HistoryExplorerPage() {
 
   const loadDetails = async (palletId: number) => {
     setSelectedPalletId(palletId);
-    setAuditEvents([]);
     setExports([]);
 
     try {
-      const [palletRow, historyRows, exportRows] = await Promise.all([
+      const [palletRow, exportRows] = await Promise.all([
         getPallet(apiToken, palletId),
-        getPalletHistory(apiToken, palletId),
         listExportsByPallet(apiToken, palletId),
       ]);
       setPallets((previous) =>
         previous.map((entry) => (entry.id === palletId ? palletRow : entry))
       );
-      setAuditEvents(historyRows);
       setExports(exportRows.exports);
     } catch {
       notify("Failed to load pallet details", "error");
     }
   };
 
-  const handleOpenExport = async (exportId: number, format: "pdf" | "xlsx") => {
-    try {
-      const response = await getExportDownloadUrl(apiToken, exportId, format);
-      window.open(response.download_url, "_blank", "noopener,noreferrer");
-    } catch {
-      notify("Failed to generate export URL", "error");
-    }
+  const handleOpenExport = (exportId: number, format: "pdf" | "xlsx") => {
+    const endpoint = getExportDownloadEndpoint(exportId, format);
+    window.open(endpoint, "_blank", "noopener,noreferrer");
   };
 
   const handleDeletePallet = async () => {
@@ -264,7 +276,6 @@ export default function HistoryExplorerPage() {
       await deletePallet(apiToken, selectedPalletId);
       setPallets((prev) => prev.filter((row) => row.id !== selectedPalletId));
       setSelectedPalletId(null);
-      setAuditEvents([]);
       setExports([]);
       notify("Pallet deleted", "success");
     } catch {
@@ -313,9 +324,10 @@ export default function HistoryExplorerPage() {
         };
       });
       setEditableSheets(nextSheets);
-    } catch {
+    } catch (error) {
       closeEditor();
-      notify("Failed to load export workbook for editing", "error");
+      const message = error instanceof Error ? error.message : "Failed to load export workbook for editing";
+      notify(message, "error");
     } finally {
       setIsEditorLoading(false);
     }
@@ -580,19 +592,6 @@ export default function HistoryExplorerPage() {
                 </section>
               ) : null}
 
-              <h3 className="subhead">Audit Trail</h3>
-              {auditEvents.length === 0 ? (
-                <p>No audit events loaded.</p>
-              ) : (
-                <ul className="flat-list">
-                  {auditEvents.slice(0, 12).map((event) => (
-                    <li key={event.id}>
-                      <span>{event.event_type}</span>
-                      <small>{new Date(event.created_at).toLocaleString()}</small>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </>
           ) : (
             <p>Select a pallet to load panel details and export actions.</p>

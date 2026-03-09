@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, time, timezone
+import mimetypes
+from pathlib import Path
 from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.deps import require_roles
@@ -230,6 +233,41 @@ def get_export_download_url(
         download_url=url,
         expires_in_seconds=expires_in_seconds,
     )
+
+
+@router.get("/{export_id}/download")
+def download_export(
+    export_id: int,
+    format: str = Query(default="pdf", pattern="^(pdf|xlsx)$"),
+    expires_in_seconds: int = Query(default=900, ge=60, le=86400),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "packout_operator", "purchasing_manager")),
+):
+    del current_user
+    export = db.query(Export).filter(Export.id == export_id).first()
+    if export is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+
+    if format == "xlsx":
+        object_key, file_name = _xlsx_object_key(export)
+    else:
+        object_key = export.object_key
+        file_name = export.file_name
+
+    local_path = Path(object_key)
+    if local_path.exists():
+        media_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+        return FileResponse(
+            path=str(local_path),
+            media_type=media_type,
+            filename=file_name,
+        )
+
+    try:
+        url = generate_export_download_url(object_key, expires_in_seconds=expires_in_seconds)
+    except StorageError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @router.post("/{export_id}/replace", response_model=ExportResponse)

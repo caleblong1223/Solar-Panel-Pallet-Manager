@@ -29,6 +29,12 @@ type PalletListResponse = {
   pallets: Pallet[];
 };
 
+type ListPalletsOptions = {
+  limit?: number;
+  offset?: number;
+  timeoutMs?: number;
+};
+
 export type UpdatePalletPayload = {
   template_type?: string;
   customer_id?: number | null;
@@ -36,9 +42,13 @@ export type UpdatePalletPayload = {
   pallet_number?: number;
 };
 
-export async function listPallets(token: string, status = "active") {
-  const query = new URLSearchParams({ status, limit: "50", offset: "0" }).toString();
-  return apiRequest<PalletListResponse>(`/pallets?${query}`, "GET", token);
+export async function listPallets(token: string, status = "active", options?: ListPalletsOptions) {
+  const query = new URLSearchParams({
+    status,
+    limit: String(options?.limit ?? 50),
+    offset: String(options?.offset ?? 0),
+  }).toString();
+  return apiRequest<PalletListResponse>(`/pallets?${query}`, "GET", token, undefined, undefined, options?.timeoutMs);
 }
 
 export async function listPalletsForCustomer(

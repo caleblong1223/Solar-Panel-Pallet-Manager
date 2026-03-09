@@ -551,6 +551,15 @@ h1 {
   background: color-mix(in srgb, var(--color-surface-alt) 70%, transparent);
 }
 
+.items-table tbody tr.row-selected td {
+  background: color-mix(in srgb, var(--color-surface-alt) 82%, #d2e7ff 18%);
+  box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--color-surface-alt) 82%, #d2e7ff 18%);
+}
+
+.items-table tbody tr.row-selected td:first-child {
+  border-left: 3px solid var(--color-primary);
+}
+
 .mono {
   font-family: var(--font-mono);
 }

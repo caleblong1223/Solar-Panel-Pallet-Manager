@@ -17,7 +17,7 @@ import {
   type PalletItem,
   type Pallet,
 } from "../features/pallets";
-import { getExportDownloadUrl } from "../features/exports";
+import { getExportDownloadEndpoint } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
 import { searchBarcodes } from "../features/barcodes";
 
@@ -443,8 +443,8 @@ export default function LiveBuilderPage() {
         template_type: desiredTemplateType,
         packout_date: packoutDate || undefined,
       });
-      const { download_url } = await getExportDownloadUrl(apiToken, created.id, "xlsx");
-      window.open(download_url, "_blank", "noopener,noreferrer");
+      const downloadEndpoint = getExportDownloadEndpoint(created.id, "xlsx");
+      window.open(downloadEndpoint, "_blank", "noopener,noreferrer");
       notify(`Pallet #${palletNumber} completed · export ready`, "success");
       setCurrent(null);
       setFallbackSerials([]);

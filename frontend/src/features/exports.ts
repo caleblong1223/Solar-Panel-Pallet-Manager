@@ -66,10 +66,23 @@ export async function getExportDownloadUrl(
   );
 }
 
+export function getExportDownloadEndpoint(exportId: number, format: "pdf" | "xlsx" = "pdf") {
+  const { apiBaseUrl } = loadRuntimeSettings();
+  const query = new URLSearchParams({ format }).toString();
+  return `${apiBaseUrl}/exports/${exportId}/download?${query}`;
+}
+
 export async function downloadExportWorkbook(token: string, exportId: number) {
-  const response = await getExportDownloadUrl(token, exportId, "xlsx");
-  const download = await fetch(response.download_url);
+  const endpoint = getExportDownloadEndpoint(exportId, "xlsx");
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const download = await fetch(endpoint, { headers });
   if (!download.ok) {
+    if (download.status === 404) {
+      throw new Error("Spreadsheet file is not available for this export");
+    }
     throw new Error(`Failed to download workbook (${download.status})`);
   }
   return await download.arrayBuffer();
@@ -87,9 +100,7 @@ export async function replaceExportWorkbook(
 
   const response = await fetch(`${apiBaseUrl}/exports/${exportId}/replace`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
   });
   if (!response.ok) {
