@@ -41,6 +41,21 @@ type BuilderSelection = {
   size: number;
 };
 
+type MissingSimPromptState = {
+  serial: string;
+  cancelText: string;
+  resolve: (useFallback: boolean) => void;
+};
+
+function findDefaultCustomer(customers: Customer[]): Customer | null {
+  const exactMatch = customers.find(
+    (customer) => customer.display_name.trim().toLowerCase() === "josh atwood"
+  );
+  if (exactMatch) return exactMatch;
+  const containsMatch = customers.find((customer) => customer.display_name.toLowerCase().includes("josh atwood"));
+  return containsMatch ?? null;
+}
+
 function loadLastBuilderSelection(): BuilderSelection | null {
   if (typeof window === "undefined") {
     return null;
@@ -128,6 +143,7 @@ export default function LiveBuilderPage() {
   const [isPalletNumberAnimating, setIsPalletNumberAnimating] = useState(false);
   const [isPackoutDateAnimating, setIsPackoutDateAnimating] = useState(false);
   const [fallbackSerials, setFallbackSerials] = useState<string[]>([]);
+  const [missingSimPrompt, setMissingSimPrompt] = useState<MissingSimPromptState | null>(null);
   const [packoutDate, setPackoutDate] = useState<string>(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -137,6 +153,21 @@ export default function LiveBuilderPage() {
   });
   const serialInputRef = useRef<HTMLInputElement | null>(null);
   const packoutDateRef = useRef<HTMLInputElement | null>(null);
+
+  const requestMissingSimDecision = (serialValue: string, cancelText: string): Promise<boolean> => {
+    return new Promise<boolean>((resolve) => {
+      setMissingSimPrompt({ serial: serialValue, cancelText, resolve });
+    });
+  };
+
+  const resolveMissingSimDecision = (useFallback: boolean) => {
+    setMissingSimPrompt((active) => {
+      if (active) {
+        active.resolve(useFallback);
+      }
+      return null;
+    });
+  };
 
   const remaining = current ? current.max_panels - current.item_count : 0;
 
@@ -166,12 +197,9 @@ export default function LiveBuilderPage() {
       if (cachedRaw) {
         const parsed = JSON.parse(cachedRaw) as Customer[];
         setCustomers(parsed);
-        const legacyDefault = parsed.find((customer) => {
-          const name = (customer.display_name ?? "").toLowerCase();
-          return name.includes("josh") && name.includes("future") && name.includes("solution");
-        });
-        if (legacyDefault) {
-          setSelectedCustomerId((prev) => (prev === "none" ? legacyDefault.id : prev));
+        const defaultCustomer = findDefaultCustomer(parsed);
+        if (defaultCustomer) {
+          setSelectedCustomerId((prev) => (prev === "none" ? defaultCustomer.id : prev));
         }
       }
     } catch {
@@ -187,19 +215,22 @@ export default function LiveBuilderPage() {
         } catch {
           // Ignore cache write failures.
         }
-        // Prefer the legacy default customer if present.
-        const legacyDefault = response.customers.find((customer) => {
-          const name = (customer.display_name ?? "").toLowerCase();
-          return name.includes("josh") && name.includes("future") && name.includes("solution");
-        });
-        if (legacyDefault) {
-          setSelectedCustomerId((prev) => (prev === "none" ? legacyDefault.id : prev));
+        const defaultCustomer = findDefaultCustomer(response.customers);
+        if (defaultCustomer) {
+          setSelectedCustomerId((prev) => (prev === "none" ? defaultCustomer.id : prev));
         }
       })
       .catch(() => {
         // Customers are optional for pallet creation; swallow errors here and surface via explicit actions if needed.
       });
   }, [contextToken]);
+
+  useEffect(() => {
+    if (current) return;
+    const defaultCustomer = findDefaultCustomer(customers);
+    if (!defaultCustomer) return;
+    setSelectedCustomerId(defaultCustomer.id);
+  }, [current, customers]);
 
   const handleStartNewPallet = async () => {
     setIsBusy(true);
@@ -258,16 +289,7 @@ export default function LiveBuilderPage() {
         const lookup = await searchBarcodes(token, { q: s, exact: true, limit: 200, offset: 0 });
         const hasSimData = lookup.results.some((result) => result.source === "sim_panel" && result.serial === s);
         if (!hasSimData) {
-          const useFallback = window.confirm(
-            [
-              "No sun simulator information exists in the database for this panel.",
-              "",
-              `Serial: ${s}`,
-              "",
-              "Select OK to add it with generated theoretical values.",
-              "Select Cancel to keep it off the pallet.",
-            ].join("\n")
-          );
+          const useFallback = await requestMissingSimDecision(s, "Keep it off the pallet");
           if (!useFallback) {
             notify(`Panel ${s} not added: no sun simulator data in database`, "warning");
             return;
@@ -365,16 +387,7 @@ export default function LiveBuilderPage() {
           if (!(error instanceof ApiError) || error.errorCode !== "SIM_DATA_REQUIRED") {
             throw error;
           }
-          const useFallback = window.confirm(
-            [
-              "No sun simulator information exists in the database for this panel.",
-              "",
-              `Serial: ${item.serial}`,
-              "",
-              "Select OK to add it with generated theoretical values.",
-              "Select Cancel to skip it and keep building this pallet.",
-            ].join("\n")
-          );
+          const useFallback = await requestMissingSimDecision(item.serial, "Skip this panel and keep building");
           if (useFallback) {
             workingPallet = await apiAddPalletItem(token, workingPallet.id, item.serial, undefined, {
               allowMissingSimData: true,
@@ -692,6 +705,24 @@ export default function LiveBuilderPage() {
           </Card>
         ) : null}
       </section>
+      {missingSimPrompt ? (
+        <div className="builder-modal__backdrop" role="dialog" aria-modal="true" aria-labelledby="missing-sim-title">
+          <div className="builder-modal">
+            <h3 id="missing-sim-title">Sun Simulator Data Missing</h3>
+            <p>No sun simulator information exists in the database for this panel.</p>
+            <p className="mono">Serial: {missingSimPrompt.serial}</p>
+            <p>You can add it with generated theoretical values, or leave it off the pallet.</p>
+            <div className="builder-modal__actions">
+              <Button variant="secondary" onClick={() => resolveMissingSimDecision(false)}>
+                {missingSimPrompt.cancelText}
+              </Button>
+              <Button variant="primary" onClick={() => resolveMissingSimDecision(true)}>
+                Use generated theoretical values
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppFrame>
   );
 }
