@@ -40,6 +40,7 @@ function matrixFromRows(rows: unknown[][]): Matrix<SheetCell> {
 export default function HistoryExplorerPage() {
   const { token } = useAuth();
   const { notify } = useToast();
+  const apiToken = token ?? "";
 
   const [query, setQuery] = useState("");
   const [exact, setExact] = useState(false);
@@ -64,15 +65,14 @@ export default function HistoryExplorerPage() {
   const selectedPalletId = selected?.pallet_id ?? null;
 
   useEffect(() => {
-    if (!token) return;
-    void listCustomers(token, { isActive: true })
+    void listCustomers(apiToken, { isActive: true })
       .then((response) => {
         setCustomers(response.customers);
       })
       .catch(() => {
         // History still works without customer filter; swallow errors here.
       });
-  }, [token]);
+  }, [apiToken]);
 
   const matchedSummary = useMemo(() => {
     if (!selected) {
@@ -156,14 +156,14 @@ export default function HistoryExplorerPage() {
   };
 
   const doSearch = useCallback(async () => {
-    if (!token || !query.trim()) {
+    if (!query.trim()) {
       return;
     }
 
     setIsLoading(true);
     try {
       const { sort, order } = sortToParams();
-      const response = await searchBarcodes(token, {
+      const response = await searchBarcodes(apiToken, {
         q: query.trim(),
         exact,
         limit: 100,
@@ -184,7 +184,7 @@ export default function HistoryExplorerPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [token, query, exact, notify, sortToParams]);
+  }, [apiToken, query, exact, notify, sortToParams]);
 
 const runSearch = async (event: FormEvent) => {
   event.preventDefault();
@@ -214,14 +214,14 @@ const runSearch = async (event: FormEvent) => {
     setAuditEvents([]);
     setExports([]);
 
-    if (!token || !row.pallet_id) {
+    if (!row.pallet_id) {
       return;
     }
 
     try {
       const [historyRows, exportRows] = await Promise.all([
-        getPalletHistory(token, row.pallet_id),
-        listExportsByPallet(token, row.pallet_id),
+        getPalletHistory(apiToken, row.pallet_id),
+        listExportsByPallet(apiToken, row.pallet_id),
       ]);
       setAuditEvents(historyRows);
       setExports(exportRows.exports);
@@ -231,11 +231,8 @@ const runSearch = async (event: FormEvent) => {
   };
 
   const handleOpenExport = async (exportId: number) => {
-    if (!token) {
-      return;
-    }
     try {
-      const response = await getExportDownloadUrl(token, exportId);
+      const response = await getExportDownloadUrl(apiToken, exportId);
       window.open(response.download_url, "_blank", "noopener,noreferrer");
     } catch {
       notify("Failed to generate export URL", "error");
@@ -243,7 +240,7 @@ const runSearch = async (event: FormEvent) => {
   };
 
   const handleDeletePallet = async () => {
-    if (!token || !selectedPalletId) {
+    if (!selectedPalletId) {
       return;
     }
     const palletNumber = selected?.pallet_number;
@@ -255,7 +252,7 @@ const runSearch = async (event: FormEvent) => {
       return;
     }
     try {
-      await deletePallet(token, selectedPalletId);
+      await deletePallet(apiToken, selectedPalletId);
       setResults((prev) => prev.filter((row) => row.pallet_id !== selectedPalletId));
       setSelected(null);
       setAuditEvents([]);
@@ -276,24 +273,18 @@ const runSearch = async (event: FormEvent) => {
   };
 
   const refreshPalletExports = async (palletId: number) => {
-    if (!token) {
-      return;
-    }
-    const exportRows = await listExportsByPallet(token, palletId);
+    const exportRows = await listExportsByPallet(apiToken, palletId);
     setExports(exportRows.exports);
   };
 
   const handleEditExport = async (item: ExportRecord) => {
-    if (!token) {
-      return;
-    }
     setIsEditorOpen(true);
     setIsEditorLoading(true);
     setEditingExport(item);
     setEditableSheets([]);
     setActiveSheetIndex(0);
     try {
-      const workbookBuffer = await downloadExportWorkbook(token, item.id);
+      const workbookBuffer = await downloadExportWorkbook(apiToken, item.id);
       const workbook = XLSX.read(workbookBuffer, { type: "array" });
       const sheetNames = workbook.SheetNames;
       if (sheetNames.length === 0) {
@@ -328,7 +319,7 @@ const runSearch = async (event: FormEvent) => {
   };
 
   const handleSaveSpreadsheet = async () => {
-    if (!token || !editingExport || editableSheets.length === 0) {
+    if (!editingExport || editableSheets.length === 0) {
       return;
     }
     setIsSavingEdit(true);
@@ -347,7 +338,7 @@ const runSearch = async (event: FormEvent) => {
         ? editingExport.file_name.slice(0, -4)
         : editingExport.file_name;
       const fileName = baseName.toLowerCase().endsWith(".xlsx") ? baseName : `${baseName}.xlsx`;
-      await replaceExportWorkbook(token, editingExport.id, blob, fileName);
+      await replaceExportWorkbook(apiToken, editingExport.id, blob, fileName);
       if (selectedPalletId) {
         await refreshPalletExports(selectedPalletId);
       }
