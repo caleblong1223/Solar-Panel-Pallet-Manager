@@ -1,9 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from fastapi import Depends
-
-from app.api.v1.endpoints.auth import get_current_user_optional
 from app.models.user import User
 
 
@@ -26,9 +23,7 @@ def require_roles(*_: str) -> Callable[..., User | AnonymousUser]:
     behaves as an "authenticated user required" check only.
     """
 
-    def _dependency(current_user: User | None = Depends(get_current_user_optional)) -> User | AnonymousUser:
-        if current_user is None:
-            return AnonymousUser()
-        return current_user
+    def _dependency() -> User | AnonymousUser:
+        return AnonymousUser()
 
     return _dependency
