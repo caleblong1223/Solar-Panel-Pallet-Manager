@@ -188,6 +188,10 @@ export default function HistoryExplorerPage() {
 
 const runSearch = async (event: FormEvent) => {
   event.preventDefault();
+  if (!query.trim()) {
+    notify("Enter a serial to search history", "warning");
+    return;
+  }
   await doSearch();
 };
 
