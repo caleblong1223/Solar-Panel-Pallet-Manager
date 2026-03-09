@@ -358,10 +358,7 @@ export default function LiveBuilderPage() {
       notify("Add at least 1 panel before completing a pallet", "warning");
       return;
     }
-    if (!token) {
-      notify("Server connection is required to finalize and export a pallet", "error");
-      return;
-    }
+    const apiToken = token ?? "";
     const desiredTemplateType = newPalletTemplate;
     const desiredCustomerId = selectedCustomerId === "none" ? null : selectedCustomerId;
     const desiredMaxPanels = newPalletSize;
@@ -371,7 +368,7 @@ export default function LiveBuilderPage() {
 
     setIsBusy(true);
     try {
-      const createdServerPallet = await apiCreatePallet(token, {
+      const createdServerPallet = await apiCreatePallet(apiToken, {
         max_panels: desiredMaxPanels,
         template_type: desiredTemplateType,
         customer_id: desiredCustomerId ?? undefined,
@@ -384,7 +381,7 @@ export default function LiveBuilderPage() {
       const skippedSerials: string[] = [];
       for (const item of draftItems) {
         try {
-          workingPallet = await apiAddPalletItem(token, workingPallet.id, item.serial, undefined, {
+          workingPallet = await apiAddPalletItem(apiToken, workingPallet.id, item.serial, undefined, {
             allowMissingSimData: fallbackSerials.includes(item.serial),
           });
         } catch (error) {
@@ -393,7 +390,7 @@ export default function LiveBuilderPage() {
           }
           const useFallback = await requestMissingSimDecision(item.serial, "Skip this panel and keep building");
           if (useFallback) {
-            workingPallet = await apiAddPalletItem(token, workingPallet.id, item.serial, undefined, {
+            workingPallet = await apiAddPalletItem(apiToken, workingPallet.id, item.serial, undefined, {
               allowMissingSimData: true,
             });
             setFallbackSerials((prev) => (prev.includes(item.serial) ? prev : [...prev, item.serial]));
@@ -405,7 +402,7 @@ export default function LiveBuilderPage() {
 
       if (skippedSerials.length > 0) {
         try {
-          await deletePallet(token, workingPallet.id);
+          await deletePallet(apiToken, workingPallet.id);
         } catch {
           // Best effort cleanup; keep operator flow moving.
         }
@@ -434,19 +431,19 @@ export default function LiveBuilderPage() {
         desiredPalletNumber > 0 &&
         workingPallet.pallet_number !== desiredPalletNumber
       ) {
-        workingPallet = await updatePallet(token, workingPallet.id, {
+        workingPallet = await updatePallet(apiToken, workingPallet.id, {
           pallet_number: desiredPalletNumber,
         });
       }
 
-      workingPallet = await apiCompletePallet(token, workingPallet.id);
+      workingPallet = await apiCompletePallet(apiToken, workingPallet.id);
       setCurrent(workingPallet);
-      const created = await createExport(token ?? "", {
+      const created = await createExport(apiToken, {
         pallet_id: workingPallet.id,
         template_type: desiredTemplateType,
         packout_date: packoutDate || undefined,
       });
-      const { download_url } = await getExportDownloadUrl(token ?? "", created.id, "xlsx");
+      const { download_url } = await getExportDownloadUrl(apiToken, created.id, "xlsx");
       window.open(download_url, "_blank", "noopener,noreferrer");
       notify(`Pallet #${palletNumber} completed · export ready`, "success");
       setCurrent(null);

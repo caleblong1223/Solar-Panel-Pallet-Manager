@@ -11,6 +11,7 @@ from app.schemas.auth import LoginRequest, MeResponse, Token
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User | None:
@@ -24,33 +25,39 @@ def authenticate_user(db: Session, username: str, password: str) -> User | None:
     return user
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
+def get_current_user_optional(
+    token: str | None = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
-) -> User:
+) -> User | None:
     from app.core.security import decode_token
+
+    if not token:
+        return None
 
     try:
         payload = decode_token(token)
         username: str | None = payload.get("sub")
     except ValueError:
-        username = None
+        return None
 
     if username is None:
+        return None
+    user = db.query(User).filter(User.username == username).first()
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
+def get_current_user(
+    current_user: User | None = Depends(get_current_user_optional),
+) -> User:
+    if current_user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    user = db.query(User).filter(User.username == username).first()
-    if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User inactive or not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
+    return current_user
 
 
 @router.post("/login", response_model=Token)
