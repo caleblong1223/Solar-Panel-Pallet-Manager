@@ -354,6 +354,10 @@ export default function LiveBuilderPage() {
 
   const handleComplete = async () => {
     if (!current) return;
+    if (current.item_count <= 0) {
+      notify("Add at least 1 panel before completing a pallet", "warning");
+      return;
+    }
     if (!token) {
       notify("Server connection is required to finalize and export a pallet", "error");
       return;
@@ -626,7 +630,7 @@ export default function LiveBuilderPage() {
               <div style={{ marginTop: "12px" }}>
                 <Button
                   variant="primary"
-                  disabled={isBusy || remaining !== 0}
+                  disabled={isBusy || current.item_count <= 0}
                   onClick={handleComplete}
                 >
                   Complete pallet
