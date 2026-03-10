@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Net;
+using System.Net.Http;
 using PalletManager.Application.Contracts;
 using PalletManager.Desktop.Avalonia.ViewModels;
 using PalletManager.Domain.Entities;
@@ -200,10 +202,69 @@ public sealed class HistoryViewModelTests
         Assert.Empty(launcher.Targets);
     }
 
+    [Fact]
+    public async Task StartSpreadsheetEditAsync_LargeWorkbook_CapsGridAndSupportsSheetSwitching()
+    {
+        var launcher = new RecordingSystemLauncher();
+        var api = new FakeApiClient();
+        var spreadsheet = new ConfigurableSpreadsheetService
+        {
+            WorkbookToLoad = BuildWorkbook(rows: 140, cols: 20, includeSecondSheet: true),
+        };
+        var http = new StaticHttpClientFactory(new byte[] { 0x01, 0x02, 0x03 });
+        var vm = CreateViewModel(launcher, api, new InMemoryCacheRepository(), spreadsheet, http);
+
+        vm.ExportRows.Add(new HistoryExportRow(8801, "packout.xlsx", "200WT", "2026-03-10", DateTime.UtcNow));
+        await vm.StartSpreadsheetEditAsync(8801);
+
+        Assert.True(vm.IsSpreadsheetEditorOpen);
+        Assert.Equal(2, vm.EditingSheetNames.Count);
+        Assert.Equal(16, vm.EditingColumnHeaders.Count);
+        Assert.Equal(119, vm.EditingRows.Count);
+        Assert.Contains("showing 120/140 rows and 16/20 columns", vm.EditingGridSummary);
+
+        vm.SelectedEditingSheetName = "SUMMARY";
+        Assert.Equal(2, vm.EditingRows.Count);
+        Assert.Equal(2, vm.EditingColumnHeaders.Count);
+        Assert.Contains("showing 3/3 rows and 2/2 columns", vm.EditingGridSummary);
+    }
+
+    [Fact]
+    public async Task SaveSpreadsheetEditsAsync_PostsEditedWorkbookAcrossSheets()
+    {
+        var launcher = new RecordingSystemLauncher();
+        var api = new FakeApiClient();
+        var spreadsheet = new ConfigurableSpreadsheetService
+        {
+            WorkbookToLoad = BuildWorkbook(rows: 4, cols: 4, includeSecondSheet: true),
+            BytesToSave = Enumerable.Repeat((byte)0xAB, 128).ToArray(),
+        };
+        var http = new StaticHttpClientFactory(new byte[] { 0x0A, 0x0B });
+        var vm = CreateViewModel(launcher, api, new InMemoryCacheRepository(), spreadsheet, http);
+
+        vm.ExportRows.Add(new HistoryExportRow(8802, "packout.xlsx", "200WT", "2026-03-10", DateTime.UtcNow));
+        await vm.StartSpreadsheetEditAsync(8802);
+        vm.EditingRows[0].Cells[1].Value = "UPDATED-PM";
+        await vm.SaveSpreadsheetEditsAsync();
+
+        Assert.Equal("/exports/8802/apply-edits", api.LastPostPath);
+        Assert.NotNull(api.LastPostBody);
+        Assert.Equal(128, api.LastPostBody!.RootElement.GetProperty("workbook_size_bytes").GetInt32());
+        var sheets = api.LastPostBody.RootElement.GetProperty("sheets");
+        Assert.Equal(2, sheets.GetArrayLength());
+        var dataSheet = sheets.EnumerateArray().First(s => s.GetProperty("name").GetString() == "DATA");
+        Assert.Equal("UPDATED-PM", dataSheet.GetProperty("data")[1][1].GetString());
+        var summarySheet = sheets.EnumerateArray().First(s => s.GetProperty("name").GetString() == "SUMMARY");
+        Assert.Equal("=SUM(DATA!B2:B2)", summarySheet.GetProperty("data")[1][1].GetString());
+        Assert.Contains("Spreadsheet changes saved (128 bytes).", vm.StatusMessage);
+    }
+
     private static HistoryViewModel CreateViewModel(
         RecordingSystemLauncher launcher,
         FakeApiClient apiClient,
-        InMemoryCacheRepository cacheRepository)
+        InMemoryCacheRepository cacheRepository,
+        ISpreadsheetService? spreadsheetService = null,
+        IHttpClientFactory? httpClientFactory = null)
     {
         return new HistoryViewModel(
             apiClient,
@@ -211,8 +272,8 @@ public sealed class HistoryViewModelTests
             cacheRepository,
             new FixedSettingsService(),
             launcher,
-            new NoopSpreadsheetService(),
-            new NoopHttpClientFactory());
+            spreadsheetService ?? new NoopSpreadsheetService(),
+            httpClientFactory ?? new NoopHttpClientFactory());
     }
 
     private sealed class FakeApiClient : IApiClient
@@ -221,6 +282,8 @@ public sealed class HistoryViewModelTests
         public string? CustomCompletedPalletsJson { get; set; }
         public bool ThrowOnDelete { get; set; }
         public bool ThrowOnExportLookup { get; set; }
+        public string? LastPostPath { get; private set; }
+        public JsonDocument? LastPostBody { get; private set; }
 
         public Task<T> GetAsync<T>(string path, string? token = null, CancellationToken ct = default)
         {
@@ -270,8 +333,16 @@ public sealed class HistoryViewModelTests
             throw new NotSupportedException(path);
         }
 
-        public Task<T> PostAsync<T>(string path, object? body = null, string? token = null, IDictionary<string, string>? headers = null, CancellationToken ct = default) =>
-            throw new NotSupportedException(path);
+        public Task<T> PostAsync<T>(string path, object? body = null, string? token = null, IDictionary<string, string>? headers = null, CancellationToken ct = default)
+        {
+            LastPostPath = path;
+            var json = JsonSerializer.Serialize(body ?? new { });
+            LastPostBody = JsonDocument.Parse(json);
+            var result = typeof(T) == typeof(object)
+                ? (T)(object)new object()
+                : JsonSerializer.Deserialize<T>("{}")!;
+            return Task.FromResult(result);
+        }
 
         public Task<T> PatchAsync<T>(string path, object body, string? token = null, CancellationToken ct = default) =>
             throw new NotSupportedException(path);
@@ -365,9 +436,110 @@ public sealed class HistoryViewModelTests
         public HttpClient CreateClient(string name) => new();
     }
 
+    private sealed class StaticHttpClientFactory : IHttpClientFactory
+    {
+        private readonly byte[] _bytes;
+
+        public StaticHttpClientFactory(byte[] bytes)
+        {
+            _bytes = bytes;
+        }
+
+        public HttpClient CreateClient(string name)
+        {
+            return new HttpClient(new StaticHttpMessageHandler(_bytes), disposeHandler: true);
+        }
+    }
+
+    private sealed class StaticHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly byte[] _bytes;
+
+        public StaticHttpMessageHandler(byte[] bytes)
+        {
+            _bytes = bytes;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(_bytes),
+            };
+            return Task.FromResult(response);
+        }
+    }
+
     private sealed class FixedAuthService : IApiTokenProvider
     {
         public Task<string?> GetBearerTokenAsync(CancellationToken ct = default) => Task.FromResult<string?>("token");
+    }
+
+    private sealed class ConfigurableSpreadsheetService : ISpreadsheetService
+    {
+        public WorkbookEditModel WorkbookToLoad { get; set; } = new();
+        public byte[] BytesToSave { get; set; } = new byte[] { 0x01 };
+        public WorkbookEditModel? LastSavedWorkbook { get; private set; }
+
+        public Task<WorkbookEditModel> LoadAsync(byte[] xlsxBytes, CancellationToken ct = default)
+        {
+            return Task.FromResult(CloneWorkbook(WorkbookToLoad));
+        }
+
+        public Task<byte[]> SaveAsync(WorkbookEditModel workbook, CancellationToken ct = default)
+        {
+            LastSavedWorkbook = CloneWorkbook(workbook);
+            return Task.FromResult(BytesToSave);
+        }
+    }
+
+    private static WorkbookEditModel BuildWorkbook(int rows, int cols, bool includeSecondSheet)
+    {
+        var workbook = new WorkbookEditModel();
+        var data = new WorkbookSheet { Name = "DATA" };
+        for (var r = 0; r < rows; r++)
+        {
+            var row = new List<string>();
+            for (var c = 0; c < cols; c++)
+            {
+                row.Add(r == 0 ? $"H{c + 1}" : $"R{r + 1}C{c + 1}");
+            }
+
+            data.Data.Add(row);
+        }
+
+        workbook.Sheets.Add(data);
+
+        if (includeSecondSheet)
+        {
+            workbook.Sheets.Add(new WorkbookSheet
+            {
+                Name = "SUMMARY",
+                Data =
+                {
+                    new List<string> { "Metric", "Value" },
+                    new List<string> { "Count", "=SUM(DATA!B2:B2)" },
+                    new List<string> { "Stamp", "2026-03-10T12:00:00Z" },
+                }
+            });
+        }
+
+        return workbook;
+    }
+
+    private static WorkbookEditModel CloneWorkbook(WorkbookEditModel source)
+    {
+        var clone = new WorkbookEditModel();
+        foreach (var sheet in source.Sheets)
+        {
+            clone.Sheets.Add(new WorkbookSheet
+            {
+                Name = sheet.Name,
+                Data = sheet.Data.Select(r => r.ToList()).ToList(),
+            });
+        }
+
+        return clone;
     }
 
     private sealed class EmptyObservable<T> : IObservable<T>

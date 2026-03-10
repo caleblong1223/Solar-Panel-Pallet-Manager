@@ -26,6 +26,7 @@
 3. Spreadsheet editor parity:
    - Verify larger real-world workbook handling (row/column caps, multi-sheet navigation).
    - Confirm save/apply-edits behavior preserves required formulas and protected layout assumptions.
+   - Status: in progress. Automated evidence added in `CoreFlowsParityTests.History_SpreadsheetEditor_LargeWorkbookCapsAndMultiSheetNavigation_MatchesExpectedFlow` plus `ExportSpreadsheetParityTests.*` formula/cell contract checks.
 
 ### P1 - Non-Core UX/State Parity
 1. Import simulator parity:

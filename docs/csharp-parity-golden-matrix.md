@@ -35,6 +35,7 @@ This document defines the behavior-level parity evidence required for Pallet Man
 | PAR-XLSX-001 | Spreadsheet | Golden CSV shape remains stable for baseline parser assumptions. | `ExportSpreadsheetParityTests.GoldenCsvFixture_ParsesWithExpectedShape` |
 | PAR-XLSX-002 | Spreadsheet | Golden workbook edit roundtrip preserves full cell matrix parity. | `ExportSpreadsheetParityTests.GoldenXlsxRoundtrip_AfterEdit_MatchesExpectedFixtureAtCellLevel` |
 | PAR-XLSX-003 | Spreadsheet | Production-like workbook preserves formulas and expected edited cells. | `ExportSpreadsheetParityTests.ProductionLikeWorkbook_AfterEdit_MatchesExpectedCellContracts_AndPreservesFormulas` |
+| PAR-XLSX-004 | Spreadsheet | History editor enforces visible row/column caps and supports multi-sheet navigation while persisting edits. | `CoreFlowsParityTests.History_SpreadsheetEditor_LargeWorkbookCapsAndMultiSheetNavigation_MatchesExpectedFlow` |
 
 ## Fixture Inventory
 - `csharp/tests/PalletManager.ParityTests/Fixtures/exports/export_golden.csv`
