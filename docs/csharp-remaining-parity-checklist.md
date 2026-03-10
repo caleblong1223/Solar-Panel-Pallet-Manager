@@ -51,6 +51,29 @@
 2. Add scenario evidence snapshots for top operator journeys (before/after state assertions).
 3. Link each checklist item to an automated test (unit/integration/parity) or mark explicit manual-only rationale.
 
+## Evidence Ledger (Automated vs Manual)
+1. Builder
+   - Automated: `CoreFlowsParityTests.Builder_MissingSimDecisionJourney_PreservesQueueSemantics`, `CoreFlowsParityTests.Builder_SimDataPresentJourney_AddRemoveComplete_PreservesSlotParity`, `CoreFlowsParityTests.Builder_TemplateAndSizeMatrix_UsesSelectedValuesInCreatePayload`.
+   - Manual sign-off required: customer assignment interaction parity and operator copy/tone parity for missing-SIM prompt in live workflow.
+2. History
+   - Automated: `CoreFlowsParityTests.History_RefreshFilterMergeAndOpenExport_MatchesExpectedFlow`, `CoreFlowsParityTests.History_FilterComboAndSort_MatchesExpectedRows`, `CoreFlowsParityTests.History_DeleteAndMergeFailures_SetOperatorSafeMessages`.
+   - Manual sign-off required: none currently identified.
+3. Spreadsheet
+   - Automated: `ExportSpreadsheetParityTests.*`, `CoreFlowsParityTests.History_SpreadsheetEditor_LargeWorkbookCapsAndMultiSheetNavigation_MatchesExpectedFlow`.
+   - Manual sign-off required: production workbook spot-check on operator-selected samples.
+4. Import simulator
+   - Automated: `NonCoreFlowsParityTests.Import_*`, `ImportSimulatorViewModelTests.UploadAsync_ShowsProgressAndPrioritizesInSpecMostRecentRows`.
+   - Manual sign-off required: confirm operator acceptance of progress UX wording and cadence.
+5. Exports library
+   - Automated: `NonCoreFlowsParityTests.Exports_*`.
+   - Manual sign-off required: none currently identified.
+6. Customers
+   - Automated: `NonCoreFlowsParityTests.Customers_*`.
+   - Manual sign-off required: none currently identified.
+7. Settings + Sync Issues
+   - Automated: `NonCoreFlowsParityTests.Settings_*`, `NonCoreFlowsParityTests.SettingsAndSyncIssues_ManualTriggerAndRetryDiscard_MaintainParityFlow`.
+   - Manual sign-off required: none currently identified.
+
 ## Acceptance Criteria to Close Remaining Parity
 1. Every P0 and P1 item has passing automated evidence or approved manual sign-off.
 2. No open critical parity defects for Builder/History/Spreadsheet flows.
