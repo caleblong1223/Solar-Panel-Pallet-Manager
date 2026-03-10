@@ -169,30 +169,133 @@ fn start_bundled_backend(app: &tauri::AppHandle) -> Result<(), String> {
   Ok(())
 }
 
+fn legacy_local_export_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
+  let mut roots: Vec<PathBuf> = Vec::new();
+
+  if let Ok(app_data_dir) = app.path().app_data_dir() {
+    roots.push(app_data_dir.join("EXPORTS").join("LOCAL_EXPORTS"));
+  }
+
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    roots.push(resource_dir.join("data").join("EXPORTS").join("LOCAL_EXPORTS"));
+    roots.push(
+      resource_dir
+        .join("_up_")
+        .join("_up_")
+        .join("data")
+        .join("EXPORTS")
+        .join("LOCAL_EXPORTS"),
+    );
+  }
+
+  if let Ok(exe_path) = std::env::current_exe() {
+    if let Some(exe_dir) = exe_path.parent() {
+      roots.push(exe_dir.join("data").join("EXPORTS").join("LOCAL_EXPORTS"));
+      roots.push(
+        exe_dir
+          .join("_up_")
+          .join("_up_")
+          .join("data")
+          .join("EXPORTS")
+          .join("LOCAL_EXPORTS"),
+      );
+    }
+  }
+
+  roots.sort();
+  roots.dedup();
+  roots
+}
+
+fn normalize_open_target(app: &tauri::AppHandle, target: &str) -> String {
+  let trimmed = target.trim();
+  if trimmed.is_empty() {
+    return trimmed.to_string();
+  }
+
+  #[cfg(target_os = "windows")]
+  {
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+      return trimmed.to_string();
+    }
+
+    let decoded = if lower.starts_with("file:///") {
+      trimmed
+        .trim_start_matches("file:///")
+        .replace("%20", " ")
+        .replace('/', "\\")
+    } else {
+      trimmed.replace("%20", " ")
+    };
+
+    let decoded_lower = decoded.to_ascii_lowercase();
+    let legacy_prefixes = [
+      "\\data\\exports\\local_exports\\",
+      "data\\exports\\local_exports\\",
+      "/data/exports/local_exports/",
+      "data/exports/local_exports/",
+    ];
+
+    for prefix in legacy_prefixes {
+      if decoded_lower.starts_with(prefix) {
+        let suffix = decoded[prefix.len()..].trim_start_matches(['\\', '/']);
+        for root in legacy_local_export_roots(app) {
+          let candidate = root.join(suffix);
+          if candidate.exists() {
+            return candidate.to_string_lossy().into_owned();
+          }
+        }
+        if let Some(root) = legacy_local_export_roots(app).into_iter().next() {
+          return root.join(suffix).to_string_lossy().into_owned();
+        }
+        return decoded;
+      }
+    }
+
+    if decoded.len() >= 3 {
+      let bytes = decoded.as_bytes();
+      let has_drive = bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/');
+      if has_drive {
+        return decoded;
+      }
+    }
+
+    return decoded;
+  }
+
+  #[cfg(not(target_os = "windows"))]
+  {
+    trimmed.to_string()
+  }
+}
+
 #[tauri::command]
-fn open_with_system(target: String) -> Result<(), String> {
+fn open_with_system(app: tauri::AppHandle, target: String) -> Result<(), String> {
   if target.trim().is_empty() {
     return Err("Target cannot be empty".to_string());
   }
 
+  let normalized_target = normalize_open_target(&app, &target);
+
   #[cfg(target_os = "macos")]
   let mut command = {
     let mut cmd = Command::new("open");
-    cmd.arg(&target);
+    cmd.arg(&normalized_target);
     cmd
   };
 
   #[cfg(target_os = "windows")]
   let mut command = {
     let mut cmd = Command::new("cmd");
-    cmd.arg("/C").arg("start").arg("").arg(&target);
+    cmd.arg("/C").arg("start").arg("").arg(&normalized_target);
     cmd
   };
 
   #[cfg(all(unix, not(target_os = "macos")))]
   let mut command = {
     let mut cmd = Command::new("xdg-open");
-    cmd.arg(&target);
+    cmd.arg(&normalized_target);
     cmd
   };
 

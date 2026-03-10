@@ -33,7 +33,7 @@ def _client_with_pallet(
     user: DummyUser,
     *,
     pallet_status: str = "completed",
-    max_panels: int = 2,
+    max_panels: int = 25,
 ) -> Generator[TestClient, None, None]:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -113,6 +113,11 @@ def test_create_export_success(monkeypatch) -> None:
 
         monkeypatch.setattr(
             exports_endpoint,
+            "_render_pdf_from_workbook_bytes",
+            lambda workbook_bytes: b"pdf-from-workbook",
+        )
+        monkeypatch.setattr(
+            exports_endpoint,
             "upload_export_artifact",
             lambda export_id, pallet_id, filename, content: (
                 f"exports/2026/03/{pallet_id}/{export_id}/{filename}",
@@ -133,6 +138,11 @@ def test_create_export_requires_completed_pallet(monkeypatch) -> None:
 
         monkeypatch.setattr(
             exports_endpoint,
+            "_render_pdf_from_workbook_bytes",
+            lambda workbook_bytes: b"pdf-from-workbook",
+        )
+        monkeypatch.setattr(
+            exports_endpoint,
             "upload_export_artifact",
             lambda export_id, pallet_id, filename, content: (
                 f"exports/2026/03/{pallet_id}/{export_id}/{filename}",
@@ -147,6 +157,11 @@ def test_list_exports_and_filters(monkeypatch) -> None:
     with _client_with_pallet(DummyUser(user_id=3, roles=["purchasing_manager"])) as client:
         from app.api.v1.endpoints import exports as exports_endpoint
 
+        monkeypatch.setattr(
+            exports_endpoint,
+            "_render_pdf_from_workbook_bytes",
+            lambda workbook_bytes: b"pdf-from-workbook",
+        )
         monkeypatch.setattr(
             exports_endpoint,
             "upload_export_artifact",
@@ -174,6 +189,11 @@ def test_export_download_url_endpoint(monkeypatch) -> None:
     with _client_with_pallet(DummyUser(user_id=5, roles=["admin"])) as client:
         from app.api.v1.endpoints import exports as exports_endpoint
 
+        monkeypatch.setattr(
+            exports_endpoint,
+            "_render_pdf_from_workbook_bytes",
+            lambda workbook_bytes: b"pdf-from-workbook",
+        )
         monkeypatch.setattr(
             exports_endpoint,
             "upload_export_artifact",
@@ -205,6 +225,11 @@ def test_replace_export_workbook_endpoint(monkeypatch) -> None:
 
         monkeypatch.setattr(
             exports_endpoint,
+            "_render_pdf_from_workbook_bytes",
+            lambda workbook_bytes: b"pdf-from-workbook",
+        )
+        monkeypatch.setattr(
+            exports_endpoint,
             "upload_export_artifact",
             lambda export_id, pallet_id, filename, content: (
                 f"exports/2026/03/{pallet_id}/{export_id}/{filename}",
@@ -217,10 +242,11 @@ def test_replace_export_workbook_endpoint(monkeypatch) -> None:
         captured: dict[str, object] = {}
 
         def _upload_at_key(*, object_key: str, filename: str, content: bytes, content_type: str | None = None):
-            captured["object_key"] = object_key
-            captured["filename"] = filename
-            captured["content_type"] = content_type
-            captured["content_len"] = len(content)
+            captured[filename] = {
+                "object_key": object_key,
+                "content_type": content_type,
+                "content_len": len(content),
+            }
             return object_key, "updatedchecksum"
 
         monkeypatch.setattr(exports_endpoint, "upload_export_artifact_at_key", _upload_at_key)
@@ -235,10 +261,14 @@ def test_replace_export_workbook_endpoint(monkeypatch) -> None:
         assert replace.status_code == 200
         payload = replace.json()
         assert payload["id"] == export_id
-        assert captured["filename"] == payload["file_name"].replace(".pdf", ".xlsx")
-        assert str(captured["object_key"]).endswith(str(captured["filename"]))
-        assert captured["content_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        assert captured["content_len"] == len(b"edited-xlsx-bytes")
+        xlsx_name = payload["file_name"].replace(".pdf", ".xlsx")
+        assert xlsx_name in captured
+        assert payload["file_name"] in captured
+        assert str(captured[xlsx_name]["object_key"]).endswith(xlsx_name)
+        assert captured[xlsx_name]["content_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        assert captured[xlsx_name]["content_len"] == len(b"edited-xlsx-bytes")
+        assert captured[payload["file_name"]]["content_type"] == "application/pdf"
+        assert captured[payload["file_name"]]["content_len"] == len(b"pdf-from-workbook")
 
 
 def test_create_export_populates_sim_values_in_workbook(monkeypatch) -> None:
@@ -249,6 +279,11 @@ def test_create_export_populates_sim_values_in_workbook(monkeypatch) -> None:
     with _client_with_pallet(DummyUser(user_id=7, roles=["packout_operator"]), max_panels=25) as client:
         from app.api.v1.endpoints import exports as exports_endpoint
 
+        monkeypatch.setattr(
+            exports_endpoint,
+            "_render_pdf_from_workbook_bytes",
+            lambda workbook_bytes: b"pdf-from-workbook",
+        )
         captured: dict[str, bytes] = {}
 
         def _upload_capture(export_id: int, pallet_id: int, filename: str, content: bytes):
@@ -271,5 +306,61 @@ def test_create_export_populates_sim_values_in_workbook(monkeypatch) -> None:
             assert float(sheet["E5"].value) == 49.32
             assert float(sheet["F5"].value) == 10.46
             assert float(sheet["G5"].value) == 40.11
+        finally:
+            workbook.close()
+
+
+def test_create_export_prefers_in_spec_sim_data_for_template(monkeypatch) -> None:
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    with _client_with_pallet(DummyUser(user_id=8, roles=["packout_operator"]), max_panels=25) as client:
+        from app.api.v1.endpoints import exports as exports_endpoint
+
+        monkeypatch.setattr(
+            exports_endpoint,
+            "_render_pdf_from_workbook_bytes",
+            lambda workbook_bytes: b"pdf-from-workbook",
+        )
+        captured: dict[str, bytes] = {}
+
+        def _upload_capture(export_id: int, pallet_id: int, filename: str, content: bytes):
+            if filename.lower().endswith(".xlsx"):
+                captured["xlsx"] = content
+            return f"exports/2026/03/{pallet_id}/{export_id}/{filename}", "checksum123"
+
+        monkeypatch.setattr(exports_endpoint, "upload_export_artifact", _upload_capture)
+
+        db = next(iter(app.dependency_overrides[get_db]()))
+        try:
+            batch = SimImportBatch(source_filename="sim-extra.csv", status="completed")
+            db.add(batch)
+            db.flush()
+            db.add(
+                SimPanel(
+                    batch_id=batch.id,
+                    serial="EXP001",
+                    panel_type="WRONGTYPE",
+                    watts=470.50,
+                    isc=11.999,
+                    voc=50.999,
+                    imp=10.999,
+                    vmp=42.999,
+                    ff=0.900,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
+        assert response.status_code == 201
+
+        workbook = load_workbook(BytesIO(captured["xlsx"]))
+        try:
+            sheet = workbook["PALLET SHEET"]
+            assert sheet["B5"].value == "EXP001"
+            assert float(sheet["C5"].value) == 450.12
         finally:
             workbook.close()

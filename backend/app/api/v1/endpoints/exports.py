@@ -23,7 +23,7 @@ from app.schemas.export import (
 )
 from app.services.export_generator import (
     convert_workbook_bytes_to_pdf_bytes,
-    generate_export_pdf_bytes,
+    generate_pdf_from_workbook_bytes,
     generate_merged_pdf_from_workbook_pages,
 )
 from app.services.export_workbook import ExportWorkbookError, generate_export_workbook_bytes
@@ -88,7 +88,18 @@ def _xlsx_object_key(export: Export) -> tuple[str, str]:
     return f"{base_dir}/{xlsx_name}", xlsx_name
 
 
-def _latest_sim_values_for_serials(db: Session, serials: list[str]) -> dict[str, dict[str, float | None]]:
+def _render_pdf_from_workbook_bytes(workbook_bytes: bytes) -> bytes:
+    try:
+        return convert_workbook_bytes_to_pdf_bytes(workbook_bytes)
+    except Exception:
+        return generate_pdf_from_workbook_bytes(workbook_bytes)
+
+
+def _latest_sim_values_for_serials(
+    db: Session,
+    serials: list[str],
+    preferred_template_type: str | None = None,
+) -> dict[str, dict[str, float | None]]:
     normalized_serials = sorted({serial.strip().upper() for serial in serials if serial and serial.strip()})
     if not normalized_serials:
         return {}
@@ -106,10 +117,12 @@ def _latest_sim_values_for_serials(db: Session, serials: list[str]) -> dict[str,
             return value.replace(tzinfo=timezone.utc)
         return value
 
+    preferred_panel_type = (preferred_template_type or "").strip().upper() or None
+
     def _is_in_spec(panel_type: str | None, watts: float | None) -> bool:
         if watts is None:
             return False
-        normalized = (panel_type or "").strip().upper()
+        normalized = preferred_panel_type or (panel_type or "").strip().upper()
         spec = PM_SPEC_RANGES.get(normalized)
         if spec is None:
             return False
@@ -217,7 +230,7 @@ def create_export(
     workbook_artifact: bytes | None
     try:
         serials = [item.serial.strip().upper() for item in pallet.items if item.serial]
-        sim_values_by_serial = _latest_sim_values_for_serials(db, serials)
+        sim_values_by_serial = _latest_sim_values_for_serials(db, serials, payload.template_type)
         workbook_artifact = generate_export_workbook_bytes(
             pallet,
             payload.template_type,
@@ -227,7 +240,13 @@ def create_export(
     except ExportWorkbookError:
         # For unsupported capacities or missing templates, continue with PDF-only export.
         workbook_artifact = None
-    pdf_artifact = generate_export_pdf_bytes(pallet, payload.template_type)
+    pdf_artifact = _render_pdf_from_workbook_bytes(workbook_artifact) if workbook_artifact is not None else None
+
+    if pdf_artifact is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Workbook PDF generation failed because the export workbook could not be created",
+        )
 
     export = Export(
         pallet_id=pallet.id,
@@ -318,7 +337,7 @@ def download_export(
         xlsx_key, _ = _xlsx_object_key(export)
         try:
             workbook_bytes = read_export_artifact(xlsx_key)
-            generated_pdf = convert_workbook_bytes_to_pdf_bytes(workbook_bytes)
+            generated_pdf = _render_pdf_from_workbook_bytes(workbook_bytes)
             pdf_name = export.file_name if export.file_name.lower().endswith(".pdf") else f"{export.file_name}.pdf"
             return Response(
                 content=generated_pdf,
@@ -380,6 +399,13 @@ def replace_export_workbook(
             filename=xlsx_name,
             content=content,
             content_type=XLSX_MIME_TYPE,
+        )
+        pdf_bytes = _render_pdf_from_workbook_bytes(content)
+        upload_export_artifact_at_key(
+            object_key=export.object_key,
+            filename=export.file_name,
+            content=pdf_bytes,
+            content_type="application/pdf",
         )
     except StorageError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -445,6 +471,13 @@ def apply_export_workbook_edits(
             filename=xlsx_name,
             content=edited_bytes,
             content_type=XLSX_MIME_TYPE,
+        )
+        pdf_bytes = _render_pdf_from_workbook_bytes(edited_bytes)
+        upload_export_artifact_at_key(
+            object_key=export.object_key,
+            filename=export.file_name,
+            content=pdf_bytes,
+            content_type="application/pdf",
         )
     except StorageError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
