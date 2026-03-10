@@ -43,8 +43,14 @@ services:
       - minio
     ports:
       - "8001:8000"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - ./data:/data:ro
+    command:
+      - /bin/sh
+      - -c
+      - alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 volumes:
   pallet_postgres_data:
   pallet_minio_data:
+

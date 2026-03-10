@@ -13,8 +13,11 @@ npm run dev
 Create `.env` with:
 
 ```bash
-VITE_API_BASE_URL=http://localhost:8000/api/v1
+VITE_PRIMARY_API_BASE_URL=http://127.0.0.1:8001/api/v1
+VITE_FALLBACK_API_BASE_URL=http://127.0.0.1:8010/api/v1
 ```
+
+If `VITE_PRIMARY_API_BASE_URL` is not set, the app falls back to `VITE_API_BASE_URL` for backward compatibility.
 
 ## Runtime Server Settings
 

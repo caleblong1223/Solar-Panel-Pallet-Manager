@@ -57,22 +57,30 @@ def validate_templates_and_seed_e2e_user() -> None:
 
     db: Session = SessionLocal()
     try:
+        is_sqlite = db.bind is not None and db.bind.dialect.name == "sqlite"
         default_customer = (
             db.query(Customer)
             .filter(Customer.display_name == "Josh Atwood")
             .first()
         )
         if default_customer is None:
-            default_customer = Customer(
-                display_name="Josh Atwood",
-                contact_name="Josh Atwood",
-                business_name="Future Solutions Inc",
-                address="2616 Glenview Dr",
-                city="Elkhart",
-                state="IN",
-                zip_code="46514",
-                is_active=True,
-            )
+            customer_kwargs = {
+                "display_name": "Josh Atwood",
+                "contact_name": "Josh Atwood",
+                "business_name": "Future Solutions Inc",
+                "address": "2616 Glenview Dr",
+                "city": "Elkhart",
+                "state": "IN",
+                "zip_code": "46514",
+                "is_active": True,
+            }
+            # Local SQLite fallback databases may use legacy schemas where id
+            # is not auto-assigned. Ensure deterministic seeding works there.
+            if is_sqlite:
+                max_id = db.query(Customer.id).order_by(Customer.id.desc()).limit(1).scalar()
+                customer_kwargs["id"] = (max_id or 0) + 1
+
+            default_customer = Customer(**customer_kwargs)
             db.add(default_customer)
 
         if os.getenv("ENABLE_E2E_SEED"):

@@ -6,7 +6,7 @@ use std::time::Duration;
 use tauri::Manager;
 
 fn backend_is_running() -> bool {
-  let addr = "127.0.0.1:8000";
+  let addr = "127.0.0.1:8010";
   match addr.parse() {
     Ok(socket_addr) => TcpStream::connect_timeout(&socket_addr, Duration::from_millis(250)).is_ok(),
     Err(_) => false,
@@ -82,7 +82,7 @@ fn start_bundled_backend(app: &tauri::App) {
     .arg("--host")
     .arg("127.0.0.1")
     .arg("--port")
-    .arg("8000")
+    .arg("8010")
     .env("DATABASE_URL", database_url)
     .env("LOCAL_IMPORT_ROOT", import_root.as_os_str())
     .env("LOCAL_EXPORT_ROOT", export_root.as_os_str())

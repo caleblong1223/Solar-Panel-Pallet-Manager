@@ -35,7 +35,7 @@ export default function SettingsPage() {
     let cancelled = false;
 
     const checkBackend = async () => {
-      const localApi = (fallbackApiBaseUrl || "http://127.0.0.1:8000/api/v1").trim();
+      const localApi = (fallbackApiBaseUrl || "http://127.0.0.1:8010/api/v1").trim();
       const result = await testServerConnectionNamed("Local backend", localApi);
       if (cancelled) {
         return;
@@ -93,7 +93,7 @@ export default function SettingsPage() {
                 label="Primary API Base URL (Central Server)"
                 value={primaryApiBaseUrl}
                 onChange={(event) => setPrimaryApiBaseUrl(event.target.value)}
-                placeholder="http://192.168.1.20:8000/api/v1"
+                placeholder="http://192.168.1.20:8001/api/v1"
                 required
                 disabled={settingsLocked}
               />
@@ -101,7 +101,7 @@ export default function SettingsPage() {
                 label="Fallback API Base URL (Local Device)"
                 value={fallbackApiBaseUrl}
                 onChange={(event) => setFallbackApiBaseUrl(event.target.value)}
-                placeholder="http://localhost:8000/api/v1"
+                placeholder="http://localhost:8010/api/v1"
                 disabled={settingsLocked}
               />
               {settingsLocked ? (

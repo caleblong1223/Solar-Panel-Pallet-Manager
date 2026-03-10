@@ -45,6 +45,12 @@ def main() -> None:
 
     env = dict(os.environ)
     env["DATABASE_URL"] = database_url
+    # Allow local/offline startup without requiring a full .env file.
+    env.setdefault("JWT_SECRET", "local-dev-insecure-secret")
+    env.setdefault("MINIO_ACCESS_KEY", "minioadmin")
+    env.setdefault("MINIO_SECRET_KEY", "minioadmin")
+    env.setdefault("MINIO_ENDPOINT", "localhost:9000")
+    env.setdefault("MINIO_SECURE", "false")
 
     print(f"[run_local_backend] DATABASE_URL={database_url}")
 

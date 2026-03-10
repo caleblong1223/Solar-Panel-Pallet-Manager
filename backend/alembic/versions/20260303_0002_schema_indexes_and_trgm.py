@@ -19,8 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_postgres = bind.dialect.name == "postgresql"
+
     # Ensure pg_trgm extension is available for trigram indexes
-    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    if is_postgres:
+        op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
     # Pallet history and filtering improvements
     op.create_index(
@@ -90,35 +94,40 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # Trigram indexes for partial search (barcodes and customer names)
-    op.create_index(
-        "ix_pallet_items_serial_trgm",
-        "pallet_items",
-        ["serial"],
-        postgresql_using="gin",
-        postgresql_ops={"serial": "gin_trgm_ops"},
-    )
-    op.create_index(
-        "ix_sim_panels_serial_trgm",
-        "sim_panels",
-        ["serial"],
-        postgresql_using="gin",
-        postgresql_ops={"serial": "gin_trgm_ops"},
-    )
-    op.create_index(
-        "ix_customers_display_name_trgm",
-        "customers",
-        ["display_name"],
-        postgresql_using="gin",
-        postgresql_ops={"display_name": "gin_trgm_ops"},
-    )
+    # Trigram indexes are Postgres-only.
+    if is_postgres:
+        op.create_index(
+            "ix_pallet_items_serial_trgm",
+            "pallet_items",
+            ["serial"],
+            postgresql_using="gin",
+            postgresql_ops={"serial": "gin_trgm_ops"},
+        )
+        op.create_index(
+            "ix_sim_panels_serial_trgm",
+            "sim_panels",
+            ["serial"],
+            postgresql_using="gin",
+            postgresql_ops={"serial": "gin_trgm_ops"},
+        )
+        op.create_index(
+            "ix_customers_display_name_trgm",
+            "customers",
+            ["display_name"],
+            postgresql_using="gin",
+            postgresql_ops={"display_name": "gin_trgm_ops"},
+        )
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    is_postgres = bind.dialect.name == "postgresql"
+
     # Drop trigram indexes first
-    op.drop_index("ix_customers_display_name_trgm", table_name="customers")
-    op.drop_index("ix_sim_panels_serial_trgm", table_name="sim_panels")
-    op.drop_index("ix_pallet_items_serial_trgm", table_name="pallet_items")
+    if is_postgres:
+        op.drop_index("ix_customers_display_name_trgm", table_name="customers")
+        op.drop_index("ix_sim_panels_serial_trgm", table_name="sim_panels")
+        op.drop_index("ix_pallet_items_serial_trgm", table_name="pallet_items")
 
     # Drop audit indexes
     op.drop_index("ix_audit_events_event_type", table_name="audit_events")
@@ -146,5 +155,6 @@ def downgrade() -> None:
     op.drop_index("ix_pallets_pallet_number", table_name="pallets")
 
     # Optionally drop pg_trgm extension (safe if unused elsewhere)
-    op.execute("DROP EXTENSION IF EXISTS pg_trgm")
+    if is_postgres:
+        op.execute("DROP EXTENSION IF EXISTS pg_trgm")
 

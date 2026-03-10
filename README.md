@@ -132,18 +132,18 @@ This should start:
 
 - Postgres
 - MinIO (for exports/imports)
-- FastAPI backend exposed on `0.0.0.0:8000` → `http://10.20.10.62:8000`.
+- FastAPI backend exposed on `0.0.0.0:8001` → `http://10.20.10.62:8001`.
 
 **Health check (from another machine):**
 
 In a browser on Computer 2/3/4:
 
 ```text
-http://10.20.10.62:8000/health/live
+http://10.20.10.62:8001/health/live
 ```
 
 You should see `{"status":"ok"}`.  
-If not, open Packout’s firewall for inbound TCP port **8000**.
+If not, open Packout’s firewall for inbound TCP port **8001**.
 
 ---
 
@@ -166,9 +166,12 @@ cd frontend
 
 # Optional: point the UI at the Packout backend (baked in at build time)
 # macOS/Linux:
-export VITE_API_BASE_URL=http://10.20.10.62:8000/api/v1
-# Windows CMD: set VITE_API_BASE_URL=http://10.20.10.62:8000/api/v1
-# Windows PowerShell: $env:VITE_API_BASE_URL = "http://10.20.10.62:8000/api/v1"
+export VITE_PRIMARY_API_BASE_URL=http://10.20.10.62:8001/api/v1
+export VITE_FALLBACK_API_BASE_URL=http://127.0.0.1:8010/api/v1
+# Windows CMD: set VITE_PRIMARY_API_BASE_URL=http://10.20.10.62:8001/api/v1
+# Windows CMD: set VITE_FALLBACK_API_BASE_URL=http://127.0.0.1:8010/api/v1
+# Windows PowerShell: $env:VITE_PRIMARY_API_BASE_URL = "http://10.20.10.62:8001/api/v1"
+# Windows PowerShell: $env:VITE_FALLBACK_API_BASE_URL = "http://127.0.0.1:8010/api/v1"
 
 npm install
 npm run build
@@ -178,7 +181,7 @@ npx tauri build
 - **macOS:** The `.app` bundle is produced under `frontend/src-tauri/target/release/bundle/macos/` (e.g. `Pallet Manager.app`).
 - **Windows:** The EXE (and optional NSIS/MSI installers) are under `frontend/src-tauri/target/release/` and `bundle/nsis`, `bundle/msi`. The script `npm run build:desktop` runs `tauri build` and then copies Windows installers to `frontend/dist/installers/`.
 
-The built app has the API base URL baked in and will talk to the configured backend (e.g. `http://10.20.10.62:8000/api/v1`).
+The built app has the API base URL baked in and will talk to the configured backend (e.g. `http://10.20.10.62:8001/api/v1`), while preserving local fallback if configured.
 
 ---
 
@@ -200,9 +203,9 @@ On each workstation:
    - All calls go to the backend on the Packout Computer.
    - If the host server IP changes, open **Settings** in the app and update
      `Primary API Base URL (Central Server)` to the new host
-     (for example `http://10.20.10.70:8000/api/v1`).
+     (for example `http://10.20.10.70:8001/api/v1`).
    - Optionally configure `Fallback API Base URL (Local Device)` for local
-     failover (for example `http://localhost:8000/api/v1`).
+     failover (for example `http://localhost:8010/api/v1`).
 
 No Docker/DB/MinIO is needed on Computers 2–4.
 

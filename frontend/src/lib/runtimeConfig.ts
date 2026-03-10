@@ -1,7 +1,8 @@
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api/v1";
-const LOOPBACK_API_BASE_URL = "http://localhost:8000/api/v1";
+const DEFAULT_PRIMARY_API_BASE_URL = "http://127.0.0.1:8001/api/v1";
+const DEFAULT_FALLBACK_API_BASE_URL = "http://127.0.0.1:8010/api/v1";
+const LOOPBACK_ALIAS_API_BASE_URL = "http://localhost:8010/api/v1";
 const SETTINGS_KEY = "pm2_runtime_settings";
-const LOCK_TO_LOCAL_BACKEND = true;
+const LOCK_TO_LOCAL_BACKEND = false;
 
 export type RuntimeSettings = {
   primaryApiBaseUrl: string;
@@ -26,14 +27,19 @@ function ensureApiV1Path(value: string): string {
 }
 
 function getDefaultSettings(): RuntimeSettings {
-  const envValue = LOCK_TO_LOCAL_BACKEND
-    ? DEFAULT_API_BASE_URL
-    : (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? DEFAULT_API_BASE_URL;
-  const normalized = ensureApiV1Path(envValue);
+  const primaryEnv =
+    (import.meta.env.VITE_PRIMARY_API_BASE_URL as string | undefined) ??
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+    DEFAULT_PRIMARY_API_BASE_URL;
+  const fallbackEnv =
+    (import.meta.env.VITE_FALLBACK_API_BASE_URL as string | undefined) ??
+    DEFAULT_FALLBACK_API_BASE_URL;
+  const primary = ensureApiV1Path(primaryEnv);
+  const fallback = ensureApiV1Path(fallbackEnv);
   return {
-    primaryApiBaseUrl: normalized,
-    fallbackApiBaseUrl: LOOPBACK_API_BASE_URL,
-    apiBaseUrl: normalized,
+    primaryApiBaseUrl: primary,
+    fallbackApiBaseUrl: fallback,
+    apiBaseUrl: primary,
   };
 }
 
@@ -83,8 +89,9 @@ export function getApiBaseCandidates(): string[] {
   const candidates = [
     settings.primaryApiBaseUrl,
     settings.fallbackApiBaseUrl,
-    DEFAULT_API_BASE_URL,
-    LOOPBACK_API_BASE_URL,
+    DEFAULT_PRIMARY_API_BASE_URL,
+    DEFAULT_FALLBACK_API_BASE_URL,
+    LOOPBACK_ALIAS_API_BASE_URL,
   ].filter(Boolean);
   return [...new Set(candidates)];
 }
