@@ -122,6 +122,8 @@ public sealed class HistoryViewModel : ViewModelBase
                 return;
             }
 
+            ExportRows.Clear();
+            SelectedSummary = $"Pallet #{value.PalletNumber} | {value.TemplateType} | {value.ItemCount} panel(s)";
             _ = LoadDetailsAsync(value.Id);
         }
     }
@@ -316,14 +318,21 @@ public sealed class HistoryViewModel : ViewModelBase
             return;
         }
 
-        var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
-        await _apiClient.DeleteAsync($"/pallets/{SelectedPallet.Id}", token, null, ct);
+        try
+        {
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
+            await _apiClient.DeleteAsync($"/pallets/{SelectedPallet.Id}", token, null, ct);
 
-        _allPallets.RemoveAll(p => p.Id == SelectedPallet.Id);
-        SelectedPallet = null;
-        ExportRows.Clear();
-        ApplyFilters();
-        StatusMessage = "Pallet deleted.";
+            _allPallets.RemoveAll(p => p.Id == SelectedPallet.Id);
+            SelectedPallet = null;
+            ExportRows.Clear();
+            ApplyFilters();
+            StatusMessage = "Pallet deleted.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = string.IsNullOrWhiteSpace(ex.Message) ? "Failed to delete pallet." : ex.Message;
+        }
     }
 
     public async Task OpenExportAsync(int exportId, string format, CancellationToken ct = default)
@@ -343,32 +352,39 @@ public sealed class HistoryViewModel : ViewModelBase
             return;
         }
 
-        var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
-        var exportIds = new List<int>();
-
-        foreach (var palletId in selectedIds)
+        try
         {
-            var response = await _apiClient.GetAsync<ApiExportListResponse>($"/exports?pallet_id={palletId}&limit=50&offset=0", token, ct);
-            var first = response.Exports.FirstOrDefault();
-            if (first is not null)
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
+            var exportIds = new List<int>();
+
+            foreach (var palletId in selectedIds)
             {
-                exportIds.Add(first.Id);
+                var response = await _apiClient.GetAsync<ApiExportListResponse>($"/exports?pallet_id={palletId}&limit=50&offset=0", token, ct);
+                var first = response.Exports.FirstOrDefault();
+                if (first is not null)
+                {
+                    exportIds.Add(first.Id);
+                }
             }
-        }
 
-        var uniqueExportIds = exportIds.Distinct().ToList();
-        if (uniqueExportIds.Count < 2)
+            var uniqueExportIds = exportIds.Distinct().ToList();
+            if (uniqueExportIds.Count < 2)
+            {
+                StatusMessage = "Need at least 2 pallets with exports to merge.";
+                return;
+            }
+
+            var settings = await _settingsService.GetAsync(ct);
+            var baseUrl = (settings.PrimaryApiBaseUrl ?? "http://127.0.0.1:8000/api/v1").TrimEnd('/');
+            var query = string.Join("&", uniqueExportIds.Select(id => $"export_id={id}"));
+            var endpoint = $"{baseUrl}/exports/merge-pdf?{query}";
+            await _systemLauncher.OpenAsync(endpoint, ct);
+            StatusMessage = $"Opened merged PDF for {uniqueExportIds.Count} exports.";
+        }
+        catch (Exception ex)
         {
-            StatusMessage = "Need at least 2 pallets with exports to merge.";
-            return;
+            StatusMessage = string.IsNullOrWhiteSpace(ex.Message) ? "Failed to merge selected pallets." : ex.Message;
         }
-
-        var settings = await _settingsService.GetAsync(ct);
-        var baseUrl = (settings.PrimaryApiBaseUrl ?? "http://127.0.0.1:8000/api/v1").TrimEnd('/');
-        var query = string.Join("&", uniqueExportIds.Select(id => $"export_id={id}"));
-        var endpoint = $"{baseUrl}/exports/merge-pdf?{query}";
-        await _systemLauncher.OpenAsync(endpoint, ct);
-        StatusMessage = $"Opened merged PDF for {uniqueExportIds.Count} exports.";
     }
 
     public async Task StartSpreadsheetEditAsync(int exportId, CancellationToken ct = default)

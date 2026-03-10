@@ -22,6 +22,7 @@
    - Validate filter combinations (query + exact + date presets + sort) against JS results.
    - Verify single-pallet detail refresh/delete behavior under API failures.
    - Validate merge-selected export behavior for mixed pallet selections.
+   - Status: in progress. Automated evidence added in `CoreFlowsParityTests.History_FilterComboAndSort_MatchesExpectedRows` and `CoreFlowsParityTests.History_DeleteAndMergeFailures_SetOperatorSafeMessages`.
 3. Spreadsheet editor parity:
    - Verify larger real-world workbook handling (row/column caps, multi-sheet navigation).
    - Confirm save/apply-edits behavior preserves required formulas and protected layout assumptions.

@@ -81,6 +81,125 @@ public sealed class HistoryViewModelTests
         Assert.NotEmpty(vm.VisiblePallets);
     }
 
+    [Fact]
+    public async Task ApplyFilters_DatePresetSortAndExactCombination_MatchesExpectedRows()
+    {
+        var launcher = new RecordingSystemLauncher();
+        var api = new FakeApiClient();
+        api.CustomCompletedPalletsJson = """
+        {
+          "total": 4,
+          "pallets": [
+            {
+              "id": 601,
+              "pallet_number": 120,
+              "status": "completed",
+              "template_type": "450WT",
+              "max_panels": 35,
+              "customer_id": null,
+              "created_at": "2026-03-10T09:00:00Z",
+              "completed_at": "2026-03-10T09:30:00Z",
+              "deleted_at": null,
+              "item_count": 4,
+              "items": [{ "id": 1, "serial": "SN-EXACT-1", "slot_index": 1, "added_at": "2026-03-10T09:05:00Z" }]
+            },
+            {
+              "id": 602,
+              "pallet_number": 122,
+              "status": "completed",
+              "template_type": "220WT",
+              "max_panels": 25,
+              "customer_id": null,
+              "created_at": "2026-03-10T10:00:00Z",
+              "completed_at": "2026-03-10T10:30:00Z",
+              "deleted_at": null,
+              "item_count": 2,
+              "items": [{ "id": 2, "serial": "SN-CONTAINS-2", "slot_index": 1, "added_at": "2026-03-10T10:05:00Z" }]
+            },
+            {
+              "id": 603,
+              "pallet_number": 119,
+              "status": "completed",
+              "template_type": "200WT",
+              "max_panels": 25,
+              "customer_id": null,
+              "created_at": "2026-03-09T11:00:00Z",
+              "completed_at": "2026-03-09T11:30:00Z",
+              "deleted_at": null,
+              "item_count": 8,
+              "items": [{ "id": 3, "serial": "SN-EXACT-3", "slot_index": 1, "added_at": "2026-03-09T11:05:00Z" }]
+            },
+            {
+              "id": 604,
+              "pallet_number": 150,
+              "status": "completed",
+              "template_type": "330WT",
+              "max_panels": 30,
+              "customer_id": null,
+              "created_at": "2026-02-15T12:00:00Z",
+              "completed_at": "2026-02-15T12:30:00Z",
+              "deleted_at": null,
+              "item_count": 10,
+              "items": [{ "id": 4, "serial": "SN-EXACT-4", "slot_index": 1, "added_at": "2026-02-15T12:05:00Z" }]
+            }
+          ]
+        }
+        """;
+        var vm = CreateViewModel(launcher, api, new InMemoryCacheRepository());
+
+        await vm.RefreshAsync();
+        vm.DatePreset = "today";
+        vm.Query = "122";
+        vm.Exact = true;
+        vm.SortMode = "number_desc";
+        vm.ApplyFilters();
+
+        var row = Assert.Single(vm.VisiblePallets);
+        Assert.Equal(602, row.Id);
+        Assert.Equal(122, row.PalletNumber);
+
+        vm.DatePreset = "all";
+        vm.Query = string.Empty;
+        vm.Exact = false;
+        vm.SortMode = "items_desc";
+        vm.ApplyFilters();
+
+        Assert.Equal(4, vm.VisiblePallets.Count);
+        Assert.Equal(604, vm.VisiblePallets[0].Id);
+        Assert.Equal(603, vm.VisiblePallets[1].Id);
+    }
+
+    [Fact]
+    public async Task DeleteSelectedPalletAsync_WhenApiDeleteFails_SetsFailureMessage()
+    {
+        var launcher = new RecordingSystemLauncher();
+        var api = new FakeApiClient { ThrowOnDelete = true };
+        var vm = CreateViewModel(launcher, api, new InMemoryCacheRepository());
+
+        await vm.RefreshAsync();
+        vm.SelectedPallet = vm.VisiblePallets.First();
+
+        await vm.DeleteSelectedPalletAsync();
+
+        Assert.Equal("Failed to delete pallet", vm.StatusMessage);
+        Assert.NotNull(vm.SelectedPallet);
+    }
+
+    [Fact]
+    public async Task MergeSelectedPalletsAsync_WhenExportLookupFails_SetsFailureMessage()
+    {
+        var launcher = new RecordingSystemLauncher();
+        var api = new FakeApiClient { ThrowOnExportLookup = true };
+        var vm = CreateViewModel(launcher, api, new InMemoryCacheRepository());
+        vm.VisiblePallets.Add(new HistoryPalletRow(71, 301, "220WT", 1, DateTime.Now, "completed", isSelected: true));
+        vm.VisiblePallets.Add(new HistoryPalletRow(72, 302, "220WT", 1, DateTime.Now, "completed", isSelected: true));
+
+        await vm.MergeSelectedPalletsAsync();
+
+        Assert.Equal("Failed to merge selected pallets", vm.StatusMessage);
+        Assert.Empty(launcher.Targets);
+    }
+
     private static HistoryViewModel CreateViewModel(
         RecordingSystemLauncher launcher,
         FakeApiClient apiClient,
@@ -99,12 +218,15 @@ public sealed class HistoryViewModelTests
     private sealed class FakeApiClient : IApiClient
     {
         public Dictionary<int, int[]> ExportMap { get; } = new();
+        public string? CustomCompletedPalletsJson { get; set; }
+        public bool ThrowOnDelete { get; set; }
+        public bool ThrowOnExportLookup { get; set; }
 
         public Task<T> GetAsync<T>(string path, string? token = null, CancellationToken ct = default)
         {
             if (path.StartsWith("/pallets?status=completed", StringComparison.OrdinalIgnoreCase))
             {
-                const string json = """
+                var json = CustomCompletedPalletsJson ?? """
                 {
                   "total": 1,
                   "pallets": [
@@ -131,6 +253,11 @@ public sealed class HistoryViewModelTests
 
             if (path.StartsWith("/exports?pallet_id=", StringComparison.OrdinalIgnoreCase))
             {
+                if (ThrowOnExportLookup)
+                {
+                    throw new InvalidOperationException("Failed to merge selected pallets");
+                }
+
                 var palletId = ParseIntQuery(path, "pallet_id");
                 var exportIds = ExportMap.TryGetValue(palletId, out var mapped) ? mapped : Array.Empty<int>();
                 var exportsJson = string.Join(",", exportIds.Select(id => $$"""
@@ -149,8 +276,15 @@ public sealed class HistoryViewModelTests
         public Task<T> PatchAsync<T>(string path, object body, string? token = null, CancellationToken ct = default) =>
             throw new NotSupportedException(path);
 
-        public Task DeleteAsync(string path, string? token = null, IDictionary<string, string>? headers = null, CancellationToken ct = default) =>
-            throw new NotSupportedException(path);
+        public Task DeleteAsync(string path, string? token = null, IDictionary<string, string>? headers = null, CancellationToken ct = default)
+        {
+            if (ThrowOnDelete && path.StartsWith("/pallets/", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Failed to delete pallet");
+            }
+
+            return Task.CompletedTask;
+        }
 
         private static int ParseIntQuery(string path, string key)
         {

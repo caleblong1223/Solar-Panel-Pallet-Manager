@@ -153,6 +153,116 @@ public sealed class CoreFlowsParityTests
         Assert.Contains("/exports/5001/download?format=xlsx", launcher.Targets.Last());
     }
 
+    [Fact]
+    public async Task History_FilterComboAndSort_MatchesExpectedRows()
+    {
+        var launcher = new RecordingLauncher();
+        var api = new HistoryApiClient
+        {
+            CompletedPalletsJson = """
+            {
+              "total": 3,
+              "pallets": [
+                {
+                  "id": 910,
+                  "pallet_number": 910,
+                  "status": "completed",
+                  "template_type": "HIST-910",
+                  "max_panels": 25,
+                  "customer_id": null,
+                  "created_at": "2026-03-10T08:00:00Z",
+                  "completed_at": "2026-03-10T08:30:00Z",
+                  "deleted_at": null,
+                  "item_count": 3,
+                  "items": [{ "id": 1, "serial": "SN-AAA-910", "slot_index": 1, "added_at": "2026-03-10T08:02:00Z" }]
+                },
+                {
+                  "id": 911,
+                  "pallet_number": 911,
+                  "status": "completed",
+                  "template_type": "HIST-911",
+                  "max_panels": 25,
+                  "customer_id": null,
+                  "created_at": "2026-03-10T09:00:00Z",
+                  "completed_at": "2026-03-10T09:30:00Z",
+                  "deleted_at": null,
+                  "item_count": 1,
+                  "items": [{ "id": 2, "serial": "SN-BBB-911", "slot_index": 1, "added_at": "2026-03-10T09:02:00Z" }]
+                },
+                {
+                  "id": 850,
+                  "pallet_number": 850,
+                  "status": "completed",
+                  "template_type": "HIST-850",
+                  "max_panels": 25,
+                  "customer_id": null,
+                  "created_at": "2026-02-10T09:00:00Z",
+                  "completed_at": "2026-02-10T09:30:00Z",
+                  "deleted_at": null,
+                  "item_count": 7,
+                  "items": [{ "id": 3, "serial": "SN-CCC-850", "slot_index": 1, "added_at": "2026-02-10T09:02:00Z" }]
+                }
+              ]
+            }
+            """
+        };
+
+        var vm = new HistoryViewModel(
+            api,
+            new FixedAuthService(),
+            new InMemoryCacheRepository(),
+            new FixedSettingsService(),
+            launcher,
+            new NoopSpreadsheetService(),
+            new NoopHttpClientFactory());
+
+        await vm.RefreshAsync();
+        vm.DatePreset = "all";
+        vm.Query = "911";
+        vm.Exact = true;
+        vm.SortMode = "number_desc";
+        vm.ApplyFilters();
+        var exact = Assert.Single(vm.VisiblePallets);
+        Assert.Equal(911, exact.PalletNumber);
+
+        vm.Query = string.Empty;
+        vm.Exact = false;
+        vm.SortMode = "items_desc";
+        vm.ApplyFilters();
+        Assert.Equal(3, vm.VisiblePallets.Count);
+        Assert.Equal(850, vm.VisiblePallets[0].PalletNumber);
+    }
+
+    [Fact]
+    public async Task History_DeleteAndMergeFailures_SetOperatorSafeMessages()
+    {
+        var launcher = new RecordingLauncher();
+        var api = new HistoryApiClient
+        {
+            ThrowOnDelete = true,
+            ThrowOnExportLookup = true,
+        };
+        var vm = new HistoryViewModel(
+            api,
+            new FixedAuthService(),
+            new InMemoryCacheRepository(),
+            new FixedSettingsService(),
+            launcher,
+            new NoopSpreadsheetService(),
+            new NoopHttpClientFactory());
+
+        await vm.RefreshAsync();
+        vm.SelectedPallet = vm.VisiblePallets.First();
+        await vm.DeleteSelectedPalletAsync();
+        Assert.Equal("Failed to delete pallet", vm.StatusMessage);
+
+        vm.VisiblePallets[0].IsSelected = true;
+        vm.VisiblePallets[1].IsSelected = true;
+        await vm.MergeSelectedPalletsAsync();
+        Assert.Equal("Failed to merge selected pallets", vm.StatusMessage);
+        Assert.DoesNotContain(launcher.Targets, t => t.Contains("merge-pdf", StringComparison.OrdinalIgnoreCase));
+    }
+
     private sealed class InMemoryDraftRepository : IBuilderDraftRepository
     {
         private BuilderDraft? _draft;
@@ -216,11 +326,15 @@ public sealed class CoreFlowsParityTests
 
     private sealed class HistoryApiClient : IApiClient
     {
+        public string? CompletedPalletsJson { get; set; }
+        public bool ThrowOnDelete { get; set; }
+        public bool ThrowOnExportLookup { get; set; }
+
         public Task<T> GetAsync<T>(string path, string? token = null, CancellationToken ct = default)
         {
             if (path.StartsWith("/pallets?status=completed", StringComparison.OrdinalIgnoreCase))
             {
-                const string json = """
+                var json = CompletedPalletsJson ?? """
                 {
                   "total": 2,
                   "pallets": [
@@ -258,12 +372,22 @@ public sealed class CoreFlowsParityTests
 
             if (path.StartsWith("/exports?pallet_id=901", StringComparison.OrdinalIgnoreCase))
             {
+                if (ThrowOnExportLookup)
+                {
+                    throw new InvalidOperationException("Failed to merge selected pallets");
+                }
+
                 const string json = """{"exports":[{"id":5001,"pallet_id":901,"template_type":"HIST-900","packout_date":"2026-03-10","object_key":"k","file_name":"h1.pdf","mime_type":"application/pdf","size_bytes":10,"checksum_sha256":"x","created_at":"2026-03-10T10:20:00Z"}]}""";
                 return Task.FromResult(JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!);
             }
 
             if (path.StartsWith("/exports?pallet_id=902", StringComparison.OrdinalIgnoreCase))
             {
+                if (ThrowOnExportLookup)
+                {
+                    throw new InvalidOperationException("Failed to merge selected pallets");
+                }
+
                 const string json = """{"exports":[{"id":5002,"pallet_id":902,"template_type":"HIST-900","packout_date":"2026-03-10","object_key":"k","file_name":"h2.pdf","mime_type":"application/pdf","size_bytes":10,"checksum_sha256":"x","created_at":"2026-03-10T11:20:00Z"}]}""";
                 return Task.FromResult(JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!);
             }
@@ -275,8 +399,15 @@ public sealed class CoreFlowsParityTests
             throw new NotSupportedException(path);
         public Task<T> PatchAsync<T>(string path, object body, string? token = null, CancellationToken ct = default) =>
             throw new NotSupportedException(path);
-        public Task DeleteAsync(string path, string? token = null, IDictionary<string, string>? headers = null, CancellationToken ct = default) =>
-            throw new NotSupportedException(path);
+        public Task DeleteAsync(string path, string? token = null, IDictionary<string, string>? headers = null, CancellationToken ct = default)
+        {
+            if (ThrowOnDelete && path.StartsWith("/pallets/", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Failed to delete pallet");
+            }
+
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class InMemoryCacheRepository : ILocalCacheRepository
