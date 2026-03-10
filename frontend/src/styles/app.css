@@ -84,6 +84,10 @@ h1 {
   display: grid;
   align-content: start;
   gap: var(--space-4);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .app-frame__nav nav {
@@ -806,6 +810,10 @@ h1 {
   .app-frame__nav {
     border-right: none;
     border-bottom: 1px solid var(--color-border);
+    position: static;
+    top: auto;
+    height: auto;
+    overflow-y: visible;
   }
 
   .app-frame__content {

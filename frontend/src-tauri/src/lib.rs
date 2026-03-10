@@ -271,6 +271,8 @@ pub fn run() {
       if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
+        let _ = window.set_fullscreen(false);
+        let _ = window.maximize();
         let _ = window.set_focus();
       }
     }))
@@ -282,6 +284,10 @@ pub fn run() {
       ensure_local_backend
     ])
     .setup(|app| {
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_fullscreen(false);
+        let _ = window.maximize();
+      }
       if let Err(err) = start_bundled_backend(&app.handle()) {
         eprintln!("{err}");
       }
