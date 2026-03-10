@@ -30,6 +30,7 @@ This document defines the behavior-level parity evidence required for Pallet Man
 | PAR-NONCORE-004 | Import | Upload failure path summarizes per-file failures and aggregate counts. | `NonCoreFlowsParityTests.Import_UploadWhenAllCandidatesFail_ShowsFailedSummary` |
 | PAR-NONCORE-009 | Import | Mixed upload outcomes (success + failure) preserve per-file status rows and aggregate summary counts. | `NonCoreFlowsParityTests.Import_UploadWithMixedResults_ShowsPartialFailureSummary` |
 | PAR-NONCORE-010 | Import | Search no-results path shows canonical no-data operator message after a completed lookup. | `NonCoreFlowsParityTests.Import_SearchNoResults_ShowsParityNoDataMessage` |
+| PAR-NONCORE-015 | Import | Upload flow surfaces progress feedback and prioritizes per-serial records to in-spec Pm with most recent timestamp before submission. | `ImportSimulatorViewModelTests.UploadAsync_ShowsProgressAndPrioritizesInSpecMostRecentRows` |
 | PAR-NONCORE-005 | Exports | Invalid pallet number validation parity. | `NonCoreFlowsParityTests.Exports_SearchWithInvalidPalletNumber_ShowsParityValidationMessage` |
 | PAR-NONCORE-006 | Exports | Invalid date handling omits bad query fields while preserving valid boundary. | `NonCoreFlowsParityTests.Exports_SearchWithInvalidDate_OmitsDateFiltersFromQuery` |
 | PAR-NONCORE-011 | Exports | Open actions dispatch correct PDF/XLSX endpoints through system launcher. | `NonCoreFlowsParityTests.Exports_OpenPdfAndXlsx_UsesSystemLauncherEndpoints` |

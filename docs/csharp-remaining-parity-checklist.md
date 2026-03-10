@@ -32,7 +32,7 @@
 1. Import simulator parity:
    - Validate multi-file upload result reporting against JS behavior for partial failures.
    - Confirm serial search result formatting and no-result messaging.
-   - Status: in progress. Automated evidence added in `NonCoreFlowsParityTests.Import_UploadWithMixedResults_ShowsPartialFailureSummary` and `NonCoreFlowsParityTests.Import_SearchNoResults_ShowsParityNoDataMessage`.
+   - Status: in progress. Automated evidence added in `NonCoreFlowsParityTests.Import_UploadWithMixedResults_ShowsPartialFailureSummary`, `NonCoreFlowsParityTests.Import_SearchNoResults_ShowsParityNoDataMessage`, and `ImportSimulatorViewModelTests.UploadAsync_ShowsProgressAndPrioritizesInSpecMostRecentRows`.
 2. Exports library parity:
    - Validate date range query normalization and open actions across PDF/XLSX.
    - Confirm operator messaging for empty results and invalid input.

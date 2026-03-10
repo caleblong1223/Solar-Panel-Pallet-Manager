@@ -141,7 +141,7 @@ public sealed class NonCoreFlowsParityTests
                 new RoutingHttpClientFactory(request =>
                 {
                     var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
-                    if (body.Contains(Path.GetFileName(okPath), StringComparison.OrdinalIgnoreCase))
+                    if (body.Contains("SN-OK", StringComparison.OrdinalIgnoreCase))
                     {
                         return new HttpResponseMessage(HttpStatusCode.OK)
                         {

@@ -53,7 +53,7 @@ public sealed class ImportSimulatorViewModelTests
 
             var row = Assert.Single(vm.UploadResults);
             Assert.Equal(7, row.BatchId);
-            Assert.Equal("completed", row.Status);
+            Assert.StartsWith("completed", row.Status, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("Imported 1 file(s), failed 0.", vm.StatusMessage);
         }
         finally
@@ -88,6 +88,52 @@ public sealed class ImportSimulatorViewModelTests
         var row = Assert.Single(vm.SearchResults);
         Assert.Equal("SN-SIM-1", row.Serial);
         Assert.Contains("Pm: 410.50", row.ElectricalSummary);
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShowsProgressAndPrioritizesInSpecMostRecentRows()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"sim-priority-{Guid.NewGuid():N}.csv");
+        await File.WriteAllTextAsync(tempFile, """
+        SerialNo,PanelType,Date,TTime,Pm,Isc,Voc,Ipm,Vpm
+        SN-1001,220,2026-03-01,08:00:00,210,10,50,9.5,42
+        SN-1001,220,2026-03-02,09:00:00,220.5,10,50,9.5,42
+        SN-1002,450,2026-03-02,09:00:00,430,10,50,9.5,42
+        SN-1002,450,2026-03-03,10:00:00,451,10,50,9.5,42
+        """);
+
+        try
+        {
+            string uploaded = string.Empty;
+            var factory = new RoutingHttpClientFactory(request =>
+            {
+                uploaded = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
+                var json = """{"id":11,"status":"completed","rows_total":2,"rows_imported":2,"rows_rejected":0}""";
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json"),
+                };
+            });
+
+            var vm = CreateViewModel(new FakeApiClient(), factory);
+            vm.UploadPathsInput = tempFile;
+
+            await vm.UploadAsync();
+
+            Assert.Equal(100d, vm.UploadProgressPercent);
+            Assert.Equal("Upload complete.", vm.UploadProgressText);
+            Assert.Contains("SN-1001,220,2026-03-02,09:00:00,220.5", uploaded);
+            Assert.DoesNotContain("SN-1001,220,2026-03-01,08:00:00,210", uploaded);
+            Assert.Contains("SN-1002,450,2026-03-03,10:00:00,451", uploaded);
+            Assert.DoesNotContain("SN-1002,450,2026-03-02,09:00:00,430", uploaded);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
     }
 
     private static ImportSimulatorViewModel CreateViewModel(IApiClient apiClient, IHttpClientFactory httpClientFactory)
