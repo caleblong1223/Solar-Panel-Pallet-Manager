@@ -78,6 +78,7 @@
 1. Execute `docs/csharp-manual-signoff-uat.md` against the release-candidate commit.
 2. Record tester/date/result for `MS-001`, `MS-002`, and `MS-003`.
 3. Treat any failed case as parity blocker until fixed and re-run.
+4. Persist results in `docs/csharp-manual-signoff-record.md`.
 
 ## Acceptance Criteria to Close Remaining Parity
 1. Every P0 and P1 item has passing automated evidence or approved manual sign-off.

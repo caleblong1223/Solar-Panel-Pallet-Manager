@@ -17,6 +17,8 @@ This checklist governs C# desktop releases on `develop/2.0-csharp` before promot
 6. Signing/notarization stub run completed:
    - `.github/workflows/csharp-release-stubs.yml` executed.
    - Signing executes where tools/secrets are present; missing prerequisites are explicitly reported.
+7. Manual parity sign-off recorded:
+   - `docs/csharp-manual-signoff-record.md` completed for `MS-001`, `MS-002`, and `MS-003`.
 
 ## Pre-Release Operator Verification
 1. Launch app build and confirm blue shell loads.
