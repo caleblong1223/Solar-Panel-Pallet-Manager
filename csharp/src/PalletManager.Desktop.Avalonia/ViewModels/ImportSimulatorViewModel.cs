@@ -10,7 +10,7 @@ namespace PalletManager.Desktop.Avalonia.ViewModels;
 public sealed class ImportSimulatorViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
-    private readonly IAuthService _authService;
+    private readonly IApiTokenProvider _authService;
     private readonly IRuntimeSettingsService _settingsService;
     private readonly IHttpClientFactory _httpClientFactory;
 
@@ -23,7 +23,7 @@ public sealed class ImportSimulatorViewModel : ViewModelBase
 
     public ImportSimulatorViewModel(
         IApiClient apiClient,
-        IAuthService authService,
+        IApiTokenProvider authService,
         IRuntimeSettingsService settingsService,
         IHttpClientFactory httpClientFactory)
     {
@@ -133,7 +133,7 @@ public sealed class ImportSimulatorViewModel : ViewModelBase
             SearchResults.Clear();
             HasSearched = false;
 
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
             var query = $"q={Uri.EscapeDataString(serial)}&exact=false&limit=50&offset=0&sort=created_at&order=desc";
             var response = await _apiClient.GetAsync<BarcodeSearchResponse>($"/barcodes/search?{query}", token, ct);
 

@@ -9,7 +9,7 @@ namespace PalletManager.Desktop.Avalonia.ViewModels;
 public sealed class HistoryViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
-    private readonly IAuthService _authService;
+    private readonly IApiTokenProvider _authService;
     private readonly ILocalCacheRepository _cacheRepository;
     private readonly IRuntimeSettingsService _settingsService;
     private readonly ISystemLauncher _systemLauncher;
@@ -37,7 +37,7 @@ public sealed class HistoryViewModel : ViewModelBase
 
     public HistoryViewModel(
         IApiClient apiClient,
-        IAuthService authService,
+        IApiTokenProvider authService,
         ILocalCacheRepository cacheRepository,
         IRuntimeSettingsService settingsService,
         ISystemLauncher systemLauncher,
@@ -207,7 +207,7 @@ public sealed class HistoryViewModel : ViewModelBase
         IsLoading = true;
         try
         {
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
             List<Pallet> loaded;
 
             try
@@ -316,7 +316,7 @@ public sealed class HistoryViewModel : ViewModelBase
             return;
         }
 
-        var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+        var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
         await _apiClient.DeleteAsync($"/pallets/{SelectedPallet.Id}", token, null, ct);
 
         _allPallets.RemoveAll(p => p.Id == SelectedPallet.Id);
@@ -343,7 +343,7 @@ public sealed class HistoryViewModel : ViewModelBase
             return;
         }
 
-        var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+        var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
         var exportIds = new List<int>();
 
         foreach (var palletId in selectedIds)
@@ -386,7 +386,7 @@ public sealed class HistoryViewModel : ViewModelBase
             var settings = await _settingsService.GetAsync(ct);
             var baseUrl = (settings.PrimaryApiBaseUrl ?? "http://127.0.0.1:8000/api/v1").TrimEnd('/');
             var endpoint = $"{baseUrl}/exports/{exportId}/download?format=xlsx";
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
 
             var client = _httpClientFactory.CreateClient(nameof(HistoryViewModel));
             using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
@@ -430,7 +430,7 @@ public sealed class HistoryViewModel : ViewModelBase
         try
         {
             var serializedWorkbook = await _spreadsheetService.SaveAsync(_editingWorkbook, ct);
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
             var payload = new
             {
                 workbook_size_bytes = serializedWorkbook.Length,
@@ -571,7 +571,7 @@ public sealed class HistoryViewModel : ViewModelBase
 
     private async Task LoadDetailsAsync(int palletId)
     {
-        var token = await _authService.GetTokenAsync() ?? string.Empty;
+        var token = await _authService.GetBearerTokenAsync() ?? string.Empty;
 
         try
         {

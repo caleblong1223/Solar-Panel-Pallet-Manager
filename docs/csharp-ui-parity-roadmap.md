@@ -66,7 +66,7 @@ Retry/fallback triggers:
 - HTTP 5xx
 
 No fallback trigger:
-- HTTP 4xx (treat as business/auth/data error)
+- HTTP 4xx (treat as business/data error)
 
 ## 7. Parity-First Behavioral Contract
 
@@ -105,7 +105,6 @@ Migrations:
 
 Key tables:
 - `runtime_settings`
-- `auth_session`
 - `sync_state`
 - `outbox_operations`
 - `id_mappings`

@@ -191,11 +191,9 @@ public sealed class BuilderViewModelTests
         }
     }
 
-    private sealed class FakeAuthService : IAuthService
+    private sealed class FakeAuthService : IApiTokenProvider
     {
-        public Task<string?> GetTokenAsync(CancellationToken ct = default) => Task.FromResult<string?>("token");
-        public Task SetTokenAsync(string? token, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ClearSessionAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<string?> GetBearerTokenAsync(CancellationToken ct = default) => Task.FromResult<string?>("token");
     }
 
     private sealed class FixedClock : IClock

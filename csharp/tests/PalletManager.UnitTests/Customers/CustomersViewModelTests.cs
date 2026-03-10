@@ -179,10 +179,8 @@ public sealed class CustomersViewModelTests
         public Task<IReadOnlyList<ExportRecord>> GetExportsByPalletAsync(int palletId, CancellationToken ct = default) => Task.FromResult((IReadOnlyList<ExportRecord>)Array.Empty<ExportRecord>());
     }
 
-    private sealed class FixedAuthService : IAuthService
+    private sealed class FixedAuthService : IApiTokenProvider
     {
-        public Task<string?> GetTokenAsync(CancellationToken ct = default) => Task.FromResult<string?>("token");
-        public Task SetTokenAsync(string? token, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ClearSessionAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<string?> GetBearerTokenAsync(CancellationToken ct = default) => Task.FromResult<string?>("token");
     }
 }

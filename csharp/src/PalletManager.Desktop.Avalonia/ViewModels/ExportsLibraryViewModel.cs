@@ -7,7 +7,7 @@ namespace PalletManager.Desktop.Avalonia.ViewModels;
 public sealed class ExportsLibraryViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
-    private readonly IAuthService _authService;
+    private readonly IApiTokenProvider _authService;
     private readonly IRuntimeSettingsService _settingsService;
     private readonly ISystemLauncher _systemLauncher;
 
@@ -20,7 +20,7 @@ public sealed class ExportsLibraryViewModel : ViewModelBase
 
     public ExportsLibraryViewModel(
         IApiClient apiClient,
-        IAuthService authService,
+        IApiTokenProvider authService,
         IRuntimeSettingsService settingsService,
         ISystemLauncher systemLauncher)
     {
@@ -92,7 +92,7 @@ public sealed class ExportsLibraryViewModel : ViewModelBase
         IsLoading = true;
         try
         {
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
             var query = BuildQuery(palletId, TemplateType, CreatedFrom, CreatedTo);
             var response = await _apiClient.GetAsync<ExportListResponse>($"/exports?{query}", token, ct);
 

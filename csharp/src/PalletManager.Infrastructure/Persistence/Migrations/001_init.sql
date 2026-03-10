@@ -14,14 +14,6 @@ CREATE TABLE IF NOT EXISTS runtime_settings (
   updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS auth_session (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  access_token TEXT,
-  user_json TEXT,
-  session_mode TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS sync_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   syncing INTEGER NOT NULL DEFAULT 0,

@@ -11,7 +11,7 @@ public sealed class SyncEngineHostedService : ISyncEngine
 {
     private readonly IOutboxRepository _outboxRepository;
     private readonly IApiClient _apiClient;
-    private readonly IAuthService _authService;
+    private readonly IApiTokenProvider _authService;
     private readonly IIdMappingRepository _idMappingRepository;
     private readonly ObservableValue<SyncState> _state;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -20,7 +20,7 @@ public sealed class SyncEngineHostedService : ISyncEngine
     public SyncEngineHostedService(
         IOutboxRepository outboxRepository,
         IApiClient apiClient,
-        IAuthService authService,
+        IApiTokenProvider authService,
         IIdMappingRepository idMappingRepository)
     {
         _outboxRepository = outboxRepository;
@@ -63,7 +63,7 @@ public sealed class SyncEngineHostedService : ISyncEngine
     {
         await PublishStateAsync(syncing: true, ct);
 
-        var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+        var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
         var operations = await _outboxRepository.ListAsync(ct);
 
         foreach (var operation in operations)

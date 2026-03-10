@@ -13,7 +13,7 @@ public sealed class BuilderViewModel : ViewModelBase
     private readonly IOutboxRepository _outboxRepository;
     private readonly IClock _clock;
     private readonly IApiClient _apiClient;
-    private readonly IAuthService _authService;
+    private readonly IApiTokenProvider _authService;
     private readonly HashSet<string> _fallbackSerials = new(StringComparer.OrdinalIgnoreCase);
 
     private Pallet? _activePallet;
@@ -34,7 +34,7 @@ public sealed class BuilderViewModel : ViewModelBase
         IOutboxRepository outboxRepository,
         IClock clock,
         IApiClient apiClient,
-        IAuthService authService)
+        IApiTokenProvider authService)
     {
         _draftRepository = draftRepository;
         _outboxRepository = outboxRepository;
@@ -434,7 +434,7 @@ public sealed class BuilderViewModel : ViewModelBase
     {
         try
         {
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
             var path = $"/barcodes/search?q={Uri.EscapeDataString(serial)}&exact=true&limit=200&offset=0";
             var response = await _apiClient.GetAsync<BarcodeSearchResponse>(path, token, ct);
             return response.Results.Any(r =>

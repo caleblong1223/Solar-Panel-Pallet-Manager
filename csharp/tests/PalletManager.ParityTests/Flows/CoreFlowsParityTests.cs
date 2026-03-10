@@ -282,11 +282,9 @@ public sealed class CoreFlowsParityTests
         public HttpClient CreateClient(string name) => new();
     }
 
-    private sealed class FixedAuthService : IAuthService
+    private sealed class FixedAuthService : IApiTokenProvider
     {
-        public Task<string?> GetTokenAsync(CancellationToken ct = default) => Task.FromResult<string?>("token");
-        public Task SetTokenAsync(string? token, CancellationToken ct = default) => Task.CompletedTask;
-        public Task ClearSessionAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task<string?> GetBearerTokenAsync(CancellationToken ct = default) => Task.FromResult<string?>("token");
     }
 
     private sealed class FixedClock : IClock

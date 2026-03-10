@@ -44,7 +44,7 @@ public static class CompositionRoot
         services.AddSingleton<IConnectivityService, ConnectivityProbe>();
         services.AddSingleton<IRuntimeSettingsService, RuntimeSettingsRepository>();
 
-        services.AddSingleton<IAuthService, AuthSessionService>();
+        services.AddSingleton<IApiTokenProvider, AnonymousApiTokenProvider>();
         services.AddSingleton<IOutboxRepository, OutboxRepository>();
         services.AddSingleton<ILocalCacheRepository, LocalCacheRepository>();
         services.AddSingleton<IBuilderDraftRepository, BuilderDraftRepository>();

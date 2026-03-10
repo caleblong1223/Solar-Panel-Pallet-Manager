@@ -8,7 +8,7 @@ namespace PalletManager.Desktop.Avalonia.ViewModels;
 public sealed class CustomersViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
-    private readonly IAuthService _authService;
+    private readonly IApiTokenProvider _authService;
     private readonly ILocalCacheRepository _cacheRepository;
 
     private int? _editingCustomerId;
@@ -30,7 +30,7 @@ public sealed class CustomersViewModel : ViewModelBase
 
     public CustomersViewModel(
         IApiClient apiClient,
-        IAuthService authService,
+        IApiTokenProvider authService,
         ILocalCacheRepository cacheRepository)
     {
         _apiClient = apiClient;
@@ -138,7 +138,7 @@ public sealed class CustomersViewModel : ViewModelBase
         IsLoading = true;
         try
         {
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
             try
             {
                 var query = BuildListQuery();
@@ -202,7 +202,7 @@ public sealed class CustomersViewModel : ViewModelBase
         IsSaving = true;
         try
         {
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
             var payload = new Dictionary<string, object?>
             {
                 ["display_name"] = name,
@@ -245,7 +245,7 @@ public sealed class CustomersViewModel : ViewModelBase
     {
         try
         {
-            var token = await _authService.GetTokenAsync(ct) ?? string.Empty;
+            var token = await _authService.GetBearerTokenAsync(ct) ?? string.Empty;
             await _apiClient.DeleteAsync($"/customers/{customerId}", token, null, ct);
             StatusMessage = "Customer archived.";
             await RefreshAsync(ct);
