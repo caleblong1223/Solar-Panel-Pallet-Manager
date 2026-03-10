@@ -386,10 +386,27 @@ h1 {
   line-height: 1.2;
 }
 
+.builder-active-pill__date {
+  appearance: none;
+  -webkit-appearance: none;
+  line-height: 1.2;
+}
+
 .builder-active-pill__number::-webkit-outer-spin-button,
 .builder-active-pill__number::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+.builder-active-pill__date::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  display: none;
+  pointer-events: none;
+}
+
+.builder-active-pill__date::-webkit-clear-button,
+.builder-active-pill__date::-webkit-inner-spin-button {
+  display: none;
 }
 
 .builder-active-pill__number--push {
