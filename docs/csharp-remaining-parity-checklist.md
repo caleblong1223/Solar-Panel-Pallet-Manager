@@ -74,6 +74,11 @@
    - Automated: `NonCoreFlowsParityTests.Settings_*`, `NonCoreFlowsParityTests.SettingsAndSyncIssues_ManualTriggerAndRetryDiscard_MaintainParityFlow`.
    - Manual sign-off required: none currently identified.
 
+## Manual Sign-Off Runbook
+1. Execute `docs/csharp-manual-signoff-uat.md` against the release-candidate commit.
+2. Record tester/date/result for `MS-001`, `MS-002`, and `MS-003`.
+3. Treat any failed case as parity blocker until fixed and re-run.
+
 ## Acceptance Criteria to Close Remaining Parity
 1. Every P0 and P1 item has passing automated evidence or approved manual sign-off.
 2. No open critical parity defects for Builder/History/Spreadsheet flows.
