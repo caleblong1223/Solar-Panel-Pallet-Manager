@@ -1,4 +1,4 @@
-import { apiRequest } from "../lib/api";
+import { apiRequest, apiRequestAcrossCandidates } from "../lib/api";
 
 export type PalletItem = {
   id: number;
@@ -136,7 +136,7 @@ export async function completePallet(token: string, palletId: number, clientOper
 }
 
 export async function getPallet(token: string, palletId: number) {
-  return apiRequest<Pallet>(`/pallets/${palletId}`, "GET", token);
+  return apiRequestAcrossCandidates<Pallet>(`/pallets/${palletId}`, "GET", token, undefined, undefined, undefined, [404]);
 }
 
 export async function updatePallet(token: string, palletId: number, payload: UpdatePalletPayload) {

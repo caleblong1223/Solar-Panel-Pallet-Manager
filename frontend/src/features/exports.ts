@@ -1,5 +1,5 @@
-import { apiRequest } from "../lib/api";
-import { loadRuntimeSettings } from "../lib/runtimeConfig";
+import { apiRequest, apiRequestAcrossCandidates, ApiError } from "../lib/api";
+import { getApiBaseCandidates, loadRuntimeSettings } from "../lib/runtimeConfig";
 
 export type ExportRecord = {
   id: number;
@@ -30,7 +30,15 @@ type ExportDownloadUrlResponse = {
 };
 
 export async function listExportsByPallet(token: string, palletId: number) {
-  return apiRequest<ExportListResponse>(`/exports?pallet_id=${palletId}&limit=50&offset=0`, "GET", token);
+  return apiRequestAcrossCandidates<ExportListResponse>(
+    `/exports?pallet_id=${palletId}&limit=50&offset=0`,
+    "GET",
+    token,
+    undefined,
+    undefined,
+    undefined,
+    [404]
+  );
 }
 
 export async function listExports(token: string, options?: { palletId?: number; templateType?: string; createdFrom?: string; createdTo?: string; limit?: number; offset?: number }) {
@@ -59,10 +67,14 @@ export async function getExportDownloadUrl(
   format: "pdf" | "xlsx" = "pdf"
 ) {
   const query = new URLSearchParams({ format }).toString();
-  return apiRequest<ExportDownloadUrlResponse>(
+  return apiRequestAcrossCandidates<ExportDownloadUrlResponse>(
     `/exports/${exportId}/download-url?${query}`,
     "GET",
-    token
+    token,
+    undefined,
+    undefined,
+    undefined,
+    [404]
   );
 }
 
@@ -80,19 +92,29 @@ export function getMergedExportsPdfEndpoint(exportIds: number[]) {
 }
 
 export async function downloadExportWorkbook(token: string, exportId: number) {
-  const endpoint = getExportDownloadEndpoint(exportId, "xlsx");
+  const query = new URLSearchParams({ format: "xlsx" }).toString();
   const headers: Record<string, string> = {};
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const download = await fetch(endpoint, { headers });
-  if (!download.ok) {
+  const candidates = getApiBaseCandidates().map((base) => `${base}/exports/${exportId}/download?${query}`);
+  let lastStatus: number | null = null;
+  for (let index = 0; index < candidates.length; index += 1) {
+    const endpoint = candidates[index];
+    const download = await fetch(endpoint, { headers });
+    if (download.ok) {
+      return await download.arrayBuffer();
+    }
+    lastStatus = download.status;
+    if (download.status === 404 && index < candidates.length - 1) {
+      continue;
+    }
     if (download.status === 404) {
       throw new Error("Spreadsheet file is not available for this export");
     }
     throw new Error(`Failed to download workbook (${download.status})`);
   }
-  return await download.arrayBuffer();
+  throw new Error(lastStatus === 404 ? "Spreadsheet file is not available for this export" : "Failed to download workbook");
 }
 
 export async function replaceExportWorkbook(
@@ -101,20 +123,27 @@ export async function replaceExportWorkbook(
   workbookBlob: Blob,
   fileName: string
 ) {
-  const { apiBaseUrl } = loadRuntimeSettings();
-  const formData = new FormData();
-  formData.append("file", workbookBlob, fileName);
-
-  const response = await fetch(`${apiBaseUrl}/exports/${exportId}/replace`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: formData,
-  });
-  if (!response.ok) {
+  const candidates = getApiBaseCandidates();
+  let lastError: Error | null = null;
+  for (let index = 0; index < candidates.length; index += 1) {
+    const formData = new FormData();
+    formData.append("file", workbookBlob, fileName);
+    const response = await fetch(`${candidates[index]}/exports/${exportId}/replace`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    });
+    if (response.ok) {
+      return (await response.json()) as ExportRecord;
+    }
     const text = await response.text();
-    throw new Error(text || `Upload failed with status ${response.status}`);
+    lastError = new Error(text || `Upload failed with status ${response.status}`);
+    if (response.status === 404 && index < candidates.length - 1) {
+      continue;
+    }
+    throw lastError;
   }
-  return (await response.json()) as ExportRecord;
+  throw lastError ?? new Error("Upload failed");
 }
 
 export async function applyExportWorkbookEdits(
@@ -122,10 +151,13 @@ export async function applyExportWorkbookEdits(
   exportId: number,
   sheets: Array<{ name: string; data: string[][] }>
 ) {
-  return apiRequest<ExportRecord>(
+  return apiRequestAcrossCandidates<ExportRecord>(
     `/exports/${exportId}/apply-edits`,
     "POST",
     token,
-    { sheets }
+    { sheets },
+    undefined,
+    undefined,
+    [404]
   );
 }
