@@ -35,6 +35,10 @@ async function uploadWithTimeout(url: string, formData: FormData): Promise<Respo
   }
 }
 
+function normalizeSimulatorBaseUrl(baseUrl: string): string {
+  return baseUrl.replace("localhost:8010", "127.0.0.1:8010");
+}
+
 async function isBackendReachable(baseUrl: string): Promise<boolean> {
   const healthUrl = baseUrl.replace(/\/api\/v1\/?$/, "") + "/health/live";
   const controller = new AbortController();
@@ -65,7 +69,7 @@ async function waitForLocalBackend(baseUrl: string): Promise<boolean> {
 }
 
 export async function uploadSimulatorFile(file: File) {
-  const candidates = getApiBaseCandidates();
+  const candidates = [...new Set(getApiBaseCandidates().map(normalizeSimulatorBaseUrl))];
   if (candidates.length === 0) {
     throw new Error("No API base URL configured for simulator import");
   }

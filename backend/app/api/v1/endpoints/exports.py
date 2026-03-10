@@ -38,6 +38,14 @@ from app.services.object_storage import (
 router = APIRouter()
 
 XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+PM_SPEC_RANGES: dict[str, tuple[float, float]] = {
+    "200WT": (195.0, 206.0),
+    "220WT": (214.0, 227.0),
+    "220M6": (214.0, 227.0),
+    "330WT": (320.0, 340.0),
+    "450WT": (439.0, 463.5),
+    "450BT": (439.0, 463.5),
+}
 
 
 class WorkbookSheetEdit(BaseModel):
@@ -81,25 +89,61 @@ def _xlsx_object_key(export: Export) -> tuple[str, str]:
 
 
 def _latest_sim_values_for_serials(db: Session, serials: list[str]) -> dict[str, dict[str, float | None]]:
-    values: dict[str, dict[str, float | None]] = {}
-    for serial in serials:
-        normalized = serial.strip().upper()
+    normalized_serials = sorted({serial.strip().upper() for serial in serials if serial and serial.strip()})
+    if not normalized_serials:
+        return {}
+
+    rows = (
+        db.query(SimPanel)
+        .filter(func.upper(func.trim(SimPanel.serial)).in_(normalized_serials))
+        .all()
+    )
+
+    def _sort_dt(value: datetime | None) -> datetime:
+        if value is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    def _is_in_spec(panel_type: str | None, watts: float | None) -> bool:
+        if watts is None:
+            return False
+        normalized = (panel_type or "").strip().upper()
+        spec = PM_SPEC_RANGES.get(normalized)
+        if spec is None:
+            return False
+        minimum, maximum = spec
+        return minimum <= watts <= maximum
+
+    def _rank(panel: SimPanel) -> tuple[int, float, datetime, datetime, int]:
+        pm = float(panel.watts) if panel.watts is not None else float("-inf")
+        in_spec_rank = 1 if _is_in_spec(panel.panel_type, pm if pm != float("-inf") else None) else 0
+        return (
+            in_spec_rank,
+            pm,
+            _sort_dt(panel.test_timestamp),
+            _sort_dt(panel.created_at),
+            panel.id,
+        )
+
+    best_by_serial: dict[str, SimPanel] = {}
+    for panel in rows:
+        normalized = (panel.serial or "").strip().upper()
         if not normalized:
             continue
-        latest = (
-            db.query(SimPanel)
-            .filter(func.upper(func.trim(SimPanel.serial)) == normalized)
-            .order_by(SimPanel.test_timestamp.desc(), SimPanel.id.desc())
-            .first()
-        )
-        if latest is None:
-            continue
+        existing = best_by_serial.get(normalized)
+        if existing is None or _rank(panel) > _rank(existing):
+            best_by_serial[normalized] = panel
+
+    values: dict[str, dict[str, float | None]] = {}
+    for normalized, panel in best_by_serial.items():
         values[normalized] = {
-            "pm": float(latest.watts) if latest.watts is not None else None,
-            "isc": float(latest.isc) if latest.isc is not None else None,
-            "voc": float(latest.voc) if latest.voc is not None else None,
-            "ipm": float(latest.imp) if latest.imp is not None else None,
-            "vpm": float(latest.vmp) if latest.vmp is not None else None,
+            "pm": float(panel.watts) if panel.watts is not None else None,
+            "isc": float(panel.isc) if panel.isc is not None else None,
+            "voc": float(panel.voc) if panel.voc is not None else None,
+            "ipm": float(panel.imp) if panel.imp is not None else None,
+            "vpm": float(panel.vmp) if panel.vmp is not None else None,
         }
     return values
 

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from typing import TypeVar
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import tuple_
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_roles
@@ -14,6 +16,8 @@ from app.services.object_storage import StorageError, upload_import_source
 from app.services.simulator_parser import RejectedSimRow, parse_simulator_file
 
 router = APIRouter()
+SIM_DUPLICATE_LOOKUP_CHUNK_SIZE = 500
+T = TypeVar("T")
 
 
 def _reject_rows_summary(rows: list[RejectedSimRow], max_items: int = 20) -> str | None:
@@ -26,6 +30,27 @@ def _reject_rows_summary(rows: list[RejectedSimRow], max_items: int = 20) -> str
     return json.dumps(payload)
 
 
+def _chunked(values: list[T], size: int) -> list[list[T]]:
+    if size <= 0:
+        return [values]
+    return [values[i : i + size] for i in range(0, len(values), size)]
+
+
+def _load_existing_sim_keys(db: Session, keys: list[tuple[str, datetime]]) -> set[tuple[str, datetime]]:
+    if not keys:
+        return set()
+
+    existing: set[tuple[str, datetime]] = set()
+    for chunk in _chunked(keys, SIM_DUPLICATE_LOOKUP_CHUNK_SIZE):
+        rows = (
+            db.query(SimPanel.serial, SimPanel.test_timestamp)
+            .filter(tuple_(SimPanel.serial, SimPanel.test_timestamp).in_(chunk))
+            .all()
+        )
+        existing.update((serial, ts) for serial, ts in rows if ts is not None)
+    return existing
+
+
 def _process_simulator_file(db: Session, batch: SimImportBatch, filename: str, content: bytes) -> None:
     object_key, checksum = upload_import_source(batch.id, filename, content)
     batch.source_object_key = object_key
@@ -36,6 +61,9 @@ def _process_simulator_file(db: Session, batch: SimImportBatch, filename: str, c
     imported = 0
     rejected_rows: list[RejectedSimRow] = list(parse_result.rejected_rows)
     seen_keys: set[tuple[str, datetime]] = set()
+    pending_rows: list[tuple] = []
+    keys_to_lookup: list[tuple[str, datetime]] = []
+
     for parsed_row in parse_result.accepted_rows:
         panel_ts = parsed_row.test_timestamp or now
         dedupe_key = (parsed_row.serial, panel_ts)
@@ -49,15 +77,13 @@ def _process_simulator_file(db: Session, batch: SimImportBatch, filename: str, c
             )
             continue
         seen_keys.add(dedupe_key)
-        exists = (
-            db.query(SimPanel.id)
-            .filter(
-                SimPanel.serial == parsed_row.serial,
-                SimPanel.test_timestamp == panel_ts,
-            )
-            .first()
-        )
-        if exists is not None:
+        pending_rows.append((parsed_row, panel_ts, dedupe_key))
+        keys_to_lookup.append(dedupe_key)
+
+    existing_keys = _load_existing_sim_keys(db, keys_to_lookup)
+    to_insert: list[dict] = []
+    for parsed_row, panel_ts, dedupe_key in pending_rows:
+        if dedupe_key in existing_keys:
             rejected_rows.append(
                 RejectedSimRow(
                     row_number=parsed_row.row_number,
@@ -66,24 +92,27 @@ def _process_simulator_file(db: Session, batch: SimImportBatch, filename: str, c
                 )
             )
             continue
-        db.add(
-            SimPanel(
-                batch_id=batch.id,
-                serial=parsed_row.serial,
-                test_timestamp=panel_ts,
-                panel_type=parsed_row.panel_type,
-                watts=parsed_row.watts,
-                voc=parsed_row.voc,
-                isc=parsed_row.isc,
-                vmp=parsed_row.vmp,
-                imp=parsed_row.imp,
-                ff=parsed_row.ff,
-                result=parsed_row.result,
-                raw_payload=None,
-                created_at=now,
-            )
+        to_insert.append(
+            {
+                "batch_id": batch.id,
+                "serial": parsed_row.serial,
+                "test_timestamp": panel_ts,
+                "panel_type": parsed_row.panel_type,
+                "watts": parsed_row.watts,
+                "voc": parsed_row.voc,
+                "isc": parsed_row.isc,
+                "vmp": parsed_row.vmp,
+                "imp": parsed_row.imp,
+                "ff": parsed_row.ff,
+                "result": parsed_row.result,
+                "raw_payload": None,
+                "created_at": now,
+            }
         )
-        imported += 1
+
+    if to_insert:
+        db.bulk_insert_mappings(SimPanel, to_insert)
+        imported = len(to_insert)
 
     batch.rows_total = parse_result.rows_total
     batch.rows_imported = imported
