@@ -15,6 +15,7 @@
 ### P0 - Release-Blocking Functional Parity
 1. Builder parity audit against production behavior:
    - Verify serial add/remove/complete behavior for all template/size combinations used in production.
+   - Status: in progress. Automated matrix evidence now exists in `CoreFlowsParityTests.Builder_TemplateAndSizeMatrix_UsesSelectedValuesInCreatePayload`.
    - Validate customer assignment interactions and edge-case messaging.
    - Confirm missing-SIM prompt wording/actions exactly match operator expectation.
 2. History parity audit:

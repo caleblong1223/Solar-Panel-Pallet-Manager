@@ -77,6 +77,17 @@ public sealed class BuilderViewModel : ViewModelBase
         get => _selectedPalletSize;
         set
         {
+            if (value <= 0)
+            {
+                return;
+            }
+
+            if (_activePallet is not null && value < _activePallet.ItemCount)
+            {
+                StatusMessage = $"Pallet size cannot be lower than current panel count ({_activePallet.ItemCount})";
+                return;
+            }
+
             if (SetProperty(ref _selectedPalletSize, value))
             {
                 if (_activePallet is not null)

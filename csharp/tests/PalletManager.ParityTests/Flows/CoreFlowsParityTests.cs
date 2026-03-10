@@ -9,6 +9,47 @@ namespace PalletManager.ParityTests.Flows;
 
 public sealed class CoreFlowsParityTests
 {
+    public static IEnumerable<object[]> BuilderTemplateSizeMatrix()
+    {
+        var templates = new[] { "200WT", "220WT", "220M6", "330WT", "450WT", "450BT" };
+        var sizes = new[] { 25, 26, 30, 35 };
+        foreach (var template in templates)
+        {
+            foreach (var size in sizes)
+            {
+                yield return new object[] { template, size };
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(BuilderTemplateSizeMatrix))]
+    public async Task Builder_TemplateAndSizeMatrix_UsesSelectedValuesInCreatePayload(string templateType, int palletSize)
+    {
+        var outbox = new InMemoryOutboxRepository();
+        var api = new BuilderApiClient();
+        api.SimSerials.Add("SN-MATRIX-1");
+        var vm = new BuilderViewModel(
+            new InMemoryDraftRepository(),
+            outbox,
+            new FixedClock(new DateTime(2026, 3, 10, 12, 0, 0, DateTimeKind.Utc)),
+            api,
+            new FixedAuthService());
+
+        vm.SelectedTemplateType = templateType;
+        vm.SelectedPalletSize = palletSize;
+
+        await vm.StartNewPalletAsync();
+        vm.SerialInput = "SN-MATRIX-1";
+        await vm.AddSerialAsync();
+        await vm.CompleteDraftAsync();
+
+        var create = outbox.Operations.First(o => o.OpType == OperationType.PalletCreate);
+        using var payload = JsonDocument.Parse(create.PayloadJson);
+        Assert.Equal(templateType, payload.RootElement.GetProperty("template_type").GetString());
+        Assert.Equal(palletSize, payload.RootElement.GetProperty("max_panels").GetInt32());
+    }
+
     [Fact]
     public async Task Builder_MissingSimDecisionJourney_PreservesQueueSemantics()
     {

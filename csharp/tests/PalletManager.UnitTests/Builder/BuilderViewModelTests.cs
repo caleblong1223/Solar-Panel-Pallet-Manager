@@ -117,6 +117,28 @@ public sealed class BuilderViewModelTests
         Assert.Contains(outboxRepo.Operations, o => o.OpType == OperationType.PalletComplete);
     }
 
+    [Fact]
+    public async Task SelectedPalletSize_WhenActiveAndLowerThanItemCount_IsRejectedWithParityMessage()
+    {
+        var draftRepo = new InMemoryDraftRepository();
+        var outboxRepo = new InMemoryOutboxRepository();
+        var api = new FakeApiClient();
+        api.SimSerials.Add("SN-SIZE-1");
+        api.SimSerials.Add("SN-SIZE-2");
+        var vm = CreateViewModel(draftRepo, outboxRepo, api);
+
+        await vm.StartNewPalletAsync();
+        vm.SerialInput = "SN-SIZE-1";
+        await vm.AddSerialAsync();
+        vm.SerialInput = "SN-SIZE-2";
+        await vm.AddSerialAsync();
+
+        vm.SelectedPalletSize = 1;
+
+        Assert.Equal(25, vm.SelectedPalletSize);
+        Assert.Equal("Pallet size cannot be lower than current panel count (2)", vm.StatusMessage);
+    }
+
     private static BuilderViewModel CreateViewModel(
         InMemoryDraftRepository draftRepo,
         InMemoryOutboxRepository outboxRepo,

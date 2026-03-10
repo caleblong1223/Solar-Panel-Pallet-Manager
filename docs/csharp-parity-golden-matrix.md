@@ -20,6 +20,7 @@ This document defines the behavior-level parity evidence required for Pallet Man
 | --- | --- | --- | --- |
 | PAR-CORE-001 | Builder | Missing SIM prompt opens for absent SIM serial; reject keeps list unchanged; accept fallback enqueues `allow_missing_sim_data=true`. | `CoreFlowsParityTests.Builder_MissingSimDecisionJourney_PreservesQueueSemantics` |
 | PAR-CORE-002 | Builder | SIM-present add/remove/complete preserves slot reindexing and expected outbox operation types. | `CoreFlowsParityTests.Builder_SimDataPresentJourney_AddRemoveComplete_PreservesSlotParity` |
+| PAR-CORE-004 | Builder | Selected template + pallet-size matrix (200WT/220WT/220M6/330WT/450WT/450BT x 25/26/30/35) must be preserved in create payload across start/add/complete flow. | `CoreFlowsParityTests.Builder_TemplateAndSizeMatrix_UsesSelectedValuesInCreatePayload` |
 | PAR-CORE-003 | History | Refresh/filter/merge/open export workflow remains behaviorally identical for operator-visible actions. | `CoreFlowsParityTests.History_RefreshFilterMergeAndOpenExport_MatchesExpectedFlow` |
 | PAR-NONCORE-001 | Customers | Display name validation error parity for empty create/update submission. | `NonCoreFlowsParityTests.Customers_SaveWithoutDisplayName_ShowsParityValidationMessage` |
 | PAR-NONCORE-002 | Customers | Create/search/archive journey keeps active/inactive listing parity. | `NonCoreFlowsParityTests.Customers_CreateSearchArchive_JourneyMaintainsParityState` |
