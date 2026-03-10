@@ -22,6 +22,15 @@ const HEALTH_TIMEOUT_MS = 2500;
 const LOCAL_BACKEND_WARMUP_MS = 20000;
 const LOCAL_BACKEND_POLL_MS = 1000;
 
+function extractErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isNetworkStyleFailure(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("failed to fetch") || normalized.includes("networkerror") || normalized.includes("abort");
+}
+
 async function uploadWithTimeout(url: string, formData: FormData): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
@@ -31,6 +40,11 @@ async function uploadWithTimeout(url: string, formData: FormData): Promise<Respo
       body: formData,
       signal: controller.signal,
     });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`Upload timed out after ${UPLOAD_TIMEOUT_MS}ms`);
+    }
+    throw error;
   } finally {
     window.clearTimeout(timeoutId);
   }
@@ -105,8 +119,10 @@ export async function uploadSimulatorFile(file: File) {
       }
       return (await response.json()) as SimImportBatch;
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      if (isLocalBackendBase(baseUrl) && detail.toLowerCase().includes("failed to fetch")) {
+      const detail = extractErrorMessage(error);
+      const networkFailure = isNetworkStyleFailure(detail);
+
+      if (isLocalBackendBase(baseUrl) && networkFailure) {
         await ensureLocalBackend([baseUrl]);
         const ready = await waitForLocalBackend(baseUrl);
         if (ready) {
@@ -121,11 +137,17 @@ export async function uploadSimulatorFile(file: File) {
             }
             return (await retryResponse.json()) as SimImportBatch;
           } catch (retryError) {
-            const retryDetail = retryError instanceof Error ? retryError.message : String(retryError);
+            const retryDetail = extractErrorMessage(retryError);
             lastError = new Error(`Simulator upload retry to ${url} failed: ${retryDetail}`);
             continue;
           }
         }
+      }
+
+      if (!networkFailure) {
+        throw new Error(
+          `Simulator upload to ${url} failed: ${detail}. The request reached the backend, so local fallback was not used.`
+        );
       }
 
       lastError = new Error(`Simulator upload attempt ${attempt + 1} to ${url} failed: ${detail}`);
