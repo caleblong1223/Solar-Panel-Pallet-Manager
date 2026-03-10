@@ -178,6 +178,34 @@ def test_conflict_responses_include_error_code_payload() -> None:
         assert missing_payload["detail"]["error_code"] == "PALLET_NOT_FOUND"
 
 
+def test_cross_pallet_duplicate_conflict_returns_assigned_elsewhere_error() -> None:
+    user = DummyUser(user_id=303, roles=["packout_operator"])
+    with _make_test_client(user) as client:
+        first_pallet = client.post("/api/v1/pallets", json={"max_panels": 2, "template_type": "450WT"})
+        second_pallet = client.post("/api/v1/pallets", json={"max_panels": 2, "template_type": "450WT"})
+
+        assert first_pallet.status_code == 201
+        assert second_pallet.status_code == 201
+
+        first_pallet_id = first_pallet.json()["id"]
+        second_pallet_id = second_pallet.json()["id"]
+
+        first_add = client.post(
+            f"/api/v1/pallets/{first_pallet_id}/items",
+            json={"serial": "SER-CROSS-001", "allow_missing_sim_data": True},
+        )
+        assert first_add.status_code == 200
+
+        duplicate_elsewhere = client.post(
+            f"/api/v1/pallets/{second_pallet_id}/items",
+            json={"serial": "ser-cross-001", "allow_missing_sim_data": True},
+        )
+        assert duplicate_elsewhere.status_code == 409
+        payload = duplicate_elsewhere.json()
+        assert payload["detail"]["error_code"] == "SERIAL_ALREADY_ASSIGNED_ELSEWHERE"
+        assert "message" in payload["detail"]
+
+
 def test_idempotency_header_returns_same_create_response() -> None:
     user = DummyUser(user_id=302, roles=["packout_operator"])
     with _make_test_client(user) as client:

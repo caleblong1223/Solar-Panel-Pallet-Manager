@@ -18,8 +18,9 @@ import {
   type Pallet,
 } from "../features/pallets";
 import { getExportDownloadEndpoint } from "../features/exports";
+import { getAllLocalPallets } from "../features/localPalletStore";
 import { listCustomers, type Customer } from "../features/customers";
-import { searchBarcodes } from "../features/barcodes";
+import { searchBarcodes, type BarcodeSearchResult } from "../features/barcodes";
 
 const DEFAULT_MAX_PANELS = 25;
 const TEMPLATE_OPTIONS = ["200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
@@ -45,6 +46,18 @@ type MissingSimPromptState = {
   serial: string;
   cancelText: string;
   resolve: (useFallback: boolean) => void;
+};
+
+type DuplicatePromptState = {
+  serial: string;
+  palletNumber: number | null;
+};
+
+type DuplicatePalletMatch = {
+  serial: string;
+  palletId: number | null;
+  palletNumber: number | null;
+  palletStatus: string | null;
 };
 
 function findDefaultCustomer(customers: Customer[]): Customer | null {
@@ -144,6 +157,7 @@ export default function LiveBuilderPage() {
   const [isPackoutDateAnimating, setIsPackoutDateAnimating] = useState(false);
   const [fallbackSerials, setFallbackSerials] = useState<string[]>([]);
   const [missingSimPrompt, setMissingSimPrompt] = useState<MissingSimPromptState | null>(null);
+  const [duplicatePrompt, setDuplicatePrompt] = useState<DuplicatePromptState | null>(null);
   const [packoutDate, setPackoutDate] = useState<string>(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -166,6 +180,86 @@ export default function LiveBuilderPage() {
         active.resolve(useFallback);
       }
       return null;
+    });
+  };
+
+  const dismissDuplicatePrompt = () => {
+    setDuplicatePrompt(null);
+    serialInputRef.current?.focus();
+  };
+
+  const findDuplicateInResults = (
+    results: BarcodeSearchResult[],
+    currentPalletId?: number | null
+  ): DuplicatePalletMatch | null => {
+    const match = results.find((result) => {
+      if (result.source !== "pallet_item") {
+        return false;
+      }
+      if (!result.matched_exact) {
+        return false;
+      }
+      if (currentPalletId && currentPalletId > 0 && result.pallet_id === currentPalletId) {
+        return false;
+      }
+      return true;
+    });
+    if (!match) {
+      return null;
+    }
+    return {
+      serial: match.serial,
+      palletId: match.pallet_id ?? null,
+      palletNumber: match.pallet_number ?? null,
+      palletStatus: match.pallet_status ?? null,
+    };
+  };
+
+  const findCachedDuplicate = (serialValue: string, currentPalletId?: number | null): DuplicatePalletMatch | null => {
+    const normalized = serialValue.trim().toUpperCase();
+    if (!normalized) {
+      return null;
+    }
+    const cachedPallet = getAllLocalPallets().find((pallet) => {
+      if (pallet.deleted_at !== null) {
+        return false;
+      }
+      if (currentPalletId && currentPalletId > 0 && pallet.id === currentPalletId) {
+        return false;
+      }
+      return pallet.items.some((item) => item.serial === normalized);
+    });
+    if (!cachedPallet) {
+      return null;
+    }
+    return {
+      serial: normalized,
+      palletId: cachedPallet.id,
+      palletNumber: cachedPallet.pallet_number,
+      palletStatus: cachedPallet.status,
+    };
+  };
+
+  const findDuplicateAssignment = async (
+    serialValue: string,
+    currentPalletId?: number | null
+  ): Promise<DuplicatePalletMatch | null> => {
+    try {
+      const lookup = await searchBarcodes(token, { q: serialValue, exact: true, limit: 50, offset: 0 });
+      const onlineMatch = findDuplicateInResults(lookup.results, currentPalletId);
+      if (onlineMatch) {
+        return onlineMatch;
+      }
+      return null;
+    } catch {
+      return findCachedDuplicate(serialValue, currentPalletId);
+    }
+  };
+
+  const showDuplicatePrompt = (duplicate: DuplicatePalletMatch) => {
+    setDuplicatePrompt({
+      serial: duplicate.serial,
+      palletNumber: duplicate.palletNumber,
     });
   };
 
@@ -287,6 +381,11 @@ export default function LiveBuilderPage() {
       let shouldUseFallback = false;
       try {
         const lookup = await searchBarcodes(token, { q: s, exact: true, limit: 200, offset: 0 });
+        const duplicate = findDuplicateInResults(lookup.results, current.id);
+        if (duplicate) {
+          showDuplicatePrompt(duplicate);
+          return;
+        }
         const hasSimData = lookup.results.some((result) => result.source === "sim_panel" && result.serial === s);
         if (!hasSimData) {
           const useFallback = await requestMissingSimDecision(s, "Keep it off the pallet");
@@ -297,6 +396,11 @@ export default function LiveBuilderPage() {
           shouldUseFallback = true;
         }
       } catch {
+        const cachedDuplicate = findCachedDuplicate(s, current.id);
+        if (cachedDuplicate) {
+          showDuplicatePrompt(cachedDuplicate);
+          return;
+        }
         notify("Could not validate simulator data right now; you can still continue.", "warning");
       }
       const nextSlot = current.items.length + 1;
@@ -385,6 +489,23 @@ export default function LiveBuilderPage() {
             allowMissingSimData: fallbackSerials.includes(item.serial),
           });
         } catch (error) {
+          if (error instanceof ApiError && error.errorCode === "SERIAL_ALREADY_ASSIGNED_ELSEWHERE") {
+            try {
+              await deletePallet(apiToken, workingPallet.id);
+            } catch {
+              // Best effort cleanup; keep draft state intact for operator recovery.
+            }
+            const duplicate = await findDuplicateAssignment(item.serial, workingPallet.id);
+            showDuplicatePrompt(
+              duplicate ?? {
+                serial: item.serial,
+                palletId: null,
+                palletNumber: null,
+                palletStatus: null,
+              }
+            );
+            return;
+          }
           if (!(error instanceof ApiError) || error.errorCode !== "SIM_DATA_REQUIRED") {
             throw error;
           }
@@ -719,6 +840,24 @@ export default function LiveBuilderPage() {
               </Button>
               <Button variant="primary" onClick={() => resolveMissingSimDecision(true)}>
                 Use generated theoretical values
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : duplicatePrompt ? (
+        <div className="builder-modal__backdrop" role="dialog" aria-modal="true" aria-labelledby="duplicate-title">
+          <div className="builder-modal">
+            <h3 id="duplicate-title">Duplicate detected</h3>
+            <p>Panel is already on a pallet.</p>
+            <p className="mono">Serial: {duplicatePrompt.serial}</p>
+            <p className="mono">
+              {duplicatePrompt.palletNumber !== null
+                ? `Pallet #${duplicatePrompt.palletNumber}`
+                : "Pallet number unavailable"}
+            </p>
+            <div className="builder-modal__actions">
+              <Button variant="primary" onClick={dismissDuplicatePrompt}>
+                Dismiss
               </Button>
             </div>
           </div>
