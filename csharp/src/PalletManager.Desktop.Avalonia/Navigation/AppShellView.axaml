@@ -1,0 +1,518 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="PalletManager.Desktop.Avalonia.Navigation.AppShellView"
+        Width="1240"
+        Height="840"
+        MinWidth="980"
+        MinHeight="640"
+        Title="Pallet Manager 2.0 C#">
+  <Grid ColumnDefinitions="260,*" RowDefinitions="*">
+    <Border Grid.Column="0" Background="#E8F0FA" BorderBrush="#C8D8EA" BorderThickness="0,0,1,0" Padding="18">
+      <Grid RowDefinitions="Auto,Auto,*">
+        <StackPanel Spacing="2">
+          <TextBlock Text="Pallet Manager" FontSize="18" FontWeight="SemiBold" Foreground="#0F2238" />
+          <TextBlock Text="C# Desktop" FontSize="12" Foreground="#4C6783" />
+        </StackPanel>
+
+        <Border Grid.Row="1" Margin="0,14,0,14" Height="1" Background="#C8D8EA" />
+
+        <StackPanel Grid.Row="2" Spacing="8">
+          <ListBox ItemsSource="{Binding NavigationItems}" SelectedItem="{Binding SelectedNavigationItem}">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Border Padding="10" CornerRadius="8" Background="#F7FBFF" BorderBrush="#D7E4F2" BorderThickness="1">
+                  <TextBlock Text="{Binding Title}" FontWeight="Medium" Foreground="#0F2238" />
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <Border Classes="card" Margin="0,10,0,0">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Sync" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding SyncSummary}" Foreground="#4C6783" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="20">
+      <Border Classes="card" Padding="14">
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+          <TextBlock Text="{Binding SelectedTitle}" FontSize="24" FontWeight="SemiBold" Foreground="#0F2238" />
+          <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="2">
+            <TextBlock Text="{Binding ConnectionSummary}" FontWeight="SemiBold" HorizontalAlignment="Right" />
+            <TextBlock Text="{Binding SyncSummary}" Foreground="#4C6783" HorizontalAlignment="Right" />
+          </StackPanel>
+          <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0" Text="{Binding SelectedDescription}" Foreground="#4C6783" />
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" Margin="0,16,0,0" IsVisible="{Binding IsDefaultWorkspaceSelected}" ColumnDefinitions="2*,*" RowDefinitions="*,Auto">
+        <Border Classes="card" Grid.Column="0" Margin="0,0,8,8">
+          <StackPanel Spacing="12">
+            <TextBlock Text="Workspace" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="Shell and service wiring are active. Continue building page-by-page parity from this foundation." Foreground="#4C6783" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Column="1" Margin="8,0,0,8">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Status" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="Branch: develop/2.0-csharp" Foreground="#4C6783" />
+            <TextBlock Text="Backend: Python API (unchanged)" Foreground="#4C6783" />
+            <TextBlock Text="Mode: Offline-capable with queued sync" Foreground="#4C6783" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
+          <TextBlock Text="Design identity: layered blue surfaces, subtle borders, and flat interaction style." Foreground="#4C6783" />
+        </Border>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="0,16,0,0" IsVisible="{Binding IsHistorySelected}" ColumnDefinitions="1.3*,1*">
+        <Border Classes="card" Grid.Column="0" Margin="0,0,8,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="History Filters" FontWeight="SemiBold" FontSize="16" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox Width="220" Watermark="Serial / Pallet / Template" Text="{Binding History.Query}" />
+              <CheckBox Content="Exact" IsChecked="{Binding History.Exact}" VerticalAlignment="Center" />
+              <ComboBox Width="120" ItemsSource="{Binding History.DatePresetOptions}" SelectedItem="{Binding History.DatePreset}" />
+              <ComboBox Width="160" ItemsSource="{Binding History.SortModeOptions}" SelectedItem="{Binding History.SortMode}" />
+              <Button Classes="secondary" Content="Apply" Click="OnApplyHistoryFiltersClicked" />
+              <Button Classes="primary" Content="Refresh" Click="OnRefreshHistoryClicked" />
+              <Button Classes="secondary" Content="Merge Selected" Click="OnMergeSelectedHistoryClicked" />
+            </StackPanel>
+
+            <TextBlock Text="Results" FontWeight="SemiBold" FontSize="16" />
+            <ListBox ItemsSource="{Binding History.VisiblePallets}" SelectedItem="{Binding History.SelectedPallet}">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                      <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                      <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding PalletNumber, StringFormat=Pallet #{0}}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding TemplateType}" Foreground="#4C6783" />
+                        <TextBlock Text="{Binding ItemCount, StringFormat=Panels: {0}}" Foreground="#4C6783" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="#4C6783" VerticalAlignment="Center" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Column="1" Margin="8,0,0,0">
+          <StackPanel Spacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Details" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
+              <Button Classes="secondary" Content="Refresh Details" Click="OnRefreshHistoryDetailsClicked" />
+              <Button Classes="secondary" Content="Delete Pallet" Click="OnDeleteSelectedPalletClicked" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding History.SelectedSummary}" Foreground="#4C6783" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding History.StatusMessage}" Foreground="#4C6783" TextWrapping="Wrap" />
+
+            <TextBlock Text="Exports" FontWeight="SemiBold" FontSize="16" />
+            <ItemsControl ItemsSource="{Binding History.ExportRows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <StackPanel Spacing="6">
+                      <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding TemplateType}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding PackoutDate}" Foreground="#4C6783" />
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="secondary" Content="Open PDF" Tag="{Binding Id}" Click="OnOpenExportPdfClicked" />
+                        <Button Classes="secondary" Content="Open XLSX" Tag="{Binding Id}" Click="OnOpenExportXlsxClicked" />
+                        <Button Classes="secondary" Content="Edit Spreadsheet" Tag="{Binding Id}" Click="OnEditExportSpreadsheetClicked" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Classes="card" IsVisible="{Binding History.IsSpreadsheetEditorOpen}">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Spreadsheet Editor" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding History.EditingExportFileName}" />
+                <TextBlock Text="{Binding History.EditingWorkbookSummary}" Foreground="#4C6783" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="Sheet" VerticalAlignment="Center" />
+                  <ComboBox Width="220"
+                            ItemsSource="{Binding History.EditingSheetNames}"
+                            SelectedItem="{Binding History.SelectedEditingSheetName}" />
+                </StackPanel>
+                <TextBlock Text="{Binding History.EditingGridSummary}" Foreground="#4C6783" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="#" Width="28" Foreground="#4C6783" />
+                  <ItemsControl ItemsSource="{Binding History.EditingColumnHeaders}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Width="98" Background="#F7FBFF" BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="6" Padding="6,4">
+                          <TextBlock Text="{Binding .}" HorizontalAlignment="Center" FontWeight="SemiBold" />
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="1" Width="28" Foreground="#4C6783" VerticalAlignment="Center" />
+                  <ItemsControl ItemsSource="{Binding History.EditingPinnedHeaderCells}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBox Width="98" Text="{Binding Value}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+                <ScrollViewer Height="280" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                  <ItemsControl ItemsSource="{Binding History.EditingRows}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+                          <TextBlock Text="{Binding RowNumber}" Width="28" Foreground="#4C6783" VerticalAlignment="Center" />
+                          <ItemsControl ItemsSource="{Binding Cells}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate>
+                                <TextBox Width="98" Text="{Binding Value}" />
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Classes="primary" Content="Save" Click="OnSaveSpreadsheetEditsClicked" />
+                  <Button Classes="secondary" Content="Close" Click="OnCloseSpreadsheetEditorClicked" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="0,16,0,0" IsVisible="{Binding IsImportSelected}" ColumnDefinitions="*,*">
+        <Border Classes="card" Grid.Column="0" Margin="0,0,8,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Import Sun Simulator Data" FontWeight="SemiBold" FontSize="16" />
+            <TextBlock Text="Add one or more file paths (.csv, .xlsx, .xls), then upload." Foreground="#4C6783" TextWrapping="Wrap" />
+            <TextBox Height="110"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     Watermark="Paste file paths, one per line"
+                     Text="{Binding ImportSimulator.UploadPathsInput}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="secondary" Content="Browse Files" Click="OnBrowseSimulatorFilesClicked" />
+              <Button Classes="primary" Content="Upload and Import" Click="OnUploadSimulatorFilesClicked" />
+            </StackPanel>
+            <TextBlock Text="{Binding ImportSimulator.StatusMessage}" Foreground="#4C6783" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding ImportSimulator.UploadResults}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <StackPanel Spacing="4">
+                      <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Status, StringFormat=Status: {0}}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding BatchId, StringFormat=Batch: {0}}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding RowsImported, StringFormat=Imported: {0}}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding RowsRejected, StringFormat=Rejected: {0}}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding Error}" Foreground="#4C6783" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Column="1" Margin="8,0,0,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Search Simulator Records" FontWeight="SemiBold" FontSize="16" />
+            <TextBox Watermark="Panel serial" Text="{Binding ImportSimulator.SearchSerial}" />
+            <Button Classes="primary" Content="Search" Click="OnSearchSimulatorSerialClicked" />
+            <ItemsControl ItemsSource="{Binding ImportSimulator.SearchResults}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <StackPanel Spacing="4">
+                      <TextBlock Text="{Binding Serial}" FontWeight="SemiBold" FontFamily="Consolas, Menlo, monospace" />
+                      <TextBlock Text="{Binding SimTestTimestamp}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding ElectricalSummary}" Foreground="#4C6783" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="0,16,0,0" IsVisible="{Binding IsExportsSelected}" ColumnDefinitions="1*,1.2*">
+        <Border Classes="card" Grid.Column="0" Margin="0,0,8,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Export Filters" FontWeight="SemiBold" FontSize="16" />
+            <TextBox Watermark="Pallet number" Text="{Binding ExportsLibrary.PalletNumber}" />
+            <ComboBox ItemsSource="{Binding ExportsLibrary.TemplateOptions}" SelectedItem="{Binding ExportsLibrary.TemplateType}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox Width="150" Watermark="From YYYY-MM-DD" Text="{Binding ExportsLibrary.CreatedFrom}" />
+              <TextBox Width="150" Watermark="To YYYY-MM-DD" Text="{Binding ExportsLibrary.CreatedTo}" />
+            </StackPanel>
+            <Button Classes="primary" Content="Search" Click="OnSearchExportsClicked" />
+            <TextBlock Text="{Binding ExportsLibrary.StatusMessage}" Foreground="#4C6783" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Column="1" Margin="8,0,0,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Exports" FontWeight="SemiBold" FontSize="16" />
+            <ItemsControl ItemsSource="{Binding ExportsLibrary.Results}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <StackPanel Spacing="6">
+                      <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding PalletId, StringFormat=Pallet: {0}}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding TemplateType}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding SizeBytes, StringFormat=Bytes: {0}}" Foreground="#4C6783" />
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="secondary" Content="Open PDF" Tag="{Binding Id}" Click="OnOpenExportLibraryPdfClicked" />
+                        <Button Classes="secondary" Content="Open XLSX" Tag="{Binding Id}" Click="OnOpenExportLibraryXlsxClicked" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="0,16,0,0" IsVisible="{Binding IsSettingsSelected}" ColumnDefinitions="1.1*,1*">
+        <Border Classes="card" Grid.Column="0" Margin="0,0,8,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Server Settings" FontWeight="SemiBold" FontSize="16" />
+            <TextBox Watermark="Primary API URL" Text="{Binding Settings.PrimaryApiBaseUrl}" />
+            <TextBox Watermark="Fallback API URL" Text="{Binding Settings.FallbackApiBaseUrl}" />
+            <TextBlock Text="{Binding Settings.BackendMessage}" Foreground="#4C6783" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="primary" Content="Save Settings" Click="OnSaveSettingsClicked" />
+              <Button Classes="secondary" Content="Test Primary" Click="OnTestPrimarySettingsClicked" />
+              <Button Classes="secondary" Content="Test Fallback" Click="OnTestFallbackSettingsClicked" />
+            </StackPanel>
+            <TextBlock Text="{Binding Settings.StatusMessage}" Foreground="#4C6783" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Column="1" Margin="8,0,0,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Sync Status" FontWeight="SemiBold" FontSize="16" />
+            <TextBlock Text="{Binding Settings.SyncSummary}" Foreground="#4C6783" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="secondary" Content="Refresh Backend" Click="OnRefreshBackendHealthClicked" />
+              <Button Classes="primary" Content="Trigger Sync Now" Click="OnTriggerSettingsSyncNowClicked" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="0,16,0,0" IsVisible="{Binding IsSyncIssuesSelected}" ColumnDefinitions="*,*">
+        <Border Classes="card" Grid.Column="0" Margin="0,0,8,0">
+          <StackPanel Spacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="primary" Content="Retry Sync Now" Click="OnSyncNowClicked" />
+              <Button Classes="secondary" Content="Refresh" Click="OnRefreshSyncIssuesClicked" />
+            </StackPanel>
+
+            <TextBlock Text="Needs Review" FontWeight="SemiBold" FontSize="16" />
+            <ItemsControl ItemsSource="{Binding SyncIssues.NeedsReview}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <StackPanel Spacing="6">
+                      <TextBlock Text="{Binding OpType}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding LastError}" Foreground="#4C6783" TextWrapping="Wrap" />
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="secondary" Content="Retry" Tag="{Binding OpId}" Click="OnRetryOpClicked" />
+                        <Button Classes="secondary" Content="Discard" Tag="{Binding OpId}" Click="OnDiscardOpClicked" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Column="1" Margin="8,0,0,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Pending Errors" FontWeight="SemiBold" FontSize="16" />
+            <ItemsControl ItemsSource="{Binding SyncIssues.PendingErrors}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <StackPanel Spacing="6">
+                      <TextBlock Text="{Binding OpType}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding LastError}" Foreground="#4C6783" TextWrapping="Wrap" />
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="secondary" Content="Retry" Tag="{Binding OpId}" Click="OnRetryOpClicked" />
+                        <Button Classes="secondary" Content="Discard" Tag="{Binding OpId}" Click="OnDiscardOpClicked" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="0,16,0,0" IsVisible="{Binding IsBuilderSelected}" ColumnDefinitions="1.4*,1*">
+        <Border Classes="card" Grid.Column="0" Margin="0,0,8,0">
+          <StackPanel Spacing="12">
+            <TextBlock Text="Builder Draft" FontWeight="SemiBold" FontSize="18" />
+            <TextBlock Text="{Binding Builder.ActiveSummary}" Foreground="#4C6783" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Template" VerticalAlignment="Center" Width="70" />
+              <ComboBox Width="180" ItemsSource="{Binding Builder.TemplateOptions}" SelectedItem="{Binding Builder.SelectedTemplateType}" />
+              <TextBlock Text="Size" VerticalAlignment="Center" Width="40" Margin="10,0,0,0" />
+              <ComboBox Width="120" ItemsSource="{Binding Builder.PalletSizeOptions}" SelectedItem="{Binding Builder.SelectedPalletSize}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Pallet #" VerticalAlignment="Center" Width="70" />
+              <TextBox Width="100" Text="{Binding Builder.PalletNumberDraft}" />
+              <TextBlock Text="Packout" VerticalAlignment="Center" Width="55" Margin="10,0,0,0" />
+              <TextBox Width="120" Text="{Binding Builder.PackoutDate}" />
+              <Button Classes="secondary" Content="Start" Click="OnStartBuilderClicked" />
+              <Button Classes="primary" Content="Complete" Click="OnCompleteBuilderClicked" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox Width="320" Watermark="Scan serial then click Add" Text="{Binding Builder.SerialInput}" />
+              <Button Classes="primary" Content="Add" Click="OnAddSerialClicked" />
+            </StackPanel>
+            <TextBlock Text="{Binding Builder.StatusMessage}" Foreground="#4C6783" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Builder.FallbackSerialCount, StringFormat=Fallback serials: {0}}" Foreground="#4C6783" />
+
+            <Border BorderBrush="#D7E4F2"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12"
+                    Background="#F7FBFF"
+                    IsVisible="{Binding Builder.IsMissingSimPromptOpen}">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Sun Simulator Data Missing" FontWeight="SemiBold" />
+                <TextBlock Text="No sun simulator information exists in the database for this panel." Foreground="#4C6783" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Builder.MissingSimSerial, StringFormat=Serial: {0}}" FontFamily="Consolas, Menlo, monospace" />
+                <TextBlock Text="You can add it with generated theoretical values, or leave it off the pallet." Foreground="#4C6783" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Classes="secondary" Content="{Binding Builder.MissingSimCancelText}" Click="OnKeepOffPalletClicked" />
+                  <Button Classes="primary" Content="Use generated theoretical values" Click="OnUseGeneratedValuesClicked" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Column="1" Margin="8,0,0,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Items" FontWeight="SemiBold" FontSize="16" />
+            <ItemsControl ItemsSource="{Binding Builder.Items}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding SlotIndex}" Width="32" Foreground="#4C6783" />
+                      <TextBlock Grid.Column="1" Text="{Binding Serial}" FontFamily="Consolas, Menlo, monospace" />
+                      <Button Grid.Column="2" Classes="secondary" Content="Remove" Tag="{Binding Id}" Click="OnRemoveSerialClicked" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Grid Grid.Row="1" Margin="0,16,0,0" IsVisible="{Binding IsCustomersSelected}" ColumnDefinitions="1.2*,1*">
+        <Border Classes="card" Grid.Column="0" Margin="0,0,8,0">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Customer Form" FontWeight="SemiBold" FontSize="16" />
+            <TextBox Watermark="Display name" Text="{Binding Customers.DisplayName}" />
+            <TextBox Watermark="Business name" Text="{Binding Customers.BusinessName}" />
+            <TextBox Watermark="Contact name" Text="{Binding Customers.ContactName}" />
+            <TextBox Watermark="Email" Text="{Binding Customers.Email}" />
+            <TextBox Watermark="Phone" Text="{Binding Customers.Phone}" />
+            <TextBox Watermark="Address" Text="{Binding Customers.Address}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox Width="140" Watermark="City" Text="{Binding Customers.City}" />
+              <TextBox Width="90" Watermark="State" Text="{Binding Customers.State}" />
+              <TextBox Width="100" Watermark="ZIP" Text="{Binding Customers.ZipCode}" />
+            </StackPanel>
+            <CheckBox Content="Active" IsChecked="{Binding Customers.IsActive}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="primary" Content="Save" Click="OnSaveCustomerClicked" />
+              <Button Classes="secondary" Content="New" Click="OnNewCustomerClicked" />
+            </StackPanel>
+            <TextBlock Text="{Binding Customers.StatusMessage}" Foreground="#4C6783" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Grid.Column="1" Margin="8,0,0,0">
+          <StackPanel Spacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox Width="220" Watermark="Search customers" Text="{Binding Customers.Search}" />
+              <CheckBox Content="Show inactive" IsChecked="{Binding Customers.ShowInactive}" VerticalAlignment="Center" />
+              <Button Classes="secondary" Content="Refresh" Click="OnRefreshCustomersClicked" />
+            </StackPanel>
+
+            <ItemsControl ItemsSource="{Binding Customers.Customers}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border BorderBrush="#D7E4F2" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                    <StackPanel Spacing="6">
+                      <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding BusinessName}" Foreground="#4C6783" />
+                      <TextBlock Text="{Binding Email}" Foreground="#4C6783" />
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="secondary" Content="Edit" Tag="{Binding Id}" Click="OnEditCustomerClicked" />
+                        <Button Classes="secondary" Content="Archive" Tag="{Binding Id}" Click="OnArchiveCustomerClicked" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

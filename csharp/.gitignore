@@ -1,0 +1,14 @@
+# Local SDK/bootstrap
+.dotnet/
+
+# Build outputs
+bin/
+obj/
+artifacts/
+
+# IDE/editor
+.idea/
+.vscode/
+*.user
+*.suo
+*.userprefs

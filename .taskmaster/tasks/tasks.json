@@ -1668,6 +1668,204 @@
           ]
         }
       ]
+    },
+    "csharp-ui": {
+      "metadata": {
+        "name": "csharp-ui",
+        "description": "C# Avalonia parity execution plan",
+        "created": "2026-03-10"
+      },
+      "tasks": [
+        {
+          "id": "CSPM-001",
+          "title": "Create .NET 8 solution and project wiring",
+          "description": "Wire Domain/Application/Infrastructure/Desktop projects and ensure Avalonia startup compiles.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Baseline architecture setup for C# track.",
+          "testStrategy": "Build solution and verify app shell startup."
+        },
+        {
+          "id": "CSPM-002",
+          "title": "Implement DI composition root and baseline services",
+          "description": "Register all interfaces and baseline service implementations for launch readiness.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-001"
+          ],
+          "details": "Ensure no runtime service resolution failures.",
+          "testStrategy": "Smoke test startup and runtime service resolution."
+        },
+        {
+          "id": "CSPM-003",
+          "title": "Implement blue identity theme system",
+          "description": "Apply blue-focused design tokens and shared styles in Avalonia.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [
+            "CSPM-001"
+          ],
+          "details": "Create flat visual language independent of JS UI philosophy.",
+          "testStrategy": "Visual review against design token checklist."
+        },
+        {
+          "id": "CSPM-010",
+          "title": "Implement SQLite migration runner and repository base",
+          "description": "Run schema migrations and expose stable persistence foundation.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-002"
+          ],
+          "details": "Use WAL and durable local storage for offline parity.",
+          "testStrategy": "Integration tests for schema creation and migration idempotency."
+        },
+        {
+          "id": "CSPM-011",
+          "title": "Implement runtime settings persistence and endpoint resolver",
+          "description": "Persist API settings and produce fallback endpoint candidate chain.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-010"
+          ],
+          "details": "Support local backend and Docker-hosted backend reachability.",
+          "testStrategy": "Unit tests for candidate ordering and settings persistence."
+        },
+        {
+          "id": "CSPM-012",
+          "title": "Implement HTTP client fallback policy parity",
+          "description": "Match JS fallback behavior for timeout/network/5xx cases.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-011"
+          ],
+          "details": "Map API errors and preserve 4xx behavior.",
+          "testStrategy": "Integration tests with simulated endpoint failures."
+        },
+        {
+          "id": "CSPM-020",
+          "title": "Implement outbox repository in SQLite",
+          "description": "Persist queued operations and retry metadata for offline operations.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-010"
+          ],
+          "details": "Durable outbox is required for parity and resilience.",
+          "testStrategy": "Repository tests for CRUD and state transitions."
+        },
+        {
+          "id": "CSPM-021",
+          "title": "Implement sync engine replay loop parity",
+          "description": "Replay outbox operations and route hard conflicts to needs_review.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-020",
+            "CSPM-012"
+          ],
+          "details": "Keep operation-id dedupe semantics.",
+          "testStrategy": "Deterministic sync simulation tests."
+        },
+        {
+          "id": "CSPM-022",
+          "title": "Implement sync issues workflow parity",
+          "description": "Expose review/retry/discard actions over durable outbox data.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [
+            "CSPM-021"
+          ],
+          "details": "Match existing operator conflict resolution path.",
+          "testStrategy": "UI + integration tests for operation lifecycle."
+        },
+        {
+          "id": "CSPM-030",
+          "title": "Implement Builder screen parity",
+          "description": "Port Builder workflow with draft persistence and missing SIM modal logic.",
+          "status": "in_progress",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-011",
+            "CSPM-021"
+          ],
+          "details": "Highest-value and highest-risk operator workflow.",
+          "testStrategy": "Golden-path and edge-case parity tests."
+        },
+        {
+          "id": "CSPM-031",
+          "title": "Implement History Explorer parity",
+          "description": "Port filtering, selection, merge, and export detail behaviors.",
+          "status": "in_progress",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-030"
+          ],
+          "details": "Includes server-driven details + selection logic parity.",
+          "testStrategy": "Functional tests for filters/sorts/selection actions."
+        },
+        {
+          "id": "CSPM-032",
+          "title": "Implement Spreadsheet editor parity spike and production path",
+          "description": "Deliver workbook load/edit/save with validated performance.",
+          "status": "in_progress",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-031"
+          ],
+          "details": "Most sensitive technical parity area.",
+          "testStrategy": "Roundtrip and performance test suite on representative files."
+        },
+        {
+          "id": "CSPM-040",
+          "title": "Implement remaining screens parity",
+          "description": "Customers, Import, Exports, Settings with equivalent behavior.",
+          "status": "done",
+          "priority": "medium",
+          "dependencies": [
+            "CSPM-030"
+          ],
+          "details": "Complete non-core screens after Builder/History stabilization.",
+          "testStrategy": "Screen-level scenario tests and API contract checks."
+        },
+        {
+          "id": "CSPM-041",
+          "title": "Build parity test harness and golden scenarios",
+          "description": "Create automated parity verification across critical workflows.",
+          "status": "done",
+          "priority": "high",
+          "dependencies": [
+            "CSPM-032",
+            "CSPM-040"
+          ],
+          "details": "Gate releases with behavior-level parity evidence.",
+          "testStrategy": "Automated parity suite pass criteria."
+        },
+        {
+          "id": "CSPM-042",
+          "title": "Cross-platform packaging and release gates",
+          "description": "Produce release artifacts and finalize rollout controls.",
+          "status": "in_progress",
+          "priority": "medium",
+          "dependencies": [
+            "CSPM-041"
+          ],
+          "details": "Windows/macOS/Linux packaging and rollout checklist.",
+          "testStrategy": "Artifact verification and install smoke tests on all target OSes."
+        }
+      ]
+    }
+  },
+  "csharp-ui-ai": {
+    "tasks": [],
+    "metadata": {
+      "created": "2026-03-10T12:51:42.341Z",
+      "updated": "2026-03-10T12:51:42.344Z",
+      "description": "AI-generated C# Avalonia parity backlog"
     }
   }
 }

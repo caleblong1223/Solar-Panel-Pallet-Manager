@@ -1,0 +1,53 @@
+name: C# Release Stubs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  packaging-and-signing-stub:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+          - os: windows-latest
+            rid: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: csharp/global.json
+
+      - name: Build publish artifact
+        shell: bash
+        run: bash csharp/scripts/package-smoke.sh "${{ matrix.rid }}"
+
+      - name: Build installer artifact and run install/uninstall smoke
+        shell: bash
+        run: bash csharp/scripts/installer-smoke.sh "${{ matrix.rid }}"
+
+      - name: Run signing/notarization stub
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_NOTARY_PROFILE: ${{ secrets.APPLE_NOTARY_PROFILE }}
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
+        run: bash csharp/scripts/signing-stub.sh "${{ matrix.rid }}" "csharp/artifacts/installers/${{ matrix.rid }}" "csharp/artifacts/publish/${{ matrix.rid }}"
+
+      - name: Upload publish artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-release-stub-${{ matrix.rid }}
+          path: |
+            csharp/artifacts/publish/${{ matrix.rid }}
+            csharp/artifacts/installers/${{ matrix.rid }}
