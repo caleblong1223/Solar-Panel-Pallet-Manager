@@ -21,6 +21,9 @@ export default function ImportExportPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
   const [isBusy, setIsBusy] = useState(false);
+  const [uploadingFileName, setUploadingFileName] = useState("");
+  const [uploadingIndex, setUploadingIndex] = useState(0);
+  const [lastImportSummary, setLastImportSummary] = useState<string | null>(null);
 
   const [searchSerial, setSearchSerial] = useState("");
   const [searchResults, setSearchResults] = useState<BarcodeSearchResult[]>([]);
@@ -50,9 +53,15 @@ export default function ImportExportPage() {
 
     setIsBusy(true);
     setUploadResults([]);
+    setLastImportSummary(null);
+    setUploadingFileName("");
+    setUploadingIndex(0);
     try {
       const summary: UploadResult[] = [];
-      for (const file of selectedFiles) {
+      for (let i = 0; i < selectedFiles.length; i += 1) {
+        const file = selectedFiles[i];
+        setUploadingIndex(i + 1);
+        setUploadingFileName(file.name);
         try {
           const batch = await uploadSimulatorFile(file);
           summary.push({ fileName: file.name, batch });
@@ -64,6 +73,10 @@ export default function ImportExportPage() {
       setUploadResults(summary);
       const successCount = summary.filter((item) => item.batch).length;
       const failureCount = summary.filter((item) => item.error).length;
+      setLastImportSummary(
+        `Import complete: ${successCount} ${successCount === 1 ? "file" : "files"} succeeded, ` +
+          `${failureCount} ${failureCount === 1 ? "file" : "files"} failed.`
+      );
       if (successCount > 0) {
         notify(`Imported ${successCount} ${successCount === 1 ? "file" : "files"}`, "success");
       }
@@ -72,6 +85,8 @@ export default function ImportExportPage() {
       }
     } finally {
       setIsBusy(false);
+      setUploadingFileName("");
+      setUploadingIndex(0);
       setSelectedFiles([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -121,6 +136,7 @@ export default function ImportExportPage() {
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 multiple
+                disabled={isBusy}
                 ref={fileInputRef}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   setSelectedFiles(event.target.files ? Array.from(event.target.files) : [])
@@ -128,15 +144,29 @@ export default function ImportExportPage() {
               />
             </label>
             <Button type="submit" disabled={isBusy || selectedFiles.length === 0}>
-              Upload and Import
+              {isBusy ? "Uploading..." : "Upload and Import"}
             </Button>
           </form>
+          {isBusy && (
+            <div className="import-feedback import-feedback--loading" role="status" aria-live="polite">
+              <div className="import-spinner" />
+              <p>
+                Importing file {uploadingIndex || 1} of {selectedFiles.length}...
+              </p>
+              {uploadingFileName ? <p className="mono">{uploadingFileName}</p> : null}
+            </div>
+          )}
           {selectedFiles.length > 0 && (
             <p className="builder-meta" style={{ marginTop: "12px" }}>
               Selected {selectedFiles.length} file{selectedFiles.length === 1 ? "" : "s"}:{" "}
               {selectedFiles.map((file) => file.name).join(", ")}
             </p>
           )}
+          {lastImportSummary ? (
+            <div className="import-feedback import-feedback--success" role="status" aria-live="polite">
+              <p>{lastImportSummary}</p>
+            </div>
+          ) : null}
 
           {uploadResults.length > 0 && (
             <div className="builder-meta" style={{ marginTop: "16px" }}>
