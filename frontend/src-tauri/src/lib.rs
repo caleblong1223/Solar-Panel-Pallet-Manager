@@ -2,8 +2,70 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
+use std::{fs, io};
 
+use serde::{Deserialize, Serialize};
 use tauri::Manager;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+struct DesktopPrefs {
+  show_backend_terminal: bool,
+}
+
+impl Default for DesktopPrefs {
+  fn default() -> Self {
+    Self {
+      show_backend_terminal: false,
+    }
+  }
+}
+
+fn desktop_prefs_path<R: tauri::Runtime, M: tauri::Manager<R>>(manager: &M) -> Option<PathBuf> {
+  let app_data_dir = manager.path().app_data_dir().ok()?;
+  Some(app_data_dir.join("desktop_prefs.json"))
+}
+
+fn save_desktop_prefs<R: tauri::Runtime, M: tauri::Manager<R>>(manager: &M, prefs: &DesktopPrefs) -> Result<(), String> {
+  let prefs_path = desktop_prefs_path(manager).ok_or("Unable to resolve app data directory".to_string())?;
+  if let Some(parent) = prefs_path.parent() {
+    fs::create_dir_all(parent).map_err(|err| format!("Unable to create preferences directory: {err}"))?;
+  }
+  let content = serde_json::to_string_pretty(prefs).map_err(|err| format!("Unable to serialize preferences: {err}"))?;
+  fs::write(&prefs_path, content).map_err(|err| format!("Unable to write preferences: {err}"))?;
+  Ok(())
+}
+
+fn load_desktop_prefs<R: tauri::Runtime, M: tauri::Manager<R>>(manager: &M) -> DesktopPrefs {
+  let Some(prefs_path) = desktop_prefs_path(manager) else {
+    return DesktopPrefs::default();
+  };
+
+  match fs::read_to_string(&prefs_path) {
+    Ok(content) => {
+      let trimmed = content.trim();
+      if trimmed.is_empty() {
+        let defaults = DesktopPrefs::default();
+        let _ = save_desktop_prefs(manager, &defaults);
+        return defaults;
+      }
+      match serde_json::from_str::<DesktopPrefs>(trimmed) {
+        Ok(prefs) => prefs,
+        Err(err) => {
+          eprintln!("Failed to parse desktop prefs from {}: {err}", prefs_path.display());
+          let defaults = DesktopPrefs::default();
+          let _ = save_desktop_prefs(manager, &defaults);
+          defaults
+        }
+      }
+    }
+    Err(err) if err.kind() == io::ErrorKind::NotFound => DesktopPrefs::default(),
+    Err(err) => {
+      eprintln!("Failed to read desktop prefs from {}: {err}", prefs_path.display());
+      DesktopPrefs::default()
+    }
+  }
+}
 
 fn backend_is_running() -> bool {
   let addr = "127.0.0.1:8010";
@@ -74,8 +136,10 @@ fn start_bundled_backend(app: &tauri::App) {
     eprintln!("Failed to create export directory {}: {err}", export_root.display());
   }
   let database_url = format!("sqlite+pysqlite:///{}", app_data_dir.join("pallet_manager.db").display());
+  let prefs = load_desktop_prefs(app);
 
-  let spawn_result = Command::new(python)
+  let mut command = Command::new(python);
+  command
     .arg("scripts/run_local_backend.py")
     .arg("--host")
     .arg("127.0.0.1")
@@ -85,8 +149,16 @@ fn start_bundled_backend(app: &tauri::App) {
     .arg(database_url)
     .env("LOCAL_IMPORT_ROOT", import_root.as_os_str())
     .env("LOCAL_EXPORT_ROOT", export_root.as_os_str())
-    .current_dir(&backend_dir)
-    .spawn();
+    .current_dir(&backend_dir);
+
+  #[cfg(target_os = "windows")]
+  if !prefs.show_backend_terminal {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    command.creation_flags(CREATE_NO_WINDOW);
+  }
+
+  let spawn_result = command.spawn();
 
   if let Err(err) = spawn_result {
     eprintln!("Failed to start bundled backend: {err}");
@@ -130,8 +202,8 @@ fn open_with_system(target: String) -> Result<(), String> {
 fn open_backend_terminal() -> Result<(), String> {
   #[cfg(target_os = "windows")]
   {
-    Command::new("cmd")
-      .args(["/C", "start", "Pallet Manager Backend Terminal", "cmd", "/K"])
+    Command::new("conhost.exe")
+      .args(["cmd.exe", "/K", "echo Pallet Manager backend terminal"])
       .spawn()
       .map_err(|error| format!("Unable to open backend terminal: {error}"))?;
     return Ok(());
@@ -158,6 +230,19 @@ fn open_backend_terminal() -> Result<(), String> {
   }
 }
 
+#[tauri::command]
+fn get_backend_terminal_setting(app: tauri::AppHandle) -> bool {
+  load_desktop_prefs(&app).show_backend_terminal
+}
+
+#[tauri::command]
+fn set_backend_terminal_setting(app: tauri::AppHandle, show_backend_terminal: bool) -> Result<(), String> {
+  let prefs = DesktopPrefs {
+    show_backend_terminal,
+  };
+  save_desktop_prefs(&app, &prefs)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -168,7 +253,12 @@ pub fn run() {
         let _ = window.set_focus();
       }
     }))
-    .invoke_handler(tauri::generate_handler![open_with_system, open_backend_terminal])
+    .invoke_handler(tauri::generate_handler![
+      open_with_system,
+      open_backend_terminal,
+      get_backend_terminal_setting,
+      set_backend_terminal_setting
+    ])
     .setup(|app| {
       start_bundled_backend(app);
       if cfg!(debug_assertions) {

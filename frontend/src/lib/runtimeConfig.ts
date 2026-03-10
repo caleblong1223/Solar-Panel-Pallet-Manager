@@ -1,4 +1,4 @@
-const DEFAULT_PRIMARY_API_BASE_URL = "http://127.0.0.1:8001/api/v1";
+const DEFAULT_PRIMARY_API_BASE_URL = "http://127.0.0.1:8010/api/v1";
 const DEFAULT_FALLBACK_API_BASE_URL = "http://127.0.0.1:8010/api/v1";
 const LOOPBACK_ALIAS_API_BASE_URL = "http://localhost:8010/api/v1";
 const SETTINGS_KEY = "pm2_runtime_settings";

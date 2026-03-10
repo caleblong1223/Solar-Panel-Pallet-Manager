@@ -19,6 +19,8 @@ export default function SettingsPage() {
   const [statusKind, setStatusKind] = useState<"success" | "warning" | "error" | null>(null);
   const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
   const [backendMessage, setBackendMessage] = useState<string>("Checking local backend...");
+  const [showBackendTerminal, setShowBackendTerminal] = useState(false);
+  const [terminalSettingSupported, setTerminalSettingSupported] = useState(true);
   const [syncState, setSyncState] = useState<SyncState>(() => getSyncState());
 
   useEffect(() => {
@@ -55,6 +57,27 @@ export default function SettingsPage() {
     };
   }, [fallbackApiBaseUrl]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadTerminalSetting = async () => {
+      try {
+        const value = await invoke<boolean>("get_backend_terminal_setting");
+        if (!cancelled) {
+          setShowBackendTerminal(Boolean(value));
+          setTerminalSettingSupported(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setTerminalSettingSupported(false);
+        }
+      }
+    };
+    void loadTerminalSetting();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleSave = (event: FormEvent) => {
     event.preventDefault();
     const saved = saveRuntimeSettings({
@@ -90,6 +113,20 @@ export default function SettingsPage() {
       const message = error instanceof Error ? error.message : String(error);
       setStatusKind("error");
       setStatusMessage(message || "Failed to open backend terminal.");
+    }
+  };
+
+  const handleToggleStartupTerminal = async (next: boolean) => {
+    setShowBackendTerminal(next);
+    try {
+      await invoke("set_backend_terminal_setting", { show_backend_terminal: next });
+      setStatusKind("success");
+      setStatusMessage("Backend startup terminal setting saved. Restart app to apply.");
+    } catch (error) {
+      setShowBackendTerminal((prev) => !prev);
+      const message = error instanceof Error ? error.message : String(error);
+      setStatusKind("error");
+      setStatusMessage(message || "Failed to save backend startup terminal setting.");
     }
   };
 
@@ -174,6 +211,20 @@ export default function SettingsPage() {
 
           <Card title="Backend Debug">
             <p>Need to inspect backend logs or run backend commands manually?</p>
+            {terminalSettingSupported ? (
+              <label className="ui-checkbox">
+                <input
+                  type="checkbox"
+                  checked={showBackendTerminal}
+                  onChange={(event) => void handleToggleStartupTerminal(event.target.checked)}
+                />
+                Show backend terminal on app startup
+              </label>
+            ) : (
+              <p className="settings-status settings-status--warning">
+                Startup terminal preference is unavailable in this build.
+              </p>
+            )}
             <div className="settings-actions">
               <Button type="button" variant="secondary" onClick={() => void handleOpenTerminal()}>
                 Open Backend Terminal
