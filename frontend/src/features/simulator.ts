@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { apiRequest } from "../lib/api";
 import { getApiBaseCandidates } from "../lib/runtimeConfig";
 
@@ -68,11 +69,24 @@ async function waitForLocalBackend(baseUrl: string): Promise<boolean> {
   return false;
 }
 
+async function ensureLocalBackend(candidates: string[]): Promise<void> {
+  const hasLocal = candidates.some((base) => isLocalBackendBase(base));
+  if (!hasLocal) {
+    return;
+  }
+  try {
+    await invoke<boolean>("ensure_local_backend");
+  } catch {
+    // Non-tauri or command unavailable; fallback to existing warm-up checks.
+  }
+}
+
 export async function uploadSimulatorFile(file: File) {
   const candidates = [...new Set(getApiBaseCandidates().map(normalizeSimulatorBaseUrl))];
   if (candidates.length === 0) {
     throw new Error("No API base URL configured for simulator import");
   }
+  await ensureLocalBackend(candidates);
 
   const endpointPath = "/simulator/imports/anonymous";
   let lastError: unknown = null;
@@ -93,6 +107,7 @@ export async function uploadSimulatorFile(file: File) {
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       if (isLocalBackendBase(baseUrl) && detail.toLowerCase().includes("failed to fetch")) {
+        await ensureLocalBackend([baseUrl]);
         const ready = await waitForLocalBackend(baseUrl);
         if (ready) {
           const retryFormData = new FormData();

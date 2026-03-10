@@ -1,6 +1,7 @@
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
 use std::time::Duration;
 use std::{fs, io};
 
@@ -93,38 +94,40 @@ fn resolve_python_executable(backend_dir: &Path) -> Option<PathBuf> {
   candidates.into_iter().find(|path| path.is_file())
 }
 
-fn start_bundled_backend(app: &tauri::App) {
+fn start_bundled_backend(app: &tauri::AppHandle) -> Result<(), String> {
   if backend_is_running() {
-    return;
+    return Ok(());
   }
 
   let resource_dir = match app.path().resource_dir() {
     Ok(path) => path,
     Err(err) => {
-      eprintln!("Failed to resolve resource dir: {err}");
-      return;
+      return Err(format!("Failed to resolve resource dir: {err}"));
     }
   };
   let backend_dir = match resolve_backend_dir(&resource_dir) {
     Some(path) => path,
     None => {
-      eprintln!("Bundled backend directory not found under {}", resource_dir.display());
-      return;
+      return Err(format!(
+        "Bundled backend directory not found under {}",
+        resource_dir.display()
+      ));
     }
   };
   let python = match resolve_python_executable(&backend_dir) {
     Some(path) => path,
     None => {
-      eprintln!("Bundled python executable not found in {}", backend_dir.display());
-      return;
+      return Err(format!(
+        "Bundled python executable not found in {}",
+        backend_dir.display()
+      ));
     }
   };
 
   let app_data_dir = match app.path().app_data_dir() {
     Ok(path) => path,
     Err(err) => {
-      eprintln!("Failed to resolve app data dir: {err}");
-      return;
+      return Err(format!("Failed to resolve app data dir: {err}"));
     }
   };
   let import_root = app_data_dir.join("IMPORTED DATA").join("LOCAL_IMPORTS");
@@ -161,8 +164,9 @@ fn start_bundled_backend(app: &tauri::App) {
   let spawn_result = command.spawn();
 
   if let Err(err) = spawn_result {
-    eprintln!("Failed to start bundled backend: {err}");
+    return Err(format!("Failed to start bundled backend: {err}"));
   }
+  Ok(())
 }
 
 #[tauri::command]
@@ -243,6 +247,23 @@ fn set_backend_terminal_setting(app: tauri::AppHandle, show_backend_terminal: bo
   save_desktop_prefs(&app, &prefs)
 }
 
+#[tauri::command]
+fn ensure_local_backend(app: tauri::AppHandle) -> Result<bool, String> {
+  if backend_is_running() {
+    return Ok(true);
+  }
+
+  start_bundled_backend(&app)?;
+
+  for _ in 0..40 {
+    if backend_is_running() {
+      return Ok(true);
+    }
+    thread::sleep(Duration::from_millis(250));
+  }
+  Ok(false)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -257,10 +278,13 @@ pub fn run() {
       open_with_system,
       open_backend_terminal,
       get_backend_terminal_setting,
-      set_backend_terminal_setting
+      set_backend_terminal_setting,
+      ensure_local_backend
     ])
     .setup(|app| {
-      start_bundled_backend(app);
+      if let Err(err) = start_bundled_backend(&app.handle()) {
+        eprintln!("{err}");
+      }
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
