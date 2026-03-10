@@ -26,6 +26,8 @@ fi
 
 OUT_DIR="$ROOT_DIR/artifacts/publish/$RID"
 APP_NAME="PalletManager.Desktop.Avalonia"
+APP_BUNDLE_PATH="$ROOT_DIR/artifacts/app/$RID/${APP_NAME}.app"
+APP_LAUNCHER_PATH="$APP_BUNDLE_PATH/Contents/MacOS/PalletManagerLauncher"
 
 echo "[package-smoke] using: $DOTNET"
 echo "[package-smoke] rid: $RID"
@@ -98,7 +100,31 @@ else
   echo "[package-smoke] launch smoke skipped (host $(uname -s) does not match RID $RID)"
 fi
 
+if [[ "$RID" == osx-* ]]; then
+  bash "$ROOT_DIR/scripts/build-macos-app.sh" "$RID" "$OUT_DIR"
+
+  if [[ ! -f "$APP_LAUNCHER_PATH" ]]; then
+    echo "[package-smoke] macOS app launcher missing: $APP_LAUNCHER_PATH"
+    exit 1
+  fi
+
+  if host_matches_rid; then
+    APP_SMOKE_OUTPUT="$("$APP_LAUNCHER_PATH" --smoke 2>&1)"
+    if [[ "$APP_SMOKE_OUTPUT" != *"PM_SMOKE_OK"* ]]; then
+      echo "[package-smoke] macOS app launcher smoke output missing PM_SMOKE_OK marker"
+      echo "$APP_SMOKE_OUTPUT"
+      exit 1
+    fi
+    echo "[package-smoke] macOS .app launcher smoke: passed"
+  else
+    echo "[package-smoke] macOS .app launcher smoke skipped (host $(uname -s) does not match RID $RID)"
+  fi
+fi
+
 echo "[package-smoke] success for $RID"
 echo "[package-smoke] verified:"
 echo "  - app artifact: $APP_PATH"
 echo "  - migrations: 001_init.sql, 002_indexes.sql"
+if [[ "$RID" == osx-* ]]; then
+  echo "  - app bundle: $APP_BUNDLE_PATH"
+fi

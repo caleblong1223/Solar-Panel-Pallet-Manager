@@ -41,6 +41,26 @@ This script validates:
 - app host artifact existence
 - embedded SQLite migration assets (`001_init.sql`, `002_indexes.sql`)
 - non-interactive launch/open/close smoke (`--smoke`) when host OS matches RID
+- for `osx-*`: creates a launch-safe `.app` bundle at `csharp/artifacts/app/<rid>/PalletManager.Desktop.Avalonia.app`
+
+## macOS App Bundle
+Build or rebuild the launch-safe macOS `.app` directly:
+
+```bash
+bash csharp/scripts/build-macos-app.sh osx-arm64
+```
+
+Optional second argument can point to a custom publish directory:
+
+```bash
+bash csharp/scripts/build-macos-app.sh osx-arm64 csharp/artifacts/publish/osx-arm64
+```
+
+Launch the macOS `.app` for manual testing:
+
+```bash
+bash csharp/scripts/launch-macos-app.sh osx-arm64
+```
 
 ## Installer Smoke
 Generate installer-style artifacts and validate install/uninstall behavior:

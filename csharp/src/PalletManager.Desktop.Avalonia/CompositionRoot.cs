@@ -37,7 +37,8 @@ public static class CompositionRoot
         services.AddSingleton(connectionFactory);
 
         var migrationRunner = new MigrationRunner(connectionFactory, migrationDir);
-        migrationRunner.RunAsync().GetAwaiter().GetResult();
+        // Avoid sync-over-async deadlock on UI startup by running migrations on a threadpool thread.
+        Task.Run(() => migrationRunner.RunAsync()).GetAwaiter().GetResult();
 
         services.AddSingleton<EndpointResolver>();
         services.AddSingleton<IApiClient, HttpApiClient>();

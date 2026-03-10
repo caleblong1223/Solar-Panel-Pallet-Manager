@@ -50,7 +50,7 @@ public sealed class BuilderViewModel : ViewModelBase
         PalletSizeOptions = new ObservableCollection<int> { 25, 26, 30, 35 };
         Items = new ObservableCollection<PalletItem>();
 
-        LoadDraft();
+        _ = LoadDraftAsync();
     }
 
     public ObservableCollection<string> TemplateOptions { get; }
@@ -336,9 +336,19 @@ public sealed class BuilderViewModel : ViewModelBase
         await AddSerialInternalAsync(serial, allowMissingSimData: true, ct);
     }
 
-    private void LoadDraft()
+    private async Task LoadDraftAsync()
     {
-        var draft = _draftRepository.GetAsync().GetAwaiter().GetResult();
+        BuilderDraft? draft;
+        try
+        {
+            draft = await _draftRepository.GetAsync();
+        }
+        catch
+        {
+            StatusMessage = "Could not load saved draft.";
+            return;
+        }
+
         if (draft is null)
         {
             return;
