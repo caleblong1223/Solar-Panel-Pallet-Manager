@@ -28,10 +28,16 @@ This document defines the behavior-level parity evidence required for Pallet Man
 | PAR-NONCORE-002 | Customers | Create/search/archive journey keeps active/inactive listing parity. | `NonCoreFlowsParityTests.Customers_CreateSearchArchive_JourneyMaintainsParityState` |
 | PAR-NONCORE-003 | Import | Blank serial search validation parity. | `NonCoreFlowsParityTests.Import_SearchWithBlankSerial_ShowsParityValidationMessage` |
 | PAR-NONCORE-004 | Import | Upload failure path summarizes per-file failures and aggregate counts. | `NonCoreFlowsParityTests.Import_UploadWhenAllCandidatesFail_ShowsFailedSummary` |
+| PAR-NONCORE-009 | Import | Mixed upload outcomes (success + failure) preserve per-file status rows and aggregate summary counts. | `NonCoreFlowsParityTests.Import_UploadWithMixedResults_ShowsPartialFailureSummary` |
+| PAR-NONCORE-010 | Import | Search no-results path shows canonical no-data operator message after a completed lookup. | `NonCoreFlowsParityTests.Import_SearchNoResults_ShowsParityNoDataMessage` |
 | PAR-NONCORE-005 | Exports | Invalid pallet number validation parity. | `NonCoreFlowsParityTests.Exports_SearchWithInvalidPalletNumber_ShowsParityValidationMessage` |
 | PAR-NONCORE-006 | Exports | Invalid date handling omits bad query fields while preserving valid boundary. | `NonCoreFlowsParityTests.Exports_SearchWithInvalidDate_OmitsDateFiltersFromQuery` |
+| PAR-NONCORE-011 | Exports | Open actions dispatch correct PDF/XLSX endpoints through system launcher. | `NonCoreFlowsParityTests.Exports_OpenPdfAndXlsx_UsesSystemLauncherEndpoints` |
+| PAR-NONCORE-012 | Exports | Empty search result path shows canonical no-results messaging. | `NonCoreFlowsParityTests.Exports_SearchNoResults_ShowsEmptyStateMessage` |
 | PAR-NONCORE-007 | Settings | Primary endpoint probe failure cannot persist temporary test URL. | `NonCoreFlowsParityTests.Settings_TestPrimaryProbeFailure_DoesNotPersistTemporaryEndpoint` |
 | PAR-NONCORE-008 | Settings | Saved configuration remains canonical after temporary probe failure. | `NonCoreFlowsParityTests.Settings_SaveThenPrimaryTestFailure_PreservesSavedConfiguration` |
+| PAR-NONCORE-013 | Customers | Offline fallback honors search filtering and inactive toggle state. | `NonCoreFlowsParityTests.Customers_OfflineFallback_RespectsSearchAndInactiveToggle` |
+| PAR-NONCORE-014 | Settings/Sync | Sync summary counters, manual trigger, and sync-issues retry/discard flows remain functional under simulated failure states. | `NonCoreFlowsParityTests.SettingsAndSyncIssues_ManualTriggerAndRetryDiscard_MaintainParityFlow` |
 | PAR-XLSX-001 | Spreadsheet | Golden CSV shape remains stable for baseline parser assumptions. | `ExportSpreadsheetParityTests.GoldenCsvFixture_ParsesWithExpectedShape` |
 | PAR-XLSX-002 | Spreadsheet | Golden workbook edit roundtrip preserves full cell matrix parity. | `ExportSpreadsheetParityTests.GoldenXlsxRoundtrip_AfterEdit_MatchesExpectedFixtureAtCellLevel` |
 | PAR-XLSX-003 | Spreadsheet | Production-like workbook preserves formulas and expected edited cells. | `ExportSpreadsheetParityTests.ProductionLikeWorkbook_AfterEdit_MatchesExpectedCellContracts_AndPreservesFormulas` |

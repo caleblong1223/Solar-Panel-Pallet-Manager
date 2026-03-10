@@ -32,15 +32,19 @@
 1. Import simulator parity:
    - Validate multi-file upload result reporting against JS behavior for partial failures.
    - Confirm serial search result formatting and no-result messaging.
+   - Status: in progress. Automated evidence added in `NonCoreFlowsParityTests.Import_UploadWithMixedResults_ShowsPartialFailureSummary` and `NonCoreFlowsParityTests.Import_SearchNoResults_ShowsParityNoDataMessage`.
 2. Exports library parity:
    - Validate date range query normalization and open actions across PDF/XLSX.
    - Confirm operator messaging for empty results and invalid input.
+   - Status: in progress. Automated evidence added in `NonCoreFlowsParityTests.Exports_OpenPdfAndXlsx_UsesSystemLauncherEndpoints` and `NonCoreFlowsParityTests.Exports_SearchNoResults_ShowsEmptyStateMessage`.
 3. Customers parity:
    - Validate offline cache fallback behavior across refresh/create/edit/archive cycles.
    - Confirm search + inactive toggle behavior against JS.
+   - Status: in progress. Automated evidence added in `NonCoreFlowsParityTests.Customers_OfflineFallback_RespectsSearchAndInactiveToggle`.
 4. Settings + Sync Issues parity:
    - Validate sync counters, manual trigger, retry/discard flows under simulated failures.
    - Confirm endpoint test behavior and rollback of temporary probe settings.
+   - Status: in progress. Automated evidence added in `NonCoreFlowsParityTests.SettingsAndSyncIssues_ManualTriggerAndRetryDiscard_MaintainParityFlow` plus existing endpoint rollback tests.
 
 ### P2 - Hardening and Evidence
 1. Add parity fixtures for additional production-like workbook variants.

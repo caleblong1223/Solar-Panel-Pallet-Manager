@@ -126,6 +126,68 @@ public sealed class NonCoreFlowsParityTests
     }
 
     [Fact]
+    public async Task Import_UploadWithMixedResults_ShowsPartialFailureSummary()
+    {
+        var okPath = Path.Combine(Path.GetTempPath(), $"ok-{Guid.NewGuid():N}.csv");
+        var failPath = Path.Combine(Path.GetTempPath(), $"fail-{Guid.NewGuid():N}.csv");
+        await File.WriteAllTextAsync(okPath, "SerialNo,Pm\nSN-OK,410");
+        await File.WriteAllTextAsync(failPath, "SerialNo,Pm\nSN-FAIL,409");
+        try
+        {
+            var vm = new ImportSimulatorViewModel(
+                new FakeApiClient(),
+                new FixedAuthService(),
+                new FixedSettingsService(),
+                new RoutingHttpClientFactory(request =>
+                {
+                    var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
+                    if (body.Contains(Path.GetFileName(okPath), StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new HttpResponseMessage(HttpStatusCode.OK)
+                        {
+                            Content = new StringContent("""{"id":41,"status":"completed","rows_total":1,"rows_imported":1,"rows_rejected":0}""", Encoding.UTF8, "application/json"),
+                        };
+                    }
+
+                    return new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                    {
+                        Content = new StringContent("failed", Encoding.UTF8, "text/plain"),
+                    };
+                }));
+            vm.UploadPathsInput = $"{okPath}\n{failPath}";
+
+            await vm.UploadAsync();
+
+            Assert.Equal(2, vm.UploadResults.Count);
+            Assert.Single(vm.UploadResults, r => r.BatchId.HasValue);
+            Assert.Single(vm.UploadResults, r => !string.IsNullOrWhiteSpace(r.Error));
+            Assert.Equal("Imported 1 file(s), failed 1.", vm.StatusMessage);
+        }
+        finally
+        {
+            if (File.Exists(okPath)) File.Delete(okPath);
+            if (File.Exists(failPath)) File.Delete(failPath);
+        }
+    }
+
+    [Fact]
+    public async Task Import_SearchNoResults_ShowsParityNoDataMessage()
+    {
+        var vm = new ImportSimulatorViewModel(
+            new FakeApiClient(),
+            new FixedAuthService(),
+            new FixedSettingsService(),
+            new StaticHttpClientFactory(new HttpResponseMessage(HttpStatusCode.OK)));
+        vm.SearchSerial = "SN-404";
+
+        await vm.SearchAsync();
+
+        Assert.True(vm.HasSearched);
+        Assert.Empty(vm.SearchResults);
+        Assert.Equal("No Sun Simulator data found for this serial.", vm.StatusMessage);
+    }
+
+    [Fact]
     public async Task Exports_SearchWithInvalidDate_OmitsDateFiltersFromQuery()
     {
         var api = new CapturingExportsApiClient();
@@ -146,6 +208,39 @@ public sealed class NonCoreFlowsParityTests
     }
 
     [Fact]
+    public async Task Exports_OpenPdfAndXlsx_UsesSystemLauncherEndpoints()
+    {
+        var launcher = new RecordingLauncher();
+        var vm = new ExportsLibraryViewModel(
+            new CapturingExportsApiClient(),
+            new FixedAuthService(),
+            new FixedSettingsService(),
+            launcher);
+
+        await vm.OpenExportAsync(9001, "pdf");
+        await vm.OpenExportAsync(9001, "xlsx");
+
+        Assert.Equal(2, launcher.Targets.Count);
+        Assert.Equal("http://api.test/api/v1/exports/9001/download?format=pdf", launcher.Targets[0]);
+        Assert.Equal("http://api.test/api/v1/exports/9001/download?format=xlsx", launcher.Targets[1]);
+    }
+
+    [Fact]
+    public async Task Exports_SearchNoResults_ShowsEmptyStateMessage()
+    {
+        var vm = new ExportsLibraryViewModel(
+            new CapturingExportsApiClient(),
+            new FixedAuthService(),
+            new FixedSettingsService(),
+            new RecordingLauncher());
+
+        await vm.SearchAsync();
+
+        Assert.Empty(vm.Results);
+        Assert.Equal("No exports found for the given filters.", vm.StatusMessage);
+    }
+
+    [Fact]
     public async Task Settings_SaveThenPrimaryTestFailure_PreservesSavedConfiguration()
     {
         var settings = new FixedSettingsService();
@@ -163,10 +258,88 @@ public sealed class NonCoreFlowsParityTests
         Assert.Equal("http://saved-primary.test/api/v1", settings.Current.PrimaryApiBaseUrl);
     }
 
+    [Fact]
+    public async Task Customers_OfflineFallback_RespectsSearchAndInactiveToggle()
+    {
+        var api = new FakeApiClient { ThrowOnCustomersList = true };
+        var cache = new InMemoryCacheRepository();
+        await cache.UpsertCustomersAsync(new[]
+        {
+            new Customer { Id = 1, DisplayName = "Alpha Solar", IsActive = true },
+            new Customer { Id = 2, DisplayName = "Beta Archived", IsActive = false },
+        });
+        var vm = new CustomersViewModel(api, new FixedAuthService(), cache);
+
+        vm.Search = "Alpha";
+        vm.ShowInactive = false;
+        await vm.RefreshAsync();
+        Assert.Single(vm.Customers);
+        Assert.Equal("Using cached customers (offline).", vm.StatusMessage);
+
+        vm.Search = "Beta";
+        vm.ShowInactive = true;
+        await vm.RefreshAsync();
+        Assert.Single(vm.Customers);
+        Assert.Equal("Beta Archived", vm.Customers[0].DisplayName);
+    }
+
+    [Fact]
+    public async Task SettingsAndSyncIssues_ManualTriggerAndRetryDiscard_MaintainParityFlow()
+    {
+        var syncEngine = new RecordingSyncEngine();
+        var settings = new SettingsViewModel(new FixedSettingsService(), new ThrowingConnectivityService(), syncEngine);
+        syncEngine.Publish(new SyncState { Syncing = true, PendingCount = 4, NeedsReviewCount = 2, FailedCount = 1 });
+        Assert.Contains("Pending: 4", settings.SyncSummary);
+        Assert.Contains("Review: 2", settings.SyncSummary);
+        await settings.TriggerSyncNowAsync();
+        Assert.Equal(1, syncEngine.TriggerNowCalls);
+
+        var outbox = new InMemoryOutboxRepository();
+        var opId = Guid.NewGuid();
+        await outbox.EnqueueAsync(new OutboxOperation
+        {
+            OpId = opId,
+            OpType = OperationType.PalletItemAdd,
+            PayloadJson = """{"pallet_id":42,"serial":"SN-RETRY"}""",
+            State = OutboxState.NeedsReview,
+            AttemptCount = 2,
+            LastError = "conflict",
+            LastErrorCode = "SIM_DATA_REQUIRED",
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow,
+        });
+
+        var syncIssues = new SyncIssuesViewModel(outbox, syncEngine);
+        await syncIssues.RefreshAsync();
+        Assert.Single(syncIssues.NeedsReview);
+
+        await syncIssues.RetryOperationAsync(opId);
+        Assert.Equal(2, syncEngine.TriggerNowCalls);
+        Assert.Empty(syncIssues.NeedsReview);
+        var remaining = Assert.Single(await outbox.ListAsync());
+        Assert.Equal(OutboxState.Pending, remaining.State);
+        Assert.Null(remaining.LastError);
+
+        await syncIssues.RefreshAsync();
+        Assert.Empty(syncIssues.PendingErrors);
+        await syncIssues.DiscardOperationAsync(opId);
+        Assert.Empty(await outbox.ListAsync());
+    }
+
     private sealed class FakeApiClient : IApiClient
     {
+        public bool ThrowOnCustomersList { get; set; }
+
         public Task<T> GetAsync<T>(string path, string? token = null, CancellationToken ct = default)
         {
+            if (path.StartsWith("/customers?", StringComparison.OrdinalIgnoreCase))
+            {
+                if (ThrowOnCustomersList)
+                {
+                    throw new InvalidOperationException("offline");
+                }
+            }
+
             const string json = """{"customers":[],"exports":[],"results":[]}""";
             var result = JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             return Task.FromResult(result!);
@@ -345,7 +518,13 @@ public sealed class NonCoreFlowsParityTests
 
     private sealed class RecordingLauncher : ISystemLauncher
     {
-        public Task OpenAsync(string target, CancellationToken ct = default) => Task.CompletedTask;
+        public List<string> Targets { get; } = new();
+
+        public Task OpenAsync(string target, CancellationToken ct = default)
+        {
+            Targets.Add(target);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StaticHttpClientFactory : IHttpClientFactory
@@ -358,6 +537,33 @@ public sealed class NonCoreFlowsParityTests
         }
 
         public HttpClient CreateClient(string name) => new(new StaticHandler(_response));
+    }
+
+    private sealed class RoutingHttpClientFactory : IHttpClientFactory
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _route;
+
+        public RoutingHttpClientFactory(Func<HttpRequestMessage, HttpResponseMessage> route)
+        {
+            _route = route;
+        }
+
+        public HttpClient CreateClient(string name) => new(new RoutingHandler(_route));
+    }
+
+    private sealed class RoutingHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _route;
+
+        public RoutingHandler(Func<HttpRequestMessage, HttpResponseMessage> route)
+        {
+            _route = route;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_route(request));
+        }
     }
 
     private sealed class StaticHandler : HttpMessageHandler
@@ -381,12 +587,129 @@ public sealed class NonCoreFlowsParityTests
 
     private sealed class InMemoryCacheRepository : ILocalCacheRepository
     {
-        public Task UpsertCustomersAsync(IEnumerable<Customer> customers, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<Customer>> GetCustomersAsync(bool includeInactive, string? search, CancellationToken ct = default) => Task.FromResult((IReadOnlyList<Customer>)Array.Empty<Customer>());
+        private readonly List<Customer> _customers = new();
+
+        public Task UpsertCustomersAsync(IEnumerable<Customer> customers, CancellationToken ct = default)
+        {
+            _customers.Clear();
+            _customers.AddRange(customers);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Customer>> GetCustomersAsync(bool includeInactive, string? search, CancellationToken ct = default)
+        {
+            IEnumerable<Customer> rows = _customers;
+            if (!includeInactive)
+            {
+                rows = rows.Where(c => c.IsActive);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                rows = rows.Where(c => c.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return Task.FromResult((IReadOnlyList<Customer>)rows.ToList());
+        }
         public Task UpsertPalletAsync(Pallet pallet, CancellationToken ct = default) => Task.CompletedTask;
         public Task<IReadOnlyList<Pallet>> GetPalletsAsync(string status, CancellationToken ct = default) => Task.FromResult((IReadOnlyList<Pallet>)Array.Empty<Pallet>());
         public Task UpsertExportsAsync(IEnumerable<ExportRecord> exports, CancellationToken ct = default) => Task.CompletedTask;
         public Task<IReadOnlyList<ExportRecord>> GetExportsByPalletAsync(int palletId, CancellationToken ct = default) => Task.FromResult((IReadOnlyList<ExportRecord>)Array.Empty<ExportRecord>());
+    }
+
+    private sealed class InMemoryOutboxRepository : IOutboxRepository
+    {
+        private readonly List<OutboxOperation> _operations = new();
+
+        public Task<IReadOnlyList<OutboxOperation>> ListAsync(CancellationToken ct = default) =>
+            Task.FromResult((IReadOnlyList<OutboxOperation>)_operations.ToList());
+
+        public Task EnqueueAsync(OutboxOperation operation, CancellationToken ct = default)
+        {
+            _operations.Add(operation);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateAsync(OutboxOperation operation, CancellationToken ct = default)
+        {
+            var index = _operations.FindIndex(o => o.OpId == operation.OpId);
+            if (index >= 0)
+            {
+                _operations[index] = operation;
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveAsync(Guid opId, CancellationToken ct = default)
+        {
+            _operations.RemoveAll(o => o.OpId == opId);
+            return Task.CompletedTask;
+        }
+
+        public Task MarkNeedsReviewAsync(Guid opId, string reason, string? errorCode, CancellationToken ct = default)
+        {
+            var op = _operations.FirstOrDefault(o => o.OpId == opId);
+            if (op is not null)
+            {
+                op.State = OutboxState.NeedsReview;
+                op.LastError = reason;
+                op.LastErrorCode = errorCode;
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingSyncEngine : ISyncEngine
+    {
+        private readonly SimpleSubject<SyncState> _subject = new();
+        public int TriggerNowCalls { get; private set; }
+        public IObservable<SyncState> State => _subject;
+
+        public Task TriggerNowAsync(CancellationToken ct = default)
+        {
+            TriggerNowCalls += 1;
+            return Task.CompletedTask;
+        }
+
+        public void Publish(SyncState state) => _subject.Publish(state);
+    }
+
+    private sealed class SimpleSubject<T> : IObservable<T>
+    {
+        private readonly List<IObserver<T>> _observers = new();
+
+        public IDisposable Subscribe(IObserver<T> observer)
+        {
+            _observers.Add(observer);
+            return new Subscription(_observers, observer);
+        }
+
+        public void Publish(T value)
+        {
+            foreach (var observer in _observers.ToArray())
+            {
+                observer.OnNext(value);
+            }
+        }
+
+        private sealed class Subscription : IDisposable
+        {
+            private readonly List<IObserver<T>> _observers;
+            private readonly IObserver<T> _observer;
+
+            public Subscription(List<IObserver<T>> observers, IObserver<T> observer)
+            {
+                _observers = observers;
+                _observer = observer;
+            }
+
+            public void Dispose()
+            {
+                _observers.Remove(_observer);
+            }
+        }
     }
 
     private sealed class EmptyObservable<T> : IObservable<T>
