@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
 import AppFrame from "../components/layout/AppFrame";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -80,6 +81,18 @@ export default function SettingsPage() {
     setIsTesting(false);
   };
 
+  const handleOpenTerminal = async () => {
+    try {
+      await invoke("open_backend_terminal");
+      setStatusKind("success");
+      setStatusMessage("Backend terminal opened.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setStatusKind("error");
+      setStatusMessage(message || "Failed to open backend terminal.");
+    }
+  };
+
   return (
     <AppFrame title="Settings">
       <main className="settings-page">
@@ -110,7 +123,9 @@ export default function SettingsPage() {
                 </p>
               ) : null}
               <div className="settings-actions">
-                <Button type="submit" disabled={settingsLocked}>Save Settings</Button>
+                <Button type="submit" disabled={settingsLocked}>
+                  Save Settings
+                </Button>
                 <Button
                   type="button"
                   variant="secondary"
@@ -155,6 +170,15 @@ export default function SettingsPage() {
             <Link className="inline-link" to="/sync-issues">
               Open Sync Issues
             </Link>
+          </Card>
+
+          <Card title="Backend Debug">
+            <p>Need to inspect backend logs or run backend commands manually?</p>
+            <div className="settings-actions">
+              <Button type="button" variant="secondary" onClick={() => void handleOpenTerminal()}>
+                Open Backend Terminal
+              </Button>
+            </div>
           </Card>
         </section>
       </main>

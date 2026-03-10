@@ -28,9 +28,7 @@ fn resolve_python_executable(backend_dir: &Path) -> Option<PathBuf> {
     backend_dir.join(".venv").join("bin").join("python3"),
     backend_dir.join(".venv").join("bin").join("python"),
   ];
-  candidates
-    .into_iter()
-    .find(|path| path.is_file())
+  candidates.into_iter().find(|path| path.is_file())
 }
 
 fn start_bundled_backend(app: &tauri::App) {
@@ -128,6 +126,38 @@ fn open_with_system(target: String) -> Result<(), String> {
   Ok(())
 }
 
+#[tauri::command]
+fn open_backend_terminal() -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  {
+    Command::new("cmd")
+      .args(["/C", "start", "Pallet Manager Backend Terminal", "cmd", "/K"])
+      .spawn()
+      .map_err(|error| format!("Unable to open backend terminal: {error}"))?;
+    return Ok(());
+  }
+
+  #[cfg(target_os = "macos")]
+  {
+    Command::new("open")
+      .args(["-a", "Terminal"])
+      .spawn()
+      .map_err(|error| format!("Unable to open backend terminal: {error}"))?;
+    return Ok(());
+  }
+
+  #[cfg(all(unix, not(target_os = "macos")))]
+  {
+    Command::new("x-terminal-emulator")
+      .spawn()
+      .or_else(|_| Command::new("gnome-terminal").spawn())
+      .or_else(|_| Command::new("konsole").spawn())
+      .or_else(|_| Command::new("xterm").spawn())
+      .map_err(|error| format!("Unable to open backend terminal: {error}"))?;
+    return Ok(());
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -138,7 +168,7 @@ pub fn run() {
         let _ = window.set_focus();
       }
     }))
-    .invoke_handler(tauri::generate_handler![open_with_system])
+    .invoke_handler(tauri::generate_handler![open_with_system, open_backend_terminal])
     .setup(|app| {
       start_bundled_backend(app);
       if cfg!(debug_assertions) {
