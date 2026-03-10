@@ -7,7 +7,7 @@
     "frontendDist": "../dist/web",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "node scripts/prepare-bundled-backend.mjs && npm run build"
   },
   "app": {
     "windows": [

@@ -23,6 +23,8 @@ fn resolve_backend_dir(resource_dir: &Path) -> Option<PathBuf> {
 
 fn resolve_python_executable(backend_dir: &Path) -> Option<PathBuf> {
   let candidates = [
+    backend_dir.join(".venv").join("Scripts").join("python.exe"),
+    backend_dir.join(".venv").join("Scripts").join("python"),
     backend_dir.join(".venv").join("bin").join("python3"),
     backend_dir.join(".venv").join("bin").join("python"),
   ];
@@ -76,14 +78,13 @@ fn start_bundled_backend(app: &tauri::App) {
   let database_url = format!("sqlite+pysqlite:///{}", app_data_dir.join("pallet_manager.db").display());
 
   let spawn_result = Command::new(python)
-    .arg("-m")
-    .arg("uvicorn")
-    .arg("app.main:app")
+    .arg("scripts/run_local_backend.py")
     .arg("--host")
     .arg("127.0.0.1")
     .arg("--port")
     .arg("8010")
-    .env("DATABASE_URL", database_url)
+    .arg("--database-url")
+    .arg(database_url)
     .env("LOCAL_IMPORT_ROOT", import_root.as_os_str())
     .env("LOCAL_EXPORT_ROOT", export_root.as_os_str())
     .current_dir(&backend_dir)
