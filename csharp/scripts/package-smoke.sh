@@ -39,7 +39,7 @@ rm -rf "$OUT_DIR"
   -f "$TFM" \
   -r "$RID" \
   --self-contained false \
-  /p:UseAppHost=true \
+  -p:UseAppHost=true \
   -o "$OUT_DIR" \
   -nologo
 
@@ -48,9 +48,15 @@ if [[ "$RID" == win-* ]]; then
 else
   APP_PATH="$OUT_DIR/$APP_NAME"
 fi
+APP_DLL_PATH="$OUT_DIR/$APP_NAME.dll"
 
 if [[ ! -f "$APP_PATH" ]]; then
   echo "[package-smoke] expected app artifact missing: $APP_PATH"
+  exit 1
+fi
+
+if [[ ! -f "$APP_DLL_PATH" ]]; then
+  echo "[package-smoke] expected app dll missing: $APP_DLL_PATH"
   exit 1
 fi
 
@@ -81,7 +87,7 @@ host_matches_rid() {
 }
 
 if host_matches_rid; then
-  SMOKE_OUTPUT="$(DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT" "$APP_PATH" --smoke 2>&1)"
+  SMOKE_OUTPUT="$(DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT" "$DOTNET" "$APP_DLL_PATH" --smoke 2>&1)"
   if [[ "$SMOKE_OUTPUT" != *"PM_SMOKE_OK"* ]]; then
     echo "[package-smoke] smoke launch output missing PM_SMOKE_OK marker"
     echo "$SMOKE_OUTPUT"

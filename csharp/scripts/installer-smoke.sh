@@ -5,8 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 if [[ -x "./.dotnet/dotnet" ]]; then
+  DOTNET="./.dotnet/dotnet"
   DOTNET_ROOT="$ROOT_DIR/.dotnet"
 else
+  DOTNET="dotnet"
   DOTNET_PATH="$(command -v dotnet)"
   DOTNET_ROOT="$(cd "$(dirname "$DOTNET_PATH")/.." && pwd)"
 fi
@@ -91,12 +93,19 @@ fi
 
 if [[ "$RID" == win-* ]]; then
   APP_PATH="$INSTALL_DIR/$APP_NAME.exe"
+  APP_DLL_PATH="$INSTALL_DIR/$APP_NAME.dll"
 else
   APP_PATH="$INSTALL_DIR/$PACKAGE_ROOT_NAME/$APP_NAME"
+  APP_DLL_PATH="$INSTALL_DIR/$PACKAGE_ROOT_NAME/$APP_NAME.dll"
 fi
 
 if [[ ! -f "$APP_PATH" ]]; then
   echo "[installer-smoke] installed app missing: $APP_PATH"
+  exit 1
+fi
+
+if [[ ! -f "$APP_DLL_PATH" ]]; then
+  echo "[installer-smoke] installed app dll missing: $APP_DLL_PATH"
   exit 1
 fi
 
@@ -120,7 +129,7 @@ host_matches_rid() {
 }
 
 if host_matches_rid; then
-  SMOKE_OUTPUT="$(DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT" "$APP_PATH" --smoke 2>&1)"
+  SMOKE_OUTPUT="$(DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT" "$DOTNET" "$APP_DLL_PATH" --smoke 2>&1)"
   if [[ "$SMOKE_OUTPUT" != *"PM_SMOKE_OK"* ]]; then
     echo "[installer-smoke] installed app did not return smoke marker"
     echo "$SMOKE_OUTPUT"
