@@ -17,6 +17,9 @@ export type SimImportBatch = {
 };
 
 const UPLOAD_TIMEOUT_MS = 300000;
+const HEALTH_TIMEOUT_MS = 2500;
+const LOCAL_BACKEND_WARMUP_MS = 20000;
+const LOCAL_BACKEND_POLL_MS = 1000;
 
 async function uploadWithTimeout(url: string, formData: FormData): Promise<Response> {
   const controller = new AbortController();
@@ -30,6 +33,35 @@ async function uploadWithTimeout(url: string, formData: FormData): Promise<Respo
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+async function isBackendReachable(baseUrl: string): Promise<boolean> {
+  const healthUrl = baseUrl.replace(/\/api\/v1\/?$/, "") + "/health/live";
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(healthUrl, { method: "GET", signal: controller.signal });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function isLocalBackendBase(baseUrl: string): boolean {
+  return baseUrl.includes("127.0.0.1:8010") || baseUrl.includes("localhost:8010");
+}
+
+async function waitForLocalBackend(baseUrl: string): Promise<boolean> {
+  const deadline = Date.now() + LOCAL_BACKEND_WARMUP_MS;
+  while (Date.now() < deadline) {
+    if (await isBackendReachable(baseUrl)) {
+      return true;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, LOCAL_BACKEND_POLL_MS));
+  }
+  return false;
 }
 
 export async function uploadSimulatorFile(file: File) {
@@ -56,6 +88,27 @@ export async function uploadSimulatorFile(file: File) {
       return (await response.json()) as SimImportBatch;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      if (isLocalBackendBase(baseUrl) && detail.toLowerCase().includes("failed to fetch")) {
+        const ready = await waitForLocalBackend(baseUrl);
+        if (ready) {
+          const retryFormData = new FormData();
+          retryFormData.append("file", file);
+          try {
+            const retryResponse = await uploadWithTimeout(url, retryFormData);
+            if (!retryResponse.ok) {
+              const text = await retryResponse.text();
+              const statusMessage = text || retryResponse.statusText || `status ${retryResponse.status}`;
+              throw new Error(`Upload failed (${statusMessage}) at ${url}`);
+            }
+            return (await retryResponse.json()) as SimImportBatch;
+          } catch (retryError) {
+            const retryDetail = retryError instanceof Error ? retryError.message : String(retryError);
+            lastError = new Error(`Simulator upload retry to ${url} failed: ${retryDetail}`);
+            continue;
+          }
+        }
+      }
+
       lastError = new Error(`Simulator upload attempt ${attempt + 1} to ${url} failed: ${detail}`);
     }
   }
