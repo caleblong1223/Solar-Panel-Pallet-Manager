@@ -5,7 +5,7 @@ import { useToast } from "../components/notifications/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
-import { getExportDownloadEndpoint, listExports, type ExportRecord } from "../features/exports";
+import { getExportDownloadUrl, listExports, type ExportRecord } from "../features/exports";
 import { openWithSystem } from "../lib/systemOpen";
 
 const TEMPLATE_OPTIONS = ["", "200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
@@ -65,9 +65,9 @@ export default function ExportsPage() {
   };
 
   const handleOpen = async (exportId: number) => {
-    const endpoint = getExportDownloadEndpoint(exportId, "pdf");
     try {
-      await openWithSystem(endpoint);
+      const response = await getExportDownloadUrl(token ?? "", exportId, "pdf");
+      await openWithSystem(response.download_url);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to open export";
       notify(message, "error");

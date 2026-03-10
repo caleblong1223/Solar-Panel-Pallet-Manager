@@ -732,6 +732,27 @@ h1 {
   color: var(--color-text-muted);
 }
 
+.builder-pallet-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.builder-pallet-item__slot {
+  min-width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 14%, #fff);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 0.88rem;
+  flex: 0 0 auto;
+}
+
 .history-editor-panel {
   margin-top: var(--space-3);
   border: 1px solid var(--color-border);
@@ -781,6 +802,39 @@ h1 {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
+  max-height: 68vh;
+}
+
+.history-editor-shell {
+  display: grid;
+  gap: 8px;
+}
+
+.history-editor-scrollbar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface-alt) 82%, #fff);
+}
+
+.history-editor-scrollbar__inner {
+  height: 1px;
+}
+
+.history-editor-grid table {
+  min-width: max-content;
+}
+
+.history-editor-grid .Spreadsheet__cell,
+.history-editor-grid .Spreadsheet__header {
+  min-width: 120px;
+}
+
+.history-editor-grid .Spreadsheet__data-viewer,
+.history-editor-grid .Spreadsheet__data-editor {
+  white-space: nowrap;
 }
 
 .sync-issue-actions {

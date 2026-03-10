@@ -1,5 +1,13 @@
+import { invoke } from "@tauri-apps/api/core";
+
 export async function openWithSystem(target: string): Promise<void> {
-  // Browser fallback works for both web and desktop contexts.
+  try {
+    await invoke("open_with_system", { target });
+    return;
+  } catch {
+    // Browser fallback works for web contexts and non-tauri dev sessions.
+  }
+
   window.open(target, "_blank", "noopener,noreferrer");
 }
 

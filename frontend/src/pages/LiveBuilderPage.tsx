@@ -168,6 +168,18 @@ export default function LiveBuilderPage() {
   const serialInputRef = useRef<HTMLInputElement | null>(null);
   const packoutDateRef = useRef<HTMLInputElement | null>(null);
 
+  const focusSerialInput = () => {
+    const input = serialInputRef.current;
+    if (!input) {
+      return;
+    }
+    try {
+      input.focus({ preventScroll: true });
+    } catch {
+      input.focus();
+    }
+  };
+
   const requestMissingSimDecision = (serialValue: string, cancelText: string): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
       setMissingSimPrompt({ serial: serialValue, cancelText, resolve });
@@ -185,7 +197,7 @@ export default function LiveBuilderPage() {
 
   const dismissDuplicatePrompt = () => {
     setDuplicatePrompt(null);
-    serialInputRef.current?.focus();
+    focusSerialInput();
   };
 
   const findDuplicateInResults = (
@@ -349,7 +361,7 @@ export default function LiveBuilderPage() {
       setFallbackSerials([]);
       setSerial("");
       notify(`Pallet #${created.pallet_number} started`, "success");
-      serialInputRef.current?.focus();
+      focusSerialInput();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start pallet";
       notify(message, "error");
@@ -423,7 +435,7 @@ export default function LiveBuilderPage() {
       }
       setSerial("");
       notify("Added", "success");
-      serialInputRef.current?.focus();
+      focusSerialInput();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to add serial";
       notify(message, "error");
@@ -568,7 +580,7 @@ export default function LiveBuilderPage() {
       notify(`Pallet #${palletNumber} completed · export ready`, "success");
       setCurrent(null);
       setFallbackSerials([]);
-      serialInputRef.current?.focus();
+      focusSerialInput();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to complete or export pallet";
       notify(message, "error");
@@ -817,7 +829,10 @@ export default function LiveBuilderPage() {
                 .sort((a, b) => a.slot_index - b.slot_index)
                 .map((item) => (
                   <li key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                    <span className="mono">{item.serial}</span>
+                    <span className="builder-pallet-item">
+                      <span className="builder-pallet-item__slot">{item.slot_index}</span>
+                      <span className="mono">{item.serial}</span>
+                    </span>
                     <Button variant="danger" disabled={isBusy} onClick={() => void handleRemoveItem(item.id)}>
                       Remove
                     </Button>

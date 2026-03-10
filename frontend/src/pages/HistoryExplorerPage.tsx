@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Spreadsheet from "react-spreadsheet";
 import type { CellBase, Matrix } from "react-spreadsheet";
 import * as XLSX from "xlsx";
@@ -13,7 +13,6 @@ import { deletePallet, getPallet, listPallets, type Pallet } from "../features/p
 import {
   applyExportWorkbookEdits,
   downloadExportWorkbook,
-  getExportDownloadEndpoint,
   getMergedExportsPdfEndpoint,
   getExportDownloadUrl,
   listExportsByPallet,
@@ -28,6 +27,12 @@ type EditableSheet = {
   data: Matrix<SheetCell>;
 };
 
+type SpreadsheetEditorProps = {
+  sheetKey: string;
+  sheetData: Matrix<SheetCell>;
+  onDataChange: (nextData: Matrix<SheetCell>) => void;
+};
+
 function matrixFromRows(rows: unknown[][]): Matrix<SheetCell> {
   const normalizedRows = rows.length > 0 ? rows : [[""]];
   return normalizedRows.map((row) => {
@@ -36,6 +41,97 @@ function matrixFromRows(rows: unknown[][]): Matrix<SheetCell> {
       value: value == null ? "" : String(value),
     }));
   });
+}
+
+function SpreadsheetEditor({ sheetKey, sheetData, onDataChange }: SpreadsheetEditorProps) {
+  const [draftData, setDraftData] = useState(sheetData);
+  const topScrollRef = useRef<HTMLDivElement | null>(null);
+  const gridScrollRef = useRef<HTMLDivElement | null>(null);
+  const topScrollInnerRef = useRef<HTMLDivElement | null>(null);
+  const syncingScrollRef = useRef<"top" | "grid" | null>(null);
+
+  useEffect(() => {
+    setDraftData(sheetData);
+  }, [sheetKey, sheetData]);
+
+  const syncScrollMetrics = useCallback(() => {
+    const topScroll = topScrollRef.current;
+    const gridScroll = gridScrollRef.current;
+    const topScrollInner = topScrollInnerRef.current;
+    if (!topScroll || !gridScroll || !topScrollInner) {
+      return;
+    }
+    topScrollInner.style.width = `${gridScroll.scrollWidth}px`;
+    topScroll.scrollLeft = gridScroll.scrollLeft;
+  }, []);
+
+  useLayoutEffect(() => {
+    syncScrollMetrics();
+  }, [draftData, syncScrollMetrics]);
+
+  useEffect(() => {
+    const topScroll = topScrollRef.current;
+    const gridScroll = gridScrollRef.current;
+    if (!topScroll || !gridScroll) {
+      return;
+    }
+
+    const handleTopScroll = () => {
+      if (syncingScrollRef.current === "grid") {
+        syncingScrollRef.current = null;
+        return;
+      }
+      syncingScrollRef.current = "top";
+      gridScroll.scrollLeft = topScroll.scrollLeft;
+    };
+
+    const handleGridScroll = () => {
+      if (syncingScrollRef.current === "top") {
+        syncingScrollRef.current = null;
+        return;
+      }
+      syncingScrollRef.current = "grid";
+      topScroll.scrollLeft = gridScroll.scrollLeft;
+    };
+
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => syncScrollMetrics()) : null;
+    resizeObserver?.observe(gridScroll);
+    const gridTable = gridScroll.querySelector("table");
+    if (gridTable instanceof HTMLElement) {
+      resizeObserver?.observe(gridTable);
+    }
+    window.addEventListener("resize", syncScrollMetrics);
+    topScroll.addEventListener("scroll", handleTopScroll, { passive: true });
+    gridScroll.addEventListener("scroll", handleGridScroll, { passive: true });
+
+    syncScrollMetrics();
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", syncScrollMetrics);
+      topScroll.removeEventListener("scroll", handleTopScroll);
+      gridScroll.removeEventListener("scroll", handleGridScroll);
+    };
+  }, [syncScrollMetrics]);
+
+  const handleChange = useCallback(
+    (nextData: Matrix<SheetCell>) => {
+      setDraftData(nextData);
+      onDataChange(nextData);
+    },
+    [onDataChange]
+  );
+
+  return (
+    <div className="history-editor-shell">
+      <div ref={topScrollRef} className="history-editor-scrollbar" aria-label="Spreadsheet horizontal scroll">
+        <div ref={topScrollInnerRef} className="history-editor-scrollbar__inner" />
+      </div>
+      <div ref={gridScrollRef} className="history-editor-grid">
+        <Spreadsheet data={draftData} onChange={handleChange} />
+      </div>
+    </div>
+  );
 }
 
 export default function HistoryExplorerPage() {
@@ -63,6 +159,7 @@ export default function HistoryExplorerPage() {
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
   const [selectedPalletIds, setSelectedPalletIds] = useState<number[]>([]);
   const [isMerging, setIsMerging] = useState(false);
+  const editableSheetsRef = useRef<EditableSheet[]>([]);
 
   const selectedPallet = useMemo(
     () => pallets.find((pallet) => pallet.id === selectedPalletId) ?? null,
@@ -238,13 +335,8 @@ export default function HistoryExplorerPage() {
 
   const handleOpenExport = async (exportId: number, format: "pdf" | "xlsx") => {
     try {
-      if (format === "xlsx") {
-        const response = await getExportDownloadUrl(apiToken, exportId, "xlsx");
-        await openWithSystem(response.download_url);
-        return;
-      }
-      const endpoint = getExportDownloadEndpoint(exportId, "pdf");
-      await openWithSystem(endpoint);
+      const response = await getExportDownloadUrl(apiToken, exportId, format);
+      await openWithSystem(response.download_url);
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to open ${format.toUpperCase()}`;
       notify(message, "error");
@@ -275,6 +367,7 @@ export default function HistoryExplorerPage() {
     setIsSavingEdit(false);
     setEditingExport(null);
     setEditableSheets([]);
+    editableSheetsRef.current = [];
     setActiveSheetIndex(0);
   };
 
@@ -320,6 +413,7 @@ export default function HistoryExplorerPage() {
           data: matrixFromRows(rows),
         };
       });
+      editableSheetsRef.current = nextSheets;
       setEditableSheets(nextSheets);
     } catch (error) {
       closeEditor();
@@ -330,11 +424,19 @@ export default function HistoryExplorerPage() {
     }
   };
 
-  const handleSheetDataChange = (nextData: Matrix<SheetCell>) => {
-    setEditableSheets((prev) =>
-      prev.map((sheet, index) => (index === activeSheetIndex ? { ...sheet, data: nextData } : sheet))
-    );
-  };
+  const handleSheetDataChange = useCallback(
+    (nextData: Matrix<SheetCell>) => {
+      const currentSheets = editableSheetsRef.current;
+      if (!currentSheets[activeSheetIndex]) {
+        return;
+      }
+      currentSheets[activeSheetIndex] = {
+        ...currentSheets[activeSheetIndex],
+        data: nextData,
+      };
+    },
+    [activeSheetIndex]
+  );
 
   const handleSaveSpreadsheet = async () => {
     if (!editingExport || editableSheets.length === 0) {
@@ -342,7 +444,7 @@ export default function HistoryExplorerPage() {
     }
     setIsSavingEdit(true);
     try {
-      const sheets = editableSheets.map((sheet) => ({
+      const sheets = editableSheetsRef.current.map((sheet) => ({
         name: sheet.name,
         data: sheet.data.map((row) => row.map((cell) => (cell?.value ?? ""))),
       }));
@@ -633,9 +735,11 @@ export default function HistoryExplorerPage() {
                       </button>
                     ))}
                   </div>
-                  <div className="history-editor-grid">
-                    <Spreadsheet data={editableSheets[activeSheetIndex]?.data ?? []} onChange={handleSheetDataChange} />
-                  </div>
+                  <SpreadsheetEditor
+                    sheetKey={`${activeSheetIndex}-${editableSheets[activeSheetIndex]?.name ?? "sheet"}`}
+                    sheetData={editableSheets[activeSheetIndex]?.data ?? []}
+                    onDataChange={handleSheetDataChange}
+                  />
                 </>
               )}
             </section>
