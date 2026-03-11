@@ -1219,7 +1219,7 @@ class PalletHistoryWindow:
             progress_window.title("Printing Spreadsheets...")
             progress_window.geometry("300x100")
             progress_window.transient(self.window)
-            progress_window.grab_set()
+            progress_window.attributes('-topmost', True)
 
             progress_label = tk.Label(
                 progress_window,
@@ -2018,6 +2018,34 @@ class PalletHistoryWindow:
                 return candidate
             counter += 1
 
+    def _trigger_windows_print_dialog_shortcut(self, window_title: str, delay_ms: int = 1200) -> bool:
+        """Try to activate a Windows app window and send Ctrl+P."""
+        if platform.system() != 'Windows':
+            return False
+
+        powershell = [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            (
+                f"$wshell = New-Object -ComObject WScript.Shell; "
+                f"Start-Sleep -Milliseconds {delay_ms}; "
+                f"if ($wshell.AppActivate('{window_title}')) "
+                "{ Start-Sleep -Milliseconds 250; $wshell.SendKeys('^p'); exit 0 } "
+                "else { exit 1 }"
+            ),
+        ]
+
+        result = subprocess.run(
+            powershell,
+            check=False,
+            timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+        )
+        return result.returncode == 0
+
     def _print_excel_files_with_excel(self, excel_files: List[Path], progress_label: Optional[tk.Label] = None) -> bool:
         """Open a combined Excel print job workbook and show the print dialog."""
         if platform.system() != 'Windows':
@@ -2100,7 +2128,9 @@ class PalletHistoryWindow:
                 progress_label.config(text="Opening Excel print dialog...")
                 progress_label.master.update()
 
-            excel.Dialogs(88).Show()
+            dialog_opened = excel.Dialogs(88).Show()
+            if dialog_opened is False:
+                raise Exception("Excel print dialog was cancelled or could not be shown.")
             success = True
             return True
         finally:
@@ -2117,10 +2147,30 @@ class PalletHistoryWindow:
             pythoncom.CoUninitialize()
 
     def _print_excel_files_with_libreoffice(self, excel_files: List[Path], progress_label: Optional[tk.Label] = None) -> bool:
-        """Open Excel files in LibreOffice for manual printing."""
+        """Use LibreOffice first where it can provide the quickest visible print path."""
         soffice = self._find_libreoffice_executable()
         if not soffice:
             return False
+
+        if platform.system() == 'Windows' and len(excel_files) == 1:
+            excel_file = excel_files[0]
+            if progress_label:
+                progress_label.config(text="Opening LibreOffice print dialog...")
+                progress_label.master.update()
+
+            subprocess.Popen(
+                [str(soffice), str(excel_file.absolute())],
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+            )
+
+            if not (
+                self._trigger_windows_print_dialog_shortcut("LibreOffice Calc")
+                or self._trigger_windows_print_dialog_shortcut("LibreOffice")
+                or self._trigger_windows_print_dialog_shortcut(excel_file.stem)
+            ):
+                raise Exception("LibreOffice opened, but the print dialog shortcut could not be triggered.")
+
+            return True
 
         for idx, excel_file in enumerate(excel_files, 1):
             if progress_label:
@@ -2139,6 +2189,21 @@ class PalletHistoryWindow:
         backend_errors = []
 
         try:
+            if self._print_excel_files_with_libreoffice(excel_files, progress_label):
+                messagebox.showinfo(
+                    "LibreOffice Print",
+                    (
+                        "LibreOffice should now be open with the print dialog."
+                        if len(excel_files) == 1 and platform.system() == 'Windows'
+                        else f"Opened {len(excel_files)} Excel file(s) in LibreOffice.\n\nUse Ctrl+P in LibreOffice to print them."
+                    ),
+                    parent=self.window
+                )
+                return "libreoffice"
+        except Exception as e:
+            backend_errors.append(f"LibreOffice: {e}")
+
+        try:
             if self._print_excel_files_with_excel(excel_files, progress_label):
                 messagebox.showinfo(
                     "Print Dialog Opened",
@@ -2149,18 +2214,6 @@ class PalletHistoryWindow:
                 return "excel"
         except Exception as e:
             backend_errors.append(f"Excel: {e}")
-
-        try:
-            if self._print_excel_files_with_libreoffice(excel_files, progress_label):
-                messagebox.showinfo(
-                    "LibreOffice Opened",
-                    f"Opened {len(excel_files)} Excel file(s) in LibreOffice.\n\n"
-                    "Use Ctrl+P in LibreOffice to print them.",
-                    parent=self.window
-                )
-                return "libreoffice"
-        except Exception as e:
-            backend_errors.append(f"LibreOffice: {e}")
 
         try:
             system = platform.system()

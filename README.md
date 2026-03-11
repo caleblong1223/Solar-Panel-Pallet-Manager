@@ -183,6 +183,28 @@ npx tauri build
 
 The built app has the API base URL baked in and will talk to the configured backend (e.g. `http://10.20.10.62:8001/api/v1`), while preserving local fallback if configured.
 
+**Recommended Windows build command**
+
+Use the dedicated batch file from `frontend/`:
+
+```bat
+cd frontend
+scripts\build-tauri-windows-installer.bat
+```
+
+That script wraps the full Windows desktop build and writes installers here:
+
+- `frontend\dist\installers\Pallet Manager_2.0.0_x64_en-US.msi`
+- `frontend\dist\installers\Pallet Manager_2.0.0_x64-setup.exe`
+
+If you need different build-time API URLs, set them first in the same CMD session:
+
+```bat
+set VITE_PRIMARY_API_BASE_URL=http://10.20.10.62:8001/api/v1
+set VITE_FALLBACK_API_BASE_URL=http://127.0.0.1:8010/api/v1
+scripts\build-tauri-windows-installer.bat
+```
+
 ---
 
 ### 4. Installing the EXE on workstations (Computers 2–4)

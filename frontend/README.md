@@ -40,3 +40,39 @@ If `VITE_PRIMARY_API_BASE_URL` is not set, the app falls back to `VITE_API_BASE_
 ## Tauri
 
 `src-tauri/tauri.conf.json` is scaffolded for desktop integration.
+
+## Windows Installer Build
+
+Use the dedicated Windows batch file:
+
+```bat
+cd frontend
+scripts\build-tauri-windows-installer.bat
+```
+
+This script:
+
+- runs `npm install`
+- runs `npm run build:desktop`
+- builds the Tauri app
+- copies the Windows installers into `frontend\dist\installers`
+
+Default build-time API URLs used by the batch file:
+
+```bat
+VITE_PRIMARY_API_BASE_URL=http://10.20.10.100:8001/api/v1
+VITE_FALLBACK_API_BASE_URL=http://127.0.0.1:8010/api/v1
+```
+
+Override them in the same CMD session before running the script if needed:
+
+```bat
+set VITE_PRIMARY_API_BASE_URL=http://10.20.10.62:8001/api/v1
+set VITE_FALLBACK_API_BASE_URL=http://127.0.0.1:8010/api/v1
+scripts\build-tauri-windows-installer.bat
+```
+
+Installer output paths:
+
+- `frontend\dist\installers\Pallet Manager_2.0.0_x64_en-US.msi`
+- `frontend\dist\installers\Pallet Manager_2.0.0_x64-setup.exe`
