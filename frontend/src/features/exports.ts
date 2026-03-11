@@ -84,6 +84,11 @@ export function getExportDownloadEndpoint(exportId: number, format: "pdf" | "xls
   return `${apiBaseUrl}/exports/${exportId}/download?${query}`;
 }
 
+export function getExportDownloadEndpoints(exportId: number, format: "pdf" | "xlsx" = "pdf") {
+  const query = new URLSearchParams({ format }).toString();
+  return getApiBaseCandidates().map((base) => `${base}/exports/${exportId}/download?${query}`);
+}
+
 export function getMergedExportsPdfEndpoint(exportIds: number[]) {
   const { apiBaseUrl } = loadRuntimeSettings();
   const params = new URLSearchParams();

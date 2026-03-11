@@ -13,13 +13,13 @@ import { deletePallet, getPallet, listPallets, type Pallet } from "../features/p
 import {
   applyExportWorkbookEdits,
   downloadExportWorkbook,
+  getExportDownloadEndpoints,
   getMergedExportsPdfEndpoint,
-  getExportDownloadUrl,
   listExportsByPallet,
   type ExportRecord,
 } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
-import { openWithSystem } from "../lib/systemOpen";
+import { downloadAndOpenWithSystem, openWithSystem } from "../lib/systemOpen";
 
 type SheetCell = CellBase<string>;
 type EditableSheet = {
@@ -333,10 +333,22 @@ export default function HistoryExplorerPage() {
     }
   };
 
-  const handleOpenExport = async (exportId: number, format: "pdf" | "xlsx") => {
+  const handleOpenExport = async (item: ExportRecord, format: "pdf" | "xlsx") => {
     try {
-      const response = await getExportDownloadUrl(apiToken, exportId, format);
-      await openWithSystem(response.download_url);
+      const candidates = getExportDownloadEndpoints(item.id, format);
+      let lastError: Error | null = null;
+      for (let index = 0; index < candidates.length; index += 1) {
+        try {
+          await downloadAndOpenWithSystem(candidates[index], {
+            bearerToken: apiToken,
+            fileName: format === "pdf" ? item.file_name : item.file_name.replace(/\.pdf$/i, ".xlsx"),
+          });
+          return;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(`Failed to open ${format.toUpperCase()}`);
+        }
+      }
+      throw lastError ?? new Error(`Failed to open ${format.toUpperCase()}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to open ${format.toUpperCase()}`;
       notify(message, "error");
@@ -682,10 +694,10 @@ export default function HistoryExplorerPage() {
                         {" | Packout: "}
                         {item.packout_date ? new Date(item.packout_date).toLocaleDateString() : "-"}
                       </span>
-                      <Button variant="secondary" onClick={() => void handleOpenExport(item.id, "pdf")}>
+                      <Button variant="secondary" onClick={() => void handleOpenExport(item, "pdf")}>
                         Open PDF
                       </Button>
-                      <Button variant="secondary" onClick={() => void handleOpenExport(item.id, "xlsx")}>
+                      <Button variant="secondary" onClick={() => void handleOpenExport(item, "xlsx")}>
                         Open XLSX
                       </Button>
                       <Button variant="secondary" onClick={() => void handleEditExport(item)}>

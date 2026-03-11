@@ -5,8 +5,8 @@ import { useToast } from "../components/notifications/ToastProvider";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
-import { getExportDownloadUrl, listExports, type ExportRecord } from "../features/exports";
-import { openWithSystem } from "../lib/systemOpen";
+import { getExportDownloadEndpoints, listExports, type ExportRecord } from "../features/exports";
+import { downloadAndOpenWithSystem } from "../lib/systemOpen";
 
 const TEMPLATE_OPTIONS = ["", "200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 
@@ -64,10 +64,22 @@ export default function ExportsPage() {
     }
   };
 
-  const handleOpen = async (exportId: number) => {
+  const handleOpen = async (item: ExportRecord) => {
     try {
-      const response = await getExportDownloadUrl(token ?? "", exportId, "pdf");
-      await openWithSystem(response.download_url);
+      const candidates = getExportDownloadEndpoints(item.id, "pdf");
+      let lastError: Error | null = null;
+      for (let index = 0; index < candidates.length; index += 1) {
+        try {
+          await downloadAndOpenWithSystem(candidates[index], {
+            bearerToken: token ?? "",
+            fileName: item.file_name,
+          });
+          return;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error("Failed to open export");
+        }
+      }
+      throw lastError ?? new Error("Failed to open export");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to open export";
       notify(message, "error");
@@ -151,7 +163,7 @@ export default function ExportsPage() {
                     <td>{row.file_name}</td>
                     <td>{row.size_bytes != null ? `${(row.size_bytes / 1024).toFixed(1)} KB` : "-"}</td>
                     <td style={{ textAlign: "right" }}>
-                      <Button variant="secondary" onClick={() => void handleOpen(row.id)}>
+                      <Button variant="secondary" onClick={() => void handleOpen(row)}>
                         Open
                       </Button>
                     </td>

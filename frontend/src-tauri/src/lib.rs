@@ -5,6 +5,7 @@ use std::thread;
 use std::time::Duration;
 use std::{fs, io};
 
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
@@ -270,32 +271,25 @@ fn normalize_open_target(app: &tauri::AppHandle, target: &str) -> String {
   }
 }
 
-#[tauri::command]
-fn open_with_system(app: tauri::AppHandle, target: String) -> Result<(), String> {
-  if target.trim().is_empty() {
-    return Err("Target cannot be empty".to_string());
-  }
-
-  let normalized_target = normalize_open_target(&app, &target);
-
+fn open_path_with_system(normalized_target: &str) -> Result<(), String> {
   #[cfg(target_os = "macos")]
   let mut command = {
     let mut cmd = Command::new("open");
-    cmd.arg(&normalized_target);
+    cmd.arg(normalized_target);
     cmd
   };
 
   #[cfg(target_os = "windows")]
   let mut command = {
     let mut cmd = Command::new("cmd");
-    cmd.arg("/C").arg("start").arg("").arg(&normalized_target);
+    cmd.arg("/C").arg("start").arg("").arg(normalized_target);
     cmd
   };
 
   #[cfg(all(unix, not(target_os = "macos")))]
   let mut command = {
     let mut cmd = Command::new("xdg-open");
-    cmd.arg(&normalized_target);
+    cmd.arg(normalized_target);
     cmd
   };
 
@@ -303,6 +297,71 @@ fn open_with_system(app: tauri::AppHandle, target: String) -> Result<(), String>
     .spawn()
     .map_err(|err| format!("Failed to open with system default app: {err}"))?;
   Ok(())
+}
+
+#[tauri::command]
+fn open_with_system(app: tauri::AppHandle, target: String) -> Result<(), String> {
+  if target.trim().is_empty() {
+    return Err("Target cannot be empty".to_string());
+  }
+
+  let normalized_target = normalize_open_target(&app, &target);
+  open_path_with_system(&normalized_target)
+}
+
+#[tauri::command]
+fn download_and_open_with_system(
+  app: tauri::AppHandle,
+  url: String,
+  bearer_token: Option<String>,
+  file_name: Option<String>,
+) -> Result<(), String> {
+  if url.trim().is_empty() {
+    return Err("URL cannot be empty".to_string());
+  }
+
+  let client = Client::builder()
+    .build()
+    .map_err(|err| format!("Failed to create HTTP client: {err}"))?;
+  let mut request = client.get(url.trim());
+  if let Some(token) = bearer_token.as_deref() {
+    if !token.trim().is_empty() {
+      request = request.bearer_auth(token.trim());
+    }
+  }
+  let response = request
+    .send()
+    .map_err(|err| format!("Failed to download file: {err}"))?;
+  if !response.status().is_success() {
+    let status = response.status();
+    let body = response.text().unwrap_or_default();
+    return Err(format!("Download failed ({status}): {body}"));
+  }
+
+  let download_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|err| format!("Unable to resolve app data directory: {err}"))?
+    .join("OPENED_FILES");
+  fs::create_dir_all(&download_dir)
+    .map_err(|err| format!("Unable to create opened files directory: {err}"))?;
+
+  let requested_name = file_name
+    .as_deref()
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .unwrap_or("download.bin");
+  let sanitized_name = Path::new(requested_name)
+    .file_name()
+    .and_then(|value| value.to_str())
+    .filter(|value| !value.trim().is_empty())
+    .unwrap_or("download.bin");
+  let target_path = download_dir.join(sanitized_name);
+  let bytes = response
+    .bytes()
+    .map_err(|err| format!("Failed to read download bytes: {err}"))?;
+  fs::write(&target_path, &bytes).map_err(|err| format!("Failed to write temp file: {err}"))?;
+  open_path_with_system(&target_path.to_string_lossy())
 }
 
 #[tauri::command]
@@ -381,6 +440,7 @@ pub fn run() {
     }))
     .invoke_handler(tauri::generate_handler![
       open_with_system,
+      download_and_open_with_system,
       open_backend_terminal,
       get_backend_terminal_setting,
       set_backend_terminal_setting,
