@@ -205,6 +205,18 @@ def test_export_download_url_endpoint(monkeypatch) -> None:
         created = client.post("/api/v1/exports", json={"pallet_id": 1, "template_type": "450WT"})
         export_id = created.json()["id"]
 
+        monkeypatch.setattr(exports_endpoint, "read_export_artifact", lambda object_key: b"xlsx-bytes")
+        refreshed: dict[str, object] = {}
+
+        def _upload_at_key(*, object_key: str, filename: str, content: bytes, content_type: str | None = None):
+            refreshed["object_key"] = object_key
+            refreshed["filename"] = filename
+            refreshed["content"] = content
+            refreshed["content_type"] = content_type
+            return object_key, "refreshedchecksum"
+
+        monkeypatch.setattr(exports_endpoint, "upload_export_artifact_at_key", _upload_at_key)
+
         monkeypatch.setattr(
             exports_endpoint,
             "generate_export_download_url",
@@ -214,6 +226,9 @@ def test_export_download_url_endpoint(monkeypatch) -> None:
         assert dl.status_code == 200
         assert dl.json()["export_id"] == export_id
         assert "https://minio.local/" in dl.json()["download_url"]
+        assert refreshed["filename"] == created.json()["file_name"]
+        assert refreshed["content"] == b"pdf-from-workbook"
+        assert refreshed["content_type"] == "application/pdf"
 
         missing = client.get("/api/v1/exports/999/download-url")
         assert missing.status_code == 404

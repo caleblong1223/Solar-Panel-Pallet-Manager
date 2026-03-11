@@ -300,6 +300,15 @@ def get_export_download_url(
         if format == "xlsx":
             object_key, file_name = _xlsx_object_key(export)
         else:
+            xlsx_key, _ = _xlsx_object_key(export)
+            workbook_bytes = read_export_artifact(xlsx_key)
+            pdf_bytes = _render_pdf_from_workbook_bytes(workbook_bytes)
+            upload_export_artifact_at_key(
+                object_key=export.object_key,
+                filename=export.file_name,
+                content=pdf_bytes,
+                content_type="application/pdf",
+            )
             object_key = export.object_key
             file_name = export.file_name
 
