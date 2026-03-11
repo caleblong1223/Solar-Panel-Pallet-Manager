@@ -248,8 +248,8 @@ class PalletHistoryWindow:
         
         tk.Label(multi_action_frame, text="Multi-Select:", 
                 font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=5)
-        tk.Button(multi_action_frame, text="Create PDF & Open", 
-                 command=self.create_pdf_and_print, width=18, 
+        tk.Button(multi_action_frame, text="Print Selected", 
+                 command=self.print_selected_exports, width=18, 
                  bg="#2196F3", fg="black", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
     
     def load_history(self):
@@ -966,10 +966,9 @@ class PalletHistoryWindow:
         return selected_pallets
     
     def create_pdf_and_print(self):
-        """Create PDF from selected Excel files and print
-        
-        Optimized for low-end systems with comprehensive error handling
-        """
+        """Backward-compatible wrapper for the old multi-select action name."""
+        self.print_selected_exports()
+        return
         from app.debug_logger import get_logger
         
         logger = get_logger()
@@ -1165,6 +1164,96 @@ class PalletHistoryWindow:
                                f"Check LOGS/ folder for details.",
                                parent=self.window)
     
+    def print_selected_exports(self):
+        """Print selected Excel export files without converting them to PDF."""
+        from app.debug_logger import get_logger
+
+        logger = get_logger()
+        logger.section("Batch Spreadsheet Print Started")
+        logger.start_timer("batch_spreadsheet_print_total")
+        logger.log_memory_usage()
+
+        print("DEBUG: Print Selected button clicked")  # Debug output
+        selected_pallets = self.get_selected_pallets()
+
+        logger.info(f"Selected {len(selected_pallets)} pallets")
+
+        if not selected_pallets:
+            logger.warning("No pallets selected")
+            messagebox.showwarning(
+                "No Selection",
+                "Please select one or more pallets first.\n\n"
+                "Click the checkboxes to select pallets.",
+                parent=self.window,
+            )
+            return
+
+        exported_pallets = [p for p in selected_pallets if p.get('exported_file')]
+        if not exported_pallets:
+            messagebox.showwarning(
+                "No Export Files",
+                "Selected pallets have no export files.",
+                parent=self.window,
+            )
+            return
+
+        file_paths = []
+        for pallet in exported_pallets:
+            exported_file = pallet.get('exported_file')
+            if exported_file:
+                file_path = resolve_export_file_path(exported_file)
+                if file_path is not None and file_path.exists():
+                    file_paths.append(file_path)
+
+        if not file_paths:
+            messagebox.showerror(
+                "Error",
+                "No export files found for selected pallets.",
+                parent=self.window,
+            )
+            return
+
+        progress_window = None
+        try:
+            progress_window = tk.Toplevel(self.window)
+            progress_window.title("Printing Spreadsheets...")
+            progress_window.geometry("300x100")
+            progress_window.transient(self.window)
+            progress_window.grab_set()
+
+            progress_label = tk.Label(
+                progress_window,
+                text="Preparing print job...",
+                font=("Arial", 10),
+            )
+            progress_label.pack(pady=20)
+            progress_window.update()
+
+            backend = self._print_excel_files(file_paths, progress_label)
+
+            progress_window.destroy()
+            progress_window = None
+
+            logger.info(f"Spreadsheet print request sent using backend: {backend}")
+            logger.end_timer("batch_spreadsheet_print_total")
+            logger.log_memory_usage()
+            logger.info("Batch spreadsheet print completed successfully")
+        except Exception as e:
+            logger.error(f"Failed to print spreadsheets: {e}", exc_info=e)
+            logger.end_timer("batch_spreadsheet_print_total")
+
+            if progress_window is not None:
+                try:
+                    progress_window.destroy()
+                except Exception:
+                    pass
+
+            messagebox.showerror(
+                "Error",
+                f"Failed to print spreadsheets:\n{e}\n\nCheck LOGS/ folder for details.",
+                parent=self.window,
+            )
+
     def _excel_to_pdf(self, excel_files: List[Path], pdf_path: Path, progress_label: tk.Label):
         """Convert Excel files to PDF - preserves exact Excel formatting
         
@@ -1882,28 +1971,155 @@ class PalletHistoryWindow:
             messagebox.showerror("Error", f"Could not open print dialog:\n{e}", 
                                parent=self.window)
     
-    def _print_excel_files(self, excel_files: List[Path]):
-        """Print Excel files directly (fallback if reportlab not available)"""
+    def _find_libreoffice_executable(self) -> Optional[Path]:
+        """Return the first available LibreOffice executable path."""
+        libreoffice_paths = []
+
+        if platform.system() == 'Windows':
+            libreoffice_paths = [
+                r"C:\Program Files\LibreOffice\program\soffice.exe",
+                r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+                r"C:\Program Files\LibreOffice 7\program\soffice.exe",
+                r"C:\Program Files\LibreOffice 24\program\soffice.exe",
+            ]
+        elif platform.system() == 'Darwin':
+            libreoffice_paths = [
+                "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+            ]
+        else:
+            libreoffice_paths = [
+                "/usr/bin/libreoffice",
+                "/usr/bin/soffice",
+            ]
+
+        for path in libreoffice_paths:
+            candidate = Path(path)
+            if candidate.exists():
+                return candidate
+
+        return None
+
+    def _print_excel_files_with_excel(self, excel_files: List[Path], progress_label: Optional[tk.Label] = None) -> bool:
+        """Print Excel files with Excel automation on Windows."""
+        if platform.system() != 'Windows':
+            return False
+
+        try:
+            import pythoncom
+            import win32com.client
+        except ImportError:
+            return False
+
+        pythoncom.CoInitialize()
+        excel = None
+        try:
+            excel = win32com.client.DispatchEx("Excel.Application")
+            excel.Visible = False
+            excel.DisplayAlerts = False
+
+            for idx, excel_file in enumerate(excel_files, 1):
+                if progress_label:
+                    progress_label.config(text=f"Printing {idx}/{len(excel_files)} with Excel...")
+                    progress_label.master.update()
+
+                workbook = excel.Workbooks.Open(str(excel_file.absolute()), ReadOnly=True)
+                try:
+                    workbook.PrintOut()
+                finally:
+                    workbook.Close(False)
+
+            return True
+        finally:
+            if excel is not None:
+                try:
+                    excel.Quit()
+                except Exception:
+                    pass
+            pythoncom.CoUninitialize()
+
+    def _print_excel_files_with_libreoffice(self, excel_files: List[Path], progress_label: Optional[tk.Label] = None) -> bool:
+        """Print Excel files with LibreOffice if it is installed."""
+        soffice = self._find_libreoffice_executable()
+        if not soffice:
+            return False
+
+        for idx, excel_file in enumerate(excel_files, 1):
+            if progress_label:
+                progress_label.config(text=f"Printing {idx}/{len(excel_files)} with LibreOffice...")
+                progress_label.master.update()
+
+            result = subprocess.run(
+                [
+                    str(soffice),
+                    '--headless',
+                    '--norestore',
+                    '-p',
+                    str(excel_file.absolute()),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+
+            if result.returncode != 0:
+                raise Exception(
+                    f"LibreOffice print failed for {excel_file.name}: "
+                    f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+                )
+
+        return True
+
+    def _print_excel_files(self, excel_files: List[Path], progress_label: Optional[tk.Label] = None) -> str:
+        """Print Excel files directly, preferring spreadsheet applications over file-open fallback."""
+        backend_errors = []
+
+        try:
+            if self._print_excel_files_with_excel(excel_files, progress_label):
+                messagebox.showinfo(
+                    "Print Sent",
+                    f"Sent {len(excel_files)} Excel file(s) to the printer using Excel.",
+                    parent=self.window
+                )
+                return "excel"
+        except Exception as e:
+            backend_errors.append(f"Excel: {e}")
+
+        try:
+            if self._print_excel_files_with_libreoffice(excel_files, progress_label):
+                messagebox.showinfo(
+                    "Print Sent",
+                    f"Sent {len(excel_files)} Excel file(s) to the printer using LibreOffice.",
+                    parent=self.window
+                )
+                return "libreoffice"
+        except Exception as e:
+            backend_errors.append(f"LibreOffice: {e}")
+
         try:
             system = platform.system()
-            for excel_file in excel_files:
+            for idx, excel_file in enumerate(excel_files, 1):
+                if progress_label:
+                    progress_label.config(text=f"Opening {idx}/{len(excel_files)} for manual print...")
+                    progress_label.master.update()
+
                 if system == 'Windows':
-                    subprocess.run(['start', '/MIN', str(excel_file.absolute())], 
-                                 shell=True, check=False)
-                elif system == 'Darwin':  # macOS
+                    os.startfile(str(excel_file.absolute()), 'print')
+                elif system == 'Darwin':
                     subprocess.run(['open', str(excel_file.absolute())], check=False)
-                else:  # Linux
+                else:
                     subprocess.run(['xdg-open', str(excel_file.absolute())], check=False)
-            
+
             messagebox.showinfo(
                 "Print",
                 f"Opened {len(excel_files)} file(s) for printing.\n\n"
-                "Please use File > Print in Excel/Preview to print.",
+                "If a print dialog does not appear automatically, use File > Print in the opened spreadsheet app.",
                 parent=self.window
             )
+            return "shell"
         except Exception as e:
-            messagebox.showerror("Error", f"Could not open files for printing:\n{e}", 
-                               parent=self.window)
+            backend_errors.append(f"Shell fallback: {e}")
+            raise Exception("Could not print files.\n" + "\n".join(backend_errors))
     
     def _update_customer_filter_options(self):
         """Update customer filter dropdown with available customers"""
