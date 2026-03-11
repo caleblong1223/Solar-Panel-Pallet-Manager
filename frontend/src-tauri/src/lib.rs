@@ -299,6 +299,18 @@ fn open_path_with_system(normalized_target: &str) -> Result<(), String> {
   Ok(())
 }
 
+fn resolve_bundled_backend_runtime(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
+  let resource_dir = app
+    .path()
+    .resource_dir()
+    .map_err(|err| format!("Failed to resolve resource dir: {err}"))?;
+  let backend_dir = resolve_backend_dir(&resource_dir)
+    .ok_or_else(|| format!("Bundled backend directory not found under {}", resource_dir.display()))?;
+  let python = resolve_python_executable(&backend_dir)
+    .ok_or_else(|| format!("Bundled python executable not found in {}", backend_dir.display()))?;
+  Ok((backend_dir, python))
+}
+
 #[tauri::command]
 fn open_with_system(app: tauri::AppHandle, target: String) -> Result<(), String> {
   if target.trim().is_empty() {
@@ -362,6 +374,69 @@ fn download_and_open_with_system(
     .map_err(|err| format!("Failed to read download bytes: {err}"))?;
   fs::write(&target_path, &bytes).map_err(|err| format!("Failed to write temp file: {err}"))?;
   open_path_with_system(&target_path.to_string_lossy())
+}
+
+#[tauri::command]
+fn render_local_workbook_pdf_and_open(app: tauri::AppHandle, workbook_path: String) -> Result<(), String> {
+  if workbook_path.trim().is_empty() {
+    return Err("Workbook path cannot be empty".to_string());
+  }
+
+  let normalized_path = normalize_open_target(&app, &workbook_path);
+  let source_path = PathBuf::from(&normalized_path);
+  if !source_path.exists() {
+    return Err(format!("Workbook file not found: {}", source_path.display()));
+  }
+
+  let (backend_dir, python) = resolve_bundled_backend_runtime(&app)?;
+  let opened_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|err| format!("Unable to resolve app data directory: {err}"))?
+    .join("OPENED_FILES");
+  fs::create_dir_all(&opened_dir)
+    .map_err(|err| format!("Unable to create opened files directory: {err}"))?;
+
+  let stem = source_path
+    .file_stem()
+    .and_then(|value| value.to_str())
+    .filter(|value| !value.trim().is_empty())
+    .unwrap_or("export");
+  let output_path = opened_dir.join(format!("{stem}.pdf"));
+
+  let python_script = r#"
+from pathlib import Path
+import sys
+from app.services.export_generator import convert_workbook_bytes_to_pdf_bytes
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+target.write_bytes(convert_workbook_bytes_to_pdf_bytes(source.read_bytes()))
+"#;
+
+  let output = Command::new(python)
+    .arg("-c")
+    .arg(python_script)
+    .arg(source_path.as_os_str())
+    .arg(output_path.as_os_str())
+    .current_dir(&backend_dir)
+    .output()
+    .map_err(|err| format!("Failed to run workbook PDF conversion: {err}"))?;
+
+  if !output.status.success() || !output_path.exists() {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let message = if !stderr.is_empty() {
+      stderr
+    } else if !stdout.is_empty() {
+      stdout
+    } else {
+      format!("Python converter exited with status {}", output.status)
+    };
+    return Err(format!("Failed to render workbook PDF: {message}"));
+  }
+
+  open_path_with_system(&output_path.to_string_lossy())
 }
 
 #[tauri::command]
@@ -441,6 +516,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       open_with_system,
       download_and_open_with_system,
+      render_local_workbook_pdf_and_open,
       open_backend_terminal,
       get_backend_terminal_setting,
       set_backend_terminal_setting,

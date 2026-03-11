@@ -19,7 +19,7 @@ import {
   type ExportRecord,
 } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
-import { downloadAndOpenWithSystem, openWithSystem } from "../lib/systemOpen";
+  import { downloadAndOpenWithSystem, openWithSystem, renderLocalWorkbookPdfAndOpen } from "../lib/systemOpen";
 
 type SheetCell = CellBase<string>;
 type EditableSheet = {
@@ -350,9 +350,12 @@ export default function HistoryExplorerPage() {
         }
       }
       if (item.object_key) {
-        const directTarget =
-          format === "pdf" ? item.object_key : item.object_key.replace(/\.pdf$/i, ".xlsx");
-        await openWithSystem(directTarget);
+        const workbookTarget = item.object_key.replace(/\.pdf$/i, ".xlsx");
+        if (format === "pdf") {
+          await renderLocalWorkbookPdfAndOpen(workbookTarget);
+        } else {
+          await openWithSystem(workbookTarget);
+        }
         return;
       }
       throw lastError ?? new Error(`Failed to open ${format.toUpperCase()}`);
