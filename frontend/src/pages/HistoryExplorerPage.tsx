@@ -349,6 +349,12 @@ export default function HistoryExplorerPage() {
           lastError = error instanceof Error ? error : new Error(`Failed to open ${format.toUpperCase()}`);
         }
       }
+      if (item.object_key) {
+        const directTarget =
+          format === "pdf" ? item.object_key : item.object_key.replace(/\.pdf$/i, ".xlsx");
+        await openWithSystem(directTarget);
+        return;
+      }
       throw lastError ?? new Error(`Failed to open ${format.toUpperCase()}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to open ${format.toUpperCase()}`;
