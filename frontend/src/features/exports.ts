@@ -1,4 +1,4 @@
-import { apiRequest, apiRequestAcrossCandidates, ApiError } from "../lib/api";
+import { apiRequest, apiRequestAcrossCandidates, apiRequestAcrossCandidatesWithSource, ApiError } from "../lib/api";
 import { getApiBaseCandidates, loadRuntimeSettings } from "../lib/runtimeConfig";
 
 export type ExportRecord = {
@@ -13,6 +13,7 @@ export type ExportRecord = {
   checksum_sha256: string | null;
   created_by: number | null;
   created_at: string;
+  source_api_base_url?: string;
 };
 
 type ExportListResponse = {
@@ -30,7 +31,7 @@ type ExportDownloadUrlResponse = {
 };
 
 export async function listExportsByPallet(token: string, palletId: number) {
-  return apiRequestAcrossCandidates<ExportListResponse>(
+  const response = await apiRequestAcrossCandidatesWithSource<ExportListResponse>(
     `/exports?pallet_id=${palletId}&limit=50&offset=0`,
     "GET",
     token,
@@ -39,6 +40,13 @@ export async function listExportsByPallet(token: string, palletId: number) {
     undefined,
     [404]
   );
+  return {
+    ...response.data,
+    exports: response.data.exports.map((item) => ({
+      ...item,
+      source_api_base_url: response.apiBaseUrl,
+    })),
+  };
 }
 
 export async function listExports(token: string, options?: { palletId?: number; templateType?: string; createdFrom?: string; createdTo?: string; limit?: number; offset?: number }) {
@@ -84,9 +92,17 @@ export function getExportDownloadEndpoint(exportId: number, format: "pdf" | "xls
   return `${apiBaseUrl}/exports/${exportId}/download?${query}`;
 }
 
-export function getExportDownloadEndpoints(exportId: number, format: "pdf" | "xlsx" = "pdf") {
+export function getExportDownloadEndpoints(
+  exportId: number,
+  format: "pdf" | "xlsx" = "pdf",
+  preferredApiBaseUrl?: string
+) {
   const query = new URLSearchParams({ format }).toString();
-  return getApiBaseCandidates().map((base) => `${base}/exports/${exportId}/download?${query}`);
+  const orderedBases = [
+    ...(preferredApiBaseUrl ? [preferredApiBaseUrl] : []),
+    ...getApiBaseCandidates(),
+  ].filter((value, index, all) => value && all.indexOf(value) === index);
+  return orderedBases.map((base) => `${base}/exports/${exportId}/download?${query}`);
 }
 
 export function getMergedExportsPdfEndpoint(exportIds: number[]) {
@@ -96,13 +112,17 @@ export function getMergedExportsPdfEndpoint(exportIds: number[]) {
   return `${apiBaseUrl}/exports/merge-pdf?${params.toString()}`;
 }
 
-export async function downloadExportWorkbook(token: string, exportId: number) {
+export async function downloadExportWorkbook(token: string, exportId: number, preferredApiBaseUrl?: string) {
   const query = new URLSearchParams({ format: "xlsx" }).toString();
   const headers: Record<string, string> = {};
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const candidates = getApiBaseCandidates().map((base) => `${base}/exports/${exportId}/download?${query}`);
+  const orderedBases = [
+    ...(preferredApiBaseUrl ? [preferredApiBaseUrl] : []),
+    ...getApiBaseCandidates(),
+  ].filter((value, index, all) => value && all.indexOf(value) === index);
+  const candidates = orderedBases.map((base) => `${base}/exports/${exportId}/download?${query}`);
   let lastStatus: number | null = null;
   for (let index = 0; index < candidates.length; index += 1) {
     const endpoint = candidates[index];
@@ -126,9 +146,13 @@ export async function replaceExportWorkbook(
   token: string,
   exportId: number,
   workbookBlob: Blob,
-  fileName: string
+  fileName: string,
+  preferredApiBaseUrl?: string
 ) {
-  const candidates = getApiBaseCandidates();
+  const candidates = [
+    ...(preferredApiBaseUrl ? [preferredApiBaseUrl] : []),
+    ...getApiBaseCandidates(),
+  ].filter((value, index, all) => value && all.indexOf(value) === index);
   let lastError: Error | null = null;
   for (let index = 0; index < candidates.length; index += 1) {
     const formData = new FormData();
@@ -154,8 +178,20 @@ export async function replaceExportWorkbook(
 export async function applyExportWorkbookEdits(
   token: string,
   exportId: number,
-  sheets: Array<{ name: string; data: string[][] }>
+  sheets: Array<{ name: string; data: string[][] }>,
+  preferredApiBaseUrl?: string
 ) {
+  if (preferredApiBaseUrl) {
+    return apiRequestAcrossCandidates<ExportRecord>(
+      `${preferredApiBaseUrl}/exports/${exportId}/apply-edits`,
+      "POST",
+      token,
+      { sheets },
+      undefined,
+      undefined,
+      [404]
+    );
+  }
   return apiRequestAcrossCandidates<ExportRecord>(
     `/exports/${exportId}/apply-edits`,
     "POST",

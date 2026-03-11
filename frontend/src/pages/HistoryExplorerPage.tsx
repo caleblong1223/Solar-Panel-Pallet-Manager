@@ -335,7 +335,8 @@ export default function HistoryExplorerPage() {
 
   const handleOpenExport = async (item: ExportRecord, format: "pdf" | "xlsx") => {
     try {
-      const candidates = getExportDownloadEndpoints(item.id, format);
+      const preferredBase = item.source_api_base_url;
+      const candidates = getExportDownloadEndpoints(item.id, format, preferredBase);
       let lastError: Error | null = null;
       for (let index = 0; index < candidates.length; index += 1) {
         try {
@@ -395,7 +396,7 @@ export default function HistoryExplorerPage() {
     setEditableSheets([]);
     setActiveSheetIndex(0);
     try {
-      const workbookBuffer = await downloadExportWorkbook(apiToken, item.id);
+      const workbookBuffer = await downloadExportWorkbook(apiToken, item.id, item.source_api_base_url);
       const workbook = XLSX.read(workbookBuffer, { type: "array" });
       const sheetNames = workbook.SheetNames;
       if (sheetNames.length === 0) {
@@ -460,7 +461,7 @@ export default function HistoryExplorerPage() {
         name: sheet.name,
         data: sheet.data.map((row) => row.map((cell) => (cell?.value ?? ""))),
       }));
-      await applyExportWorkbookEdits(apiToken, editingExport.id, sheets);
+      await applyExportWorkbookEdits(apiToken, editingExport.id, sheets, editingExport.source_api_base_url);
       if (selectedPalletId) {
         await refreshPalletExports(selectedPalletId);
       }
