@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 
 from openpyxl import load_workbook
 
@@ -159,12 +160,13 @@ def generate_merged_pdf_from_workbook_pages(pages: list[tuple[str, bytes]]) -> b
 
 
 def convert_workbook_bytes_to_pdf_bytes(workbook_bytes: bytes) -> bytes:
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        source = tmp_path / "export.xlsx"
-        output_pdf = tmp_path / "export.pdf"
-        source.write_bytes(workbook_bytes)
+    tmp_dir = tempfile.mkdtemp()
+    tmp_path = Path(tmp_dir)
+    source = tmp_path / "export.xlsx"
+    output_pdf = tmp_path / "export.pdf"
+    source.write_bytes(workbook_bytes)
 
+    try:
         # 1) Prefer LibreOffice on all platforms when available.
         soffice_path = shutil.which("soffice")
         if soffice_path is None:
@@ -212,9 +214,18 @@ try {
 }
 finally {
   if ($workbook -ne $null) { $workbook.Close($false) | Out-Null }
-  if ($excel -ne $null) { $excel.Quit() | Out-Null }
+  if ($workbook -ne $null) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($workbook) }
+  if ($excel -ne $null) {
+    $excel.Quit() | Out-Null
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
+  }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+  Start-Sleep -Milliseconds 300
 }
 """
+            script_path = tmp_path / "excel_to_pdf.ps1"
+            script_path.write_text(ps_script, encoding="utf-8")
             process = subprocess.run(
                 [
                     "powershell",
@@ -222,9 +233,11 @@ finally {
                     "-NonInteractive",
                     "-ExecutionPolicy",
                     "Bypass",
-                    "-Command",
-                    ps_script,
+                    "-File",
+                    str(script_path),
+                    "-xlsxPath",
                     str(source),
+                    "-pdfPath",
                     str(output_pdf),
                 ],
                 capture_output=True,
@@ -239,3 +252,13 @@ finally {
             raise RuntimeError(f"XLSX to PDF conversion failed via LibreOffice/Excel: {message}")
 
         raise RuntimeError("XLSX to PDF conversion failed: LibreOffice (soffice) not found")
+    finally:
+        # Windows Excel automation can hold short-lived locks on temp files; cleanup is best-effort.
+        for _ in range(5):
+            try:
+                shutil.rmtree(tmp_path)
+                break
+            except PermissionError:
+                time.sleep(0.2)
+            except FileNotFoundError:
+                break
