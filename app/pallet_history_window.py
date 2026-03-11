@@ -248,9 +248,12 @@ class PalletHistoryWindow:
         
         tk.Label(multi_action_frame, text="Multi-Select:", 
                 font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=5)
-        tk.Button(multi_action_frame, text="Print Selected", 
-                 command=self.print_selected_exports, width=18, 
+        tk.Button(multi_action_frame, text="Open PDF",
+                 command=self.open_selected_pdfs, width=15,
                  bg="#2196F3", fg="black", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
+        tk.Button(multi_action_frame, text="Print All Selected",
+                 command=self.create_pdf_and_print, width=18,
+                 bg="#4CAF50", fg="black", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
     
     def load_history(self):
         """Load and display pallet history"""
@@ -965,10 +968,183 @@ class PalletHistoryWindow:
         print(f"DEBUG: Selected pallets: {len(selected_pallets)}")  # Debug output
         return selected_pallets
     
+    def _get_selected_export_file_paths(self) -> List[Path]:
+        """Resolve exported Excel files from the current multi-selection."""
+        selected_pallets = self.get_selected_pallets()
+
+        if not selected_pallets:
+            messagebox.showwarning(
+                "No Selection",
+                "Please select one or more pallets first.\n\nClick the checkboxes to select pallets.",
+                parent=self.window,
+            )
+            return []
+
+        exported_pallets = [p for p in selected_pallets if p.get('exported_file')]
+        if not exported_pallets:
+            messagebox.showwarning(
+                "No Export Files",
+                "Selected pallets have no export files.",
+                parent=self.window,
+            )
+            return []
+
+        file_paths = []
+        for pallet in exported_pallets:
+            exported_file = pallet.get('exported_file')
+            if exported_file:
+                file_path = resolve_export_file_path(exported_file)
+                if file_path is not None and file_path.exists():
+                    file_paths.append(file_path)
+
+        if not file_paths:
+            messagebox.showerror(
+                "Error",
+                "No export files found for selected pallets.",
+                parent=self.window,
+            )
+
+        return file_paths
+
+    def _create_selected_pdfs(self, file_paths: List[Path], progress_title: str, success_action: str):
+        """Create individual PDFs and return the PDF to open/print."""
+        from app.debug_logger import get_logger
+
+        logger = get_logger()
+
+        first_file_dir = file_paths[0].parent
+        default_name = file_paths[0].stem + ".pdf" if len(file_paths) == 1 else f"Pallets_{len(file_paths)}_combined.pdf"
+        pdf_path = first_file_dir / default_name
+
+        if pdf_path.exists():
+            base_name = pdf_path.stem
+            counter = 1
+            while pdf_path.exists():
+                pdf_path = first_file_dir / f"{base_name}_{counter}.pdf"
+                counter += 1
+                if counter > 1000:
+                    raise Exception("Too many PDF files with same name. Please clean up.")
+
+        progress_window = tk.Toplevel(self.window)
+        progress_window.title(progress_title)
+        progress_window.geometry("320x100")
+        progress_window.transient(self.window)
+        progress_window.attributes('-topmost', True)
+
+        progress_label = tk.Label(progress_window, text=progress_title, font=("Arial", 10))
+        progress_label.pack(pady=20)
+        progress_window.update()
+
+        try:
+            individual_pdfs = self._excel_to_pdf(file_paths, pdf_path, progress_label)
+
+            target_pdf = individual_pdfs[0]
+            created_count = len(individual_pdfs)
+
+            if created_count > 1:
+                progress_label.config(text=f"Preparing combined PDF for {success_action}...")
+                progress_label.master.update()
+
+                print_folder = pdf_path.parent / "PRINT"
+                print_folder.mkdir(exist_ok=True)
+
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                merged_pdf_name = f"PRINT_Combined_{timestamp}.pdf"
+                target_pdf = print_folder / merged_pdf_name
+
+                logger.start_timer("merge_pdfs")
+                self._merge_pdfs([str(p) for p in individual_pdfs], target_pdf)
+                logger.end_timer("merge_pdfs")
+
+            return target_pdf, created_count
+        finally:
+            try:
+                progress_window.destroy()
+            except Exception:
+                pass
+
+    def open_selected_pdfs(self):
+        """Generate PDF(s) from selected exports and open the result."""
+        from app.debug_logger import get_logger
+
+        logger = get_logger()
+        logger.section("PDF Export & Open Started")
+        logger.start_timer("pdf_export_open_total")
+        logger.log_memory_usage()
+
+        file_paths = self._get_selected_export_file_paths()
+        if not file_paths:
+            return
+
+        try:
+            target_pdf, created_count = self._create_selected_pdfs(
+                file_paths,
+                progress_title="Creating PDF...",
+                success_action="opening",
+            )
+            self._open_pdf(target_pdf)
+            logger.end_timer("pdf_export_open_total")
+            logger.log_memory_usage()
+
+            messagebox.showinfo(
+                "PDF Ready",
+                (
+                    f"Created {created_count} PDF file(s).\n\nOpened:\n{target_pdf.name}"
+                    if created_count > 1
+                    else f"Created and opened:\n{target_pdf.name}"
+                ),
+                parent=self.window,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create/open PDF: {e}", exc_info=e)
+            logger.end_timer("pdf_export_open_total")
+            messagebox.showerror(
+                "Error",
+                f"Failed to create/open PDF:\n{e}\n\nCheck LOGS/ folder for details.",
+                parent=self.window,
+            )
+
     def create_pdf_and_print(self):
-        """Backward-compatible wrapper for the old multi-select action name."""
-        self.print_selected_exports()
-        return
+        """Generate PDF(s) from selected exports and open the PDF print flow."""
+        from app.debug_logger import get_logger
+
+        logger = get_logger()
+        logger.section("PDF Export & Print Started")
+        logger.start_timer("pdf_export_print_total")
+        logger.log_memory_usage()
+
+        file_paths = self._get_selected_export_file_paths()
+        if not file_paths:
+            return
+
+        try:
+            target_pdf, created_count = self._create_selected_pdfs(
+                file_paths,
+                progress_title="Creating Printable PDF...",
+                success_action="printing",
+            )
+            self._print_pdf(target_pdf)
+            logger.end_timer("pdf_export_print_total")
+            logger.log_memory_usage()
+
+            messagebox.showinfo(
+                "Printable PDF Ready",
+                (
+                    f"Created {created_count} PDF file(s).\n\nPrepared for printing:\n{target_pdf.name}"
+                    if created_count > 1
+                    else f"Created printable PDF:\n{target_pdf.name}"
+                ),
+                parent=self.window,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create/print PDF: {e}", exc_info=e)
+            logger.end_timer("pdf_export_print_total")
+            messagebox.showerror(
+                "Error",
+                f"Failed to create/print PDF:\n{e}\n\nCheck LOGS/ folder for details.",
+                parent=self.window,
+            )
+
         from app.debug_logger import get_logger
         
         logger = get_logger()
@@ -1165,94 +1341,8 @@ class PalletHistoryWindow:
                                parent=self.window)
     
     def print_selected_exports(self):
-        """Print selected Excel export files without converting them to PDF."""
-        from app.debug_logger import get_logger
-
-        logger = get_logger()
-        logger.section("Batch Spreadsheet Print Started")
-        logger.start_timer("batch_spreadsheet_print_total")
-        logger.log_memory_usage()
-
-        print("DEBUG: Print Selected button clicked")  # Debug output
-        selected_pallets = self.get_selected_pallets()
-
-        logger.info(f"Selected {len(selected_pallets)} pallets")
-
-        if not selected_pallets:
-            logger.warning("No pallets selected")
-            messagebox.showwarning(
-                "No Selection",
-                "Please select one or more pallets first.\n\n"
-                "Click the checkboxes to select pallets.",
-                parent=self.window,
-            )
-            return
-
-        exported_pallets = [p for p in selected_pallets if p.get('exported_file')]
-        if not exported_pallets:
-            messagebox.showwarning(
-                "No Export Files",
-                "Selected pallets have no export files.",
-                parent=self.window,
-            )
-            return
-
-        file_paths = []
-        for pallet in exported_pallets:
-            exported_file = pallet.get('exported_file')
-            if exported_file:
-                file_path = resolve_export_file_path(exported_file)
-                if file_path is not None and file_path.exists():
-                    file_paths.append(file_path)
-
-        if not file_paths:
-            messagebox.showerror(
-                "Error",
-                "No export files found for selected pallets.",
-                parent=self.window,
-            )
-            return
-
-        progress_window = None
-        try:
-            progress_window = tk.Toplevel(self.window)
-            progress_window.title("Printing Spreadsheets...")
-            progress_window.geometry("300x100")
-            progress_window.transient(self.window)
-            progress_window.attributes('-topmost', True)
-
-            progress_label = tk.Label(
-                progress_window,
-                text="Preparing print job...",
-                font=("Arial", 10),
-            )
-            progress_label.pack(pady=20)
-            progress_window.update()
-
-            backend = self._print_excel_files(file_paths, progress_label)
-
-            progress_window.destroy()
-            progress_window = None
-
-            logger.info(f"Spreadsheet print request sent using backend: {backend}")
-            logger.end_timer("batch_spreadsheet_print_total")
-            logger.log_memory_usage()
-            logger.info("Batch spreadsheet print completed successfully")
-        except Exception as e:
-            logger.error(f"Failed to print spreadsheets: {e}", exc_info=e)
-            logger.end_timer("batch_spreadsheet_print_total")
-
-            if progress_window is not None:
-                try:
-                    progress_window.destroy()
-                except Exception:
-                    pass
-
-            messagebox.showerror(
-                "Error",
-                f"Failed to print spreadsheets:\n{e}\n\nCheck LOGS/ folder for details.",
-                parent=self.window,
-            )
+        """Backward-compatible wrapper for the temporary spreadsheet print action."""
+        self.create_pdf_and_print()
 
     def _excel_to_pdf(self, excel_files: List[Path], pdf_path: Path, progress_label: tk.Label):
         """Convert Excel files to PDF - preserves exact Excel formatting
@@ -1758,22 +1848,25 @@ class PalletHistoryWindow:
                     shutil.copy(pdf_files[0], output_path)
     
     def _open_pdf(self, pdf_path: Path):
-        """Open PDF file. On Windows, prefer Microsoft Edge."""
+        """Open PDF file using the system default handler when possible."""
         try:
             system = platform.system()
             if system == 'Windows':
-                edge_paths = [
-                    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-                ]
-                edge_path = next((p for p in edge_paths if Path(p).exists()), None)
-                if edge_path:
-                    subprocess.Popen(
-                        [edge_path, str(pdf_path.absolute())],
-                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
-                    )
-                else:
+                if hasattr(os, 'startfile'):
                     os.startfile(str(pdf_path.absolute()))
+                else:
+                    edge_paths = [
+                        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                    ]
+                    edge_path = next((p for p in edge_paths if Path(p).exists()), None)
+                    if edge_path:
+                        subprocess.Popen(
+                            [edge_path, str(pdf_path.absolute())],
+                            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                        )
+                    else:
+                        raise FileNotFoundError("No Windows PDF opener available.")
             elif system == 'Darwin':
                 subprocess.run(['open', str(pdf_path.absolute())], check=False)
             else:
@@ -1782,10 +1875,7 @@ class PalletHistoryWindow:
             messagebox.showerror("Error", f"Could not open PDF:\n{e}", parent=self.window)
 
     def _print_pdf(self, pdf_path: Path):
-        """Backward-compatible wrapper. Use _open_pdf for new workflow."""
-        self._open_pdf(pdf_path)
-        return
-        """Print PDF file - automatically opens print dialog for the saved PDF"""
+        """Print PDF file - automatically opens print dialog for the saved PDF."""
         try:
             system = platform.system()
             if system == 'Windows':
@@ -2022,29 +2112,28 @@ class PalletHistoryWindow:
         """Try to activate a Windows app window and send Ctrl+P."""
         if platform.system() != 'Windows':
             return False
+        try:
+            import time
+            import pythoncom
+            import win32com.client
+        except ImportError:
+            return False
 
-        powershell = [
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            (
-                f"$wshell = New-Object -ComObject WScript.Shell; "
-                f"Start-Sleep -Milliseconds {delay_ms}; "
-                f"if ($wshell.AppActivate('{window_title}')) "
-                "{ Start-Sleep -Milliseconds 250; $wshell.SendKeys('^p'); exit 0 } "
-                "else { exit 1 }"
-            ),
-        ]
+        pythoncom.CoInitialize()
+        try:
+            shell = win32com.client.Dispatch("WScript.Shell")
+            deadline = time.time() + max(delay_ms / 1000.0, 0.5) + 4.0
 
-        result = subprocess.run(
-            powershell,
-            check=False,
-            timeout=15,
-            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
-        )
-        return result.returncode == 0
+            while time.time() < deadline:
+                if shell.AppActivate(window_title):
+                    time.sleep(0.3)
+                    shell.SendKeys("^p")
+                    return True
+                time.sleep(0.2)
+
+            return False
+        finally:
+            pythoncom.CoUninitialize()
 
     def _print_excel_files_with_excel(self, excel_files: List[Path], progress_label: Optional[tk.Label] = None) -> bool:
         """Open a combined Excel print job workbook and show the print dialog."""
@@ -2123,14 +2212,22 @@ class PalletHistoryWindow:
             excel.DisplayAlerts = True
             excel.Visible = True
             excel.UserControl = True
+            try:
+                excel.WindowState = -4137  # xlMaximized
+            except Exception:
+                pass
 
             if progress_label:
                 progress_label.config(text="Opening Excel print dialog...")
                 progress_label.master.update()
 
-            dialog_opened = excel.Dialogs(88).Show()
-            if dialog_opened is False:
-                raise Exception("Excel print dialog was cancelled or could not be shown.")
+            window_titles = [print_workbook.Name, "Microsoft Excel", "Excel"]
+            dialog_opened = any(
+                self._trigger_windows_print_dialog_shortcut(title, delay_ms=1200)
+                for title in window_titles
+            )
+            if not dialog_opened:
+                raise Exception("Excel opened, but the print dialog shortcut could not be triggered.")
             success = True
             return True
         finally:
