@@ -6,7 +6,7 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
 import { getExportDownloadEndpoints, listExports, type ExportRecord } from "../features/exports";
-import { downloadAndOpenWithSystem } from "../lib/systemOpen";
+import { downloadAndPrintWorkbook } from "../lib/systemOpen";
 
 const TEMPLATE_OPTIONS = ["", "200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 
@@ -21,6 +21,7 @@ export default function ExportsPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<ExportRecord[]>([]);
+  const [openingExportId, setOpeningExportId] = useState<number | null>(null);
 
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
@@ -64,25 +65,31 @@ export default function ExportsPage() {
     }
   };
 
-  const handleOpen = async (item: ExportRecord) => {
+  const handlePrint = async (item: ExportRecord) => {
+    if (openingExportId === item.id) {
+      return;
+    }
+    setOpeningExportId(item.id);
     try {
-      const candidates = getExportDownloadEndpoints(item.id, "pdf");
+      const candidates = getExportDownloadEndpoints(item.id, "xlsx");
       let lastError: Error | null = null;
       for (let index = 0; index < candidates.length; index += 1) {
         try {
-          await downloadAndOpenWithSystem(candidates[index], {
+          await downloadAndPrintWorkbook(candidates[index], {
             bearerToken: token ?? "",
-            fileName: item.file_name,
+            fileName: item.file_name.replace(/\.pdf$/i, ".xlsx"),
           });
           return;
         } catch (error) {
-          lastError = error instanceof Error ? error : new Error("Failed to open export");
+          lastError = error instanceof Error ? error : new Error("Failed to print export");
         }
       }
-      throw lastError ?? new Error("Failed to open export");
+      throw lastError ?? new Error("Failed to print export");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to open export";
+      const message = error instanceof Error ? error.message : "Failed to print export";
       notify(message, "error");
+    } finally {
+      setOpeningExportId((current) => (current === item.id ? null : current));
     }
   };
 
@@ -163,8 +170,8 @@ export default function ExportsPage() {
                     <td>{row.file_name}</td>
                     <td>{row.size_bytes != null ? `${(row.size_bytes / 1024).toFixed(1)} KB` : "-"}</td>
                     <td style={{ textAlign: "right" }}>
-                      <Button variant="secondary" onClick={() => void handleOpen(row)}>
-                        Open
+                      <Button variant="secondary" onClick={() => void handlePrint(row)} disabled={openingExportId === row.id}>
+                        {openingExportId === row.id ? "Opening Print..." : "Print"}
                       </Button>
                     </td>
                   </tr>

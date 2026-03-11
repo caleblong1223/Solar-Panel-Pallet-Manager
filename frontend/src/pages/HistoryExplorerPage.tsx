@@ -19,7 +19,7 @@ import {
   type ExportRecord,
 } from "../features/exports";
 import { listCustomers, type Customer } from "../features/customers";
-  import { downloadAndOpenWithSystem, openWithSystem, renderLocalWorkbookPdfAndOpen } from "../lib/systemOpen";
+import { downloadAndOpenWithSystem, downloadAndPrintWorkbook, openWithSystem, printLocalWorkbook } from "../lib/systemOpen";
 
 type SheetCell = CellBase<string>;
 type EditableSheet = {
@@ -159,6 +159,7 @@ export default function HistoryExplorerPage() {
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
   const [selectedPalletIds, setSelectedPalletIds] = useState<number[]>([]);
   const [isMerging, setIsMerging] = useState(false);
+  const [openingExportKey, setOpeningExportKey] = useState<string | null>(null);
   const editableSheetsRef = useRef<EditableSheet[]>([]);
 
   const selectedPallet = useMemo(
@@ -333,35 +334,49 @@ export default function HistoryExplorerPage() {
     }
   };
 
-  const handleOpenExport = async (item: ExportRecord, format: "pdf" | "xlsx") => {
+  const handleOpenExport = async (item: ExportRecord, format: "print" | "xlsx") => {
+    const openKey = `${item.id}:${format}`;
+    if (openingExportKey === openKey) {
+      return;
+    }
+    setOpeningExportKey(openKey);
     try {
       const preferredBase = item.source_api_base_url;
-      const candidates = getExportDownloadEndpoints(item.id, format, preferredBase);
+      const candidates = getExportDownloadEndpoints(item.id, "xlsx", preferredBase);
       let lastError: Error | null = null;
       for (let index = 0; index < candidates.length; index += 1) {
         try {
-          await downloadAndOpenWithSystem(candidates[index], {
-            bearerToken: apiToken,
-            fileName: format === "pdf" ? item.file_name : item.file_name.replace(/\.pdf$/i, ".xlsx"),
-          });
+          if (format === "print") {
+            await downloadAndPrintWorkbook(candidates[index], {
+              bearerToken: apiToken,
+              fileName: item.file_name.replace(/\.pdf$/i, ".xlsx"),
+            });
+          } else {
+            await downloadAndOpenWithSystem(candidates[index], {
+              bearerToken: apiToken,
+              fileName: item.file_name.replace(/\.pdf$/i, ".xlsx"),
+            });
+          }
           return;
         } catch (error) {
-          lastError = error instanceof Error ? error : new Error(`Failed to open ${format.toUpperCase()}`);
+          lastError = error instanceof Error ? error : new Error(`Failed to ${format === "print" ? "print" : "open XLSX"}`);
         }
       }
       if (item.object_key) {
         const workbookTarget = item.object_key.replace(/\.pdf$/i, ".xlsx");
-        if (format === "pdf") {
-          await renderLocalWorkbookPdfAndOpen(workbookTarget);
+        if (format === "print") {
+          await printLocalWorkbook(workbookTarget);
         } else {
           await openWithSystem(workbookTarget);
         }
         return;
       }
-      throw lastError ?? new Error(`Failed to open ${format.toUpperCase()}`);
+      throw lastError ?? new Error(`Failed to ${format === "print" ? "print" : "open XLSX"}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : `Failed to open ${format.toUpperCase()}`;
+      const message = error instanceof Error ? error.message : `Failed to ${format === "print" ? "print" : "open XLSX"}`;
       notify(message, "error");
+    } finally {
+      setOpeningExportKey((current) => (current === openKey ? null : current));
     }
   };
 
@@ -704,11 +719,19 @@ export default function HistoryExplorerPage() {
                         {" | Packout: "}
                         {item.packout_date ? new Date(item.packout_date).toLocaleDateString() : "-"}
                       </span>
-                      <Button variant="secondary" onClick={() => void handleOpenExport(item, "pdf")}>
-                        Open PDF
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleOpenExport(item, "print")}
+                        disabled={openingExportKey === `${item.id}:print`}
+                      >
+                        {openingExportKey === `${item.id}:print` ? "Opening Print..." : "Print"}
                       </Button>
-                      <Button variant="secondary" onClick={() => void handleOpenExport(item, "xlsx")}>
-                        Open XLSX
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleOpenExport(item, "xlsx")}
+                        disabled={openingExportKey === `${item.id}:xlsx`}
+                      >
+                        {openingExportKey === `${item.id}:xlsx` ? "Opening XLSX..." : "Open XLSX"}
                       </Button>
                       <Button variant="secondary" onClick={() => void handleEditExport(item)}>
                         Edit Spreadsheet

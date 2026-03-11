@@ -59,10 +59,46 @@ export async function downloadAndOpenWithSystem(
 export async function renderLocalWorkbookPdfAndOpen(workbookPath: string): Promise<void> {
   if (isTauriRuntime()) {
     try {
-      await invoke("render_local_workbook_pdf_and_open", { workbook_path: workbookPath });
+      await invoke("render_local_workbook_pdf_and_open", { workbookPath });
       return;
     } catch (error) {
       throw normalizeInvokeError(error, "Failed to render workbook PDF");
+    }
+  }
+
+  window.open(workbookPath, "_blank", "noopener,noreferrer");
+}
+
+export async function downloadAndPrintWorkbook(
+  url: string,
+  options?: {
+    bearerToken?: string;
+    fileName?: string;
+  }
+): Promise<void> {
+  if (isTauriRuntime()) {
+    try {
+      await invoke("download_and_print_workbook", {
+        url,
+        bearerToken: options?.bearerToken ?? null,
+        fileName: options?.fileName ?? null,
+      });
+      return;
+    } catch (error) {
+      throw normalizeInvokeError(error, "Failed to print workbook");
+    }
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+export async function printLocalWorkbook(workbookPath: string): Promise<void> {
+  if (isTauriRuntime()) {
+    try {
+      await invoke("print_local_workbook", { workbookPath });
+      return;
+    } catch (error) {
+      throw normalizeInvokeError(error, "Failed to print workbook");
     }
   }
 

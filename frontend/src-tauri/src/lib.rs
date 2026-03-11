@@ -299,6 +299,65 @@ fn open_path_with_system(normalized_target: &str) -> Result<(), String> {
   Ok(())
 }
 
+fn show_print_dialog_for_workbook(workbook_path: &Path) -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  {
+    if !workbook_path.exists() {
+      return Err(format!("Workbook file not found: {}", workbook_path.display()));
+    }
+
+    let temp_dir = std::env::temp_dir();
+    let script_path = temp_dir.join("pallet_manager_print_workbook.ps1");
+    let ps_script = r#"
+param([string]$xlsxPath)
+$excel = $null
+$workbook = $null
+try {
+  $excel = New-Object -ComObject Excel.Application
+  $excel.Visible = $true
+  $excel.DisplayAlerts = $false
+  $workbook = $excel.Workbooks.Open($xlsxPath)
+  [void]$workbook.Activate()
+  $null = $excel.Dialogs(8).Show()
+}
+finally {
+  if ($workbook -ne $null) { $workbook.Close($false) | Out-Null }
+  if ($workbook -ne $null) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($workbook) }
+  if ($excel -ne $null) {
+    $excel.Quit() | Out-Null
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
+  }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+}
+"#;
+    fs::write(&script_path, ps_script).map_err(|err| format!("Failed to write print script: {err}"))?;
+    let output = Command::new("powershell")
+      .arg("-NoProfile")
+      .arg("-NonInteractive")
+      .arg("-ExecutionPolicy")
+      .arg("Bypass")
+      .arg("-File")
+      .arg(&script_path)
+      .arg("-xlsxPath")
+      .arg(workbook_path.as_os_str())
+      .output()
+      .map_err(|err| format!("Failed to launch print dialog: {err}"))?;
+    if !output.status.success() {
+      let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+      let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+      let message = if !stderr.is_empty() { stderr } else if !stdout.is_empty() { stdout } else { format!("Print dialog exited with status {}", output.status) };
+      return Err(format!("Failed to show print dialog: {message}"));
+    }
+    return Ok(());
+  }
+
+  #[cfg(not(target_os = "windows"))]
+  {
+    open_path_with_system(&workbook_path.to_string_lossy())
+  }
+}
+
 fn resolve_bundled_backend_runtime(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
   let resource_dir = app
     .path()
@@ -374,6 +433,71 @@ fn download_and_open_with_system(
     .map_err(|err| format!("Failed to read download bytes: {err}"))?;
   fs::write(&target_path, &bytes).map_err(|err| format!("Failed to write temp file: {err}"))?;
   open_path_with_system(&target_path.to_string_lossy())
+}
+
+#[tauri::command]
+fn download_and_print_workbook(
+  app: tauri::AppHandle,
+  url: String,
+  bearer_token: Option<String>,
+  file_name: Option<String>,
+) -> Result<(), String> {
+  if url.trim().is_empty() {
+    return Err("URL cannot be empty".to_string());
+  }
+
+  let client = Client::builder()
+    .build()
+    .map_err(|err| format!("Failed to create HTTP client: {err}"))?;
+  let mut request = client.get(url.trim());
+  if let Some(token) = bearer_token.as_deref() {
+    if !token.trim().is_empty() {
+      request = request.bearer_auth(token.trim());
+    }
+  }
+  let response = request
+    .send()
+    .map_err(|err| format!("Failed to download workbook: {err}"))?;
+  if !response.status().is_success() {
+    let status = response.status();
+    let body = response.text().unwrap_or_default();
+    return Err(format!("Download failed ({status}): {body}"));
+  }
+
+  let download_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|err| format!("Unable to resolve app data directory: {err}"))?
+    .join("OPENED_FILES");
+  fs::create_dir_all(&download_dir)
+    .map_err(|err| format!("Unable to create opened files directory: {err}"))?;
+
+  let requested_name = file_name
+    .as_deref()
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .unwrap_or("export.xlsx");
+  let sanitized_name = Path::new(requested_name)
+    .file_name()
+    .and_then(|value| value.to_str())
+    .filter(|value| !value.trim().is_empty())
+    .unwrap_or("export.xlsx");
+  let target_path = download_dir.join(sanitized_name);
+  let bytes = response
+    .bytes()
+    .map_err(|err| format!("Failed to read workbook bytes: {err}"))?;
+  fs::write(&target_path, &bytes).map_err(|err| format!("Failed to write workbook file: {err}"))?;
+  show_print_dialog_for_workbook(&target_path)
+}
+
+#[tauri::command]
+fn print_local_workbook(app: tauri::AppHandle, workbook_path: String) -> Result<(), String> {
+  if workbook_path.trim().is_empty() {
+    return Err("Workbook path cannot be empty".to_string());
+  }
+  let normalized_path = normalize_open_target(&app, &workbook_path);
+  let source_path = PathBuf::from(&normalized_path);
+  show_print_dialog_for_workbook(&source_path)
 }
 
 #[tauri::command]
@@ -516,6 +640,8 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       open_with_system,
       download_and_open_with_system,
+      download_and_print_workbook,
+      print_local_workbook,
       render_local_workbook_pdf_and_open,
       open_backend_terminal,
       get_backend_terminal_setting,

@@ -1999,12 +1999,32 @@ class PalletHistoryWindow:
 
         return None
 
+    def _build_unique_sheet_name(self, desired_name: str, used_names: set) -> str:
+        """Create a valid, unique Excel sheet name."""
+        invalid_chars = set('[]:*?/\\')
+        cleaned = ''.join('_' if ch in invalid_chars else ch for ch in desired_name).strip() or "Pallet"
+        cleaned = cleaned[:31]
+
+        if cleaned not in used_names:
+            used_names.add(cleaned)
+            return cleaned
+
+        base = cleaned[:28] or "Pallet"
+        counter = 1
+        while True:
+            candidate = f"{base}_{counter}"[:31]
+            if candidate not in used_names:
+                used_names.add(candidate)
+                return candidate
+            counter += 1
+
     def _print_excel_files_with_excel(self, excel_files: List[Path], progress_label: Optional[tk.Label] = None) -> bool:
-        """Print Excel files with Excel automation on Windows."""
+        """Open a combined Excel print job workbook and show the print dialog."""
         if platform.system() != 'Windows':
             return False
 
         try:
+            import tempfile
             import pythoncom
             import win32com.client
         except ImportError:
@@ -2012,25 +2032,84 @@ class PalletHistoryWindow:
 
         pythoncom.CoInitialize()
         excel = None
+        print_workbook = None
+        success = False
         try:
             excel = win32com.client.DispatchEx("Excel.Application")
             excel.Visible = False
             excel.DisplayAlerts = False
+            excel.ScreenUpdating = False
+            excel.EnableEvents = False
+            excel.UserControl = False
+
+            print_workbook = excel.Workbooks.Add()
+            starter_sheet_names = [sheet.Name for sheet in print_workbook.Worksheets]
+            used_sheet_names = set(starter_sheet_names)
+            copied_count = 0
 
             for idx, excel_file in enumerate(excel_files, 1):
                 if progress_label:
-                    progress_label.config(text=f"Printing {idx}/{len(excel_files)} with Excel...")
+                    progress_label.config(text=f"Preparing {idx}/{len(excel_files)} in Excel...")
                     progress_label.master.update()
 
-                workbook = excel.Workbooks.Open(str(excel_file.absolute()), ReadOnly=True)
+                workbook = excel.Workbooks.Open(
+                    str(excel_file.absolute()),
+                    ReadOnly=True,
+                    UpdateLinks=False,
+                    IgnoreReadOnlyRecommended=True,
+                )
                 try:
-                    workbook.PrintOut()
+                    pallet_sheet = None
+                    for sheet in workbook.Sheets:
+                        if sheet.Name.upper().replace(' ', '') == 'PALLETSHEET':
+                            pallet_sheet = sheet
+                            break
+
+                    if pallet_sheet is None:
+                        continue
+
+                    pallet_sheet.Copy(After=print_workbook.Worksheets(print_workbook.Worksheets.Count))
+                    copied_sheet = print_workbook.Worksheets(print_workbook.Worksheets.Count)
+                    copied_sheet.Name = self._build_unique_sheet_name(excel_file.stem, used_sheet_names)
+                    copied_count += 1
                 finally:
                     workbook.Close(False)
 
+            if copied_count == 0:
+                raise Exception("No printable 'PALLET SHEET' tabs were found in the selected files.")
+
+            for sheet_name in starter_sheet_names:
+                try:
+                    print_workbook.Worksheets(sheet_name).Delete()
+                except Exception:
+                    pass
+
+            temp_dir = Path(tempfile.mkdtemp(prefix="pallet_print_"))
+            temp_workbook_path = temp_dir / "Pallet_Print_Job.xlsx"
+            print_workbook.SaveAs(str(temp_workbook_path))
+
+            print_workbook.Activate()
+            print_workbook.Worksheets.Select()
+
+            excel.ScreenUpdating = True
+            excel.DisplayAlerts = True
+            excel.Visible = True
+            excel.UserControl = True
+
+            if progress_label:
+                progress_label.config(text="Opening Excel print dialog...")
+                progress_label.master.update()
+
+            excel.Dialogs(88).Show()
+            success = True
             return True
         finally:
-            if excel is not None:
+            if not success and print_workbook is not None:
+                try:
+                    print_workbook.Close(False)
+                except Exception:
+                    pass
+            if not success and excel is not None:
                 try:
                     excel.Quit()
                 except Exception:
@@ -2038,35 +2117,20 @@ class PalletHistoryWindow:
             pythoncom.CoUninitialize()
 
     def _print_excel_files_with_libreoffice(self, excel_files: List[Path], progress_label: Optional[tk.Label] = None) -> bool:
-        """Print Excel files with LibreOffice if it is installed."""
+        """Open Excel files in LibreOffice for manual printing."""
         soffice = self._find_libreoffice_executable()
         if not soffice:
             return False
 
         for idx, excel_file in enumerate(excel_files, 1):
             if progress_label:
-                progress_label.config(text=f"Printing {idx}/{len(excel_files)} with LibreOffice...")
+                progress_label.config(text=f"Opening {idx}/{len(excel_files)} in LibreOffice...")
                 progress_label.master.update()
 
-            result = subprocess.run(
-                [
-                    str(soffice),
-                    '--headless',
-                    '--norestore',
-                    '-p',
-                    str(excel_file.absolute()),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120,
-                check=False,
+            subprocess.Popen(
+                [str(soffice), str(excel_file.absolute())],
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
             )
-
-            if result.returncode != 0:
-                raise Exception(
-                    f"LibreOffice print failed for {excel_file.name}: "
-                    f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
-                )
 
         return True
 
@@ -2077,8 +2141,9 @@ class PalletHistoryWindow:
         try:
             if self._print_excel_files_with_excel(excel_files, progress_label):
                 messagebox.showinfo(
-                    "Print Sent",
-                    f"Sent {len(excel_files)} Excel file(s) to the printer using Excel.",
+                    "Print Dialog Opened",
+                    f"Excel opened a combined print workbook for {len(excel_files)} file(s).\n\n"
+                    "The Excel print dialog should now be open for the combined workbook.",
                     parent=self.window
                 )
                 return "excel"
@@ -2088,8 +2153,9 @@ class PalletHistoryWindow:
         try:
             if self._print_excel_files_with_libreoffice(excel_files, progress_label):
                 messagebox.showinfo(
-                    "Print Sent",
-                    f"Sent {len(excel_files)} Excel file(s) to the printer using LibreOffice.",
+                    "LibreOffice Opened",
+                    f"Opened {len(excel_files)} Excel file(s) in LibreOffice.\n\n"
+                    "Use Ctrl+P in LibreOffice to print them.",
                     parent=self.window
                 )
                 return "libreoffice"
@@ -2104,16 +2170,16 @@ class PalletHistoryWindow:
                     progress_label.master.update()
 
                 if system == 'Windows':
-                    os.startfile(str(excel_file.absolute()), 'print')
+                    os.startfile(str(excel_file.absolute()))
                 elif system == 'Darwin':
                     subprocess.run(['open', str(excel_file.absolute())], check=False)
                 else:
                     subprocess.run(['xdg-open', str(excel_file.absolute())], check=False)
 
             messagebox.showinfo(
-                "Print",
+                "Files Opened",
                 f"Opened {len(excel_files)} file(s) for printing.\n\n"
-                "If a print dialog does not appear automatically, use File > Print in the opened spreadsheet app.",
+                "Use Ctrl+P or File > Print in the opened spreadsheet app.",
                 parent=self.window
             )
             return "shell"

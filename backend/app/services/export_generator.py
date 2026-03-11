@@ -159,6 +159,22 @@ def generate_merged_pdf_from_workbook_pages(pages: list[tuple[str, bytes]]) -> b
     return _pdf_from_pages(rendered)
 
 
+def _resolve_soffice_path() -> str | None:
+    soffice_path = shutil.which("soffice")
+    if soffice_path is not None:
+        return soffice_path
+
+    candidates = [
+        Path("/Applications/LibreOffice.app/Contents/MacOS/soffice"),
+        Path("C:/Program Files/LibreOffice/program/soffice.exe"),
+        Path("C:/Program Files (x86)/LibreOffice/program/soffice.exe"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
 def convert_workbook_bytes_to_pdf_bytes(workbook_bytes: bytes) -> bytes:
     tmp_dir = tempfile.mkdtemp()
     tmp_path = Path(tmp_dir)
@@ -168,11 +184,7 @@ def convert_workbook_bytes_to_pdf_bytes(workbook_bytes: bytes) -> bytes:
 
     try:
         # 1) Prefer LibreOffice on all platforms when available.
-        soffice_path = shutil.which("soffice")
-        if soffice_path is None:
-            mac_soffice = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
-            if mac_soffice.exists():
-                soffice_path = str(mac_soffice)
+        soffice_path = _resolve_soffice_path()
 
         if soffice_path is not None:
             process = subprocess.run(
@@ -204,15 +216,33 @@ def convert_workbook_bytes_to_pdf_bytes(workbook_bytes: bytes) -> bytes:
 param([string]$xlsxPath,[string]$pdfPath)
 $excel = $null
 $workbook = $null
+$worksheet = $null
+$pageSetup = $null
 try {
   $excel = New-Object -ComObject Excel.Application
   $excel.Visible = $false
   $excel.DisplayAlerts = $false
   $workbook = $excel.Workbooks.Open($xlsxPath)
+  try {
+    $worksheet = $workbook.Worksheets.Item("PALLET SHEET")
+  } catch {
+    $worksheet = $workbook.Worksheets.Item(1)
+  }
+  if ($worksheet -eq $null) {
+    throw "Workbook has no worksheets"
+  }
+  $pageSetup = $worksheet.PageSetup
+  $pageSetup.PrintArea = $worksheet.UsedRange.Address()
+  $pageSetup.Zoom = $false
+  $pageSetup.FitToPagesWide = 1
+  $pageSetup.FitToPagesTall = 1
+  $pageSetup.CenterHorizontally = $true
   # xlTypePDF = 0
-  $workbook.ExportAsFixedFormat(0, $pdfPath)
+  $worksheet.ExportAsFixedFormat(0, $pdfPath)
 }
 finally {
+  if ($pageSetup -ne $null) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($pageSetup) }
+  if ($worksheet -ne $null) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($worksheet) }
   if ($workbook -ne $null) { $workbook.Close($false) | Out-Null }
   if ($workbook -ne $null) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($workbook) }
   if ($excel -ne $null) {
