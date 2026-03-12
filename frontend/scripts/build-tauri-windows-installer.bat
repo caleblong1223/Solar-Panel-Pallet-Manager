@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-REM Build the Windows Tauri desktop app and copy installers into dist\installers.
+REM Build the Windows Tauri desktop app and copy the supported MSI installer into dist\installers.
 REM Run this from anywhere; the script resolves the frontend directory itself.
 
 set "SCRIPT_DIR=%~dp0"
@@ -26,7 +26,6 @@ if errorlevel 1 goto :fail
 echo.
 echo Build complete.
 echo MSI: %FRONTEND_DIR%\dist\installers\Pallet Manager_2.0.0_x64_en-US.msi
-echo EXE: %FRONTEND_DIR%\dist\installers\Pallet Manager_2.0.0_x64-setup.exe
 
 popd
 exit /b 0

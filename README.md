@@ -179,7 +179,7 @@ npx tauri build
 ```
 
 - **macOS:** The `.app` bundle is produced under `frontend/src-tauri/target/release/bundle/macos/` (e.g. `Pallet Manager.app`).
-- **Windows:** The EXE (and optional NSIS/MSI installers) are under `frontend/src-tauri/target/release/` and `bundle/nsis`, `bundle/msi`. The script `npm run build:desktop` runs `tauri build` and then copies Windows installers to `frontend/dist/installers/`.
+- **Windows:** Use the MSI installer build. `npm run build:desktop` runs `tauri build --bundles msi` and copies the supported Windows installer to `frontend/dist/installers/`.
 
 The built app has the API base URL baked in and will talk to the configured backend (e.g. `http://10.20.10.62:8001/api/v1`), while preserving local fallback if configured.
 
@@ -192,10 +192,11 @@ cd frontend
 scripts\build-tauri-windows-installer.bat
 ```
 
-That script wraps the full Windows desktop build and writes installers here:
+That script wraps the full Windows desktop build and writes the supported installer here:
 
 - `frontend\dist\installers\Pallet Manager_2.0.0_x64_en-US.msi`
-- `frontend\dist\installers\Pallet Manager_2.0.0_x64-setup.exe`
+
+Do not use the NSIS `.exe` installer for Windows releases. The supported Windows package is the MSI because the bundled backend works correctly with the MSI install path.
 
 If you need different build-time API URLs, set them first in the same CMD session:
 
@@ -207,11 +208,11 @@ scripts\build-tauri-windows-installer.bat
 
 ---
 
-### 4. Installing the EXE on workstations (Computers 2–4)
+### 4. Installing the MSI on workstations (Computers 2–4)
 
 On each workstation:
 
-1. Copy the built EXE from the build machine (USB/share).
+1. Copy the built MSI from the build machine (USB/share).
 2. Optionally create a desktop shortcut (rename to `Pallet Manager 2.0`).
 3. Make sure the workstation is on `Crossroads-WiFi` and can reach Packout:
 
@@ -219,7 +220,7 @@ On each workstation:
    ping 10.20.10.62
    ```
 
-4. Double‑click the EXE:
+4. Run the MSI installer:
    - The app will launch.
    - It performs **background login** with the shared account.
    - All calls go to the backend on the Packout Computer.

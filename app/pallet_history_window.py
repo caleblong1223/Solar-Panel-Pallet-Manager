@@ -1136,6 +1136,7 @@ class PalletHistoryWindow:
                 ),
                 parent=self.window,
             )
+            return
         except Exception as e:
             logger.error(f"Failed to create/print PDF: {e}", exc_info=e)
             logger.end_timer("pdf_export_print_total")
@@ -1144,6 +1145,7 @@ class PalletHistoryWindow:
                 f"Failed to create/print PDF:\n{e}\n\nCheck LOGS/ folder for details.",
                 parent=self.window,
             )
+            return
 
         from app.debug_logger import get_logger
         

@@ -55,7 +55,7 @@ This script:
 - runs `npm install`
 - runs `npm run build:desktop`
 - builds the Tauri app
-- copies the Windows installers into `frontend\dist\installers`
+- copies the supported Windows MSI installer into `frontend\dist\installers`
 
 Default build-time API URLs used by the batch file:
 
@@ -72,7 +72,8 @@ set VITE_FALLBACK_API_BASE_URL=http://127.0.0.1:8010/api/v1
 scripts\build-tauri-windows-installer.bat
 ```
 
-Installer output paths:
+Supported Windows installer output path:
 
 - `frontend\dist\installers\Pallet Manager_2.0.0_x64_en-US.msi`
-- `frontend\dist\installers\Pallet Manager_2.0.0_x64-setup.exe`
+
+Do not distribute the NSIS `.exe` installer for this app. Use the MSI build for Windows releases because the bundled backend works correctly from the MSI install.

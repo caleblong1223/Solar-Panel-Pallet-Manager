@@ -6,7 +6,7 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import TextInput from "../components/ui/TextInput";
 import { getExportDownloadEndpoints, listExports, type ExportRecord } from "../features/exports";
-import { downloadAndPrintWorkbook } from "../lib/systemOpen";
+import { downloadAndOpenWithSystem } from "../lib/systemOpen";
 
 const TEMPLATE_OPTIONS = ["", "200WT", "220WT", "220M6", "330WT", "450WT", "450BT"];
 
@@ -22,6 +22,7 @@ export default function ExportsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<ExportRecord[]>([]);
   const [openingExportId, setOpeningExportId] = useState<number | null>(null);
+  const [pdfProgressMessage, setPdfProgressMessage] = useState<string | null>(null);
 
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
@@ -65,31 +66,33 @@ export default function ExportsPage() {
     }
   };
 
-  const handlePrint = async (item: ExportRecord) => {
+  const handleOpenPdf = async (item: ExportRecord) => {
     if (openingExportId === item.id) {
       return;
     }
     setOpeningExportId(item.id);
+    setPdfProgressMessage("Creating and opening PDF...");
     try {
-      const candidates = getExportDownloadEndpoints(item.id, "xlsx");
+      const candidates = getExportDownloadEndpoints(item.id, "pdf");
       let lastError: Error | null = null;
       for (let index = 0; index < candidates.length; index += 1) {
         try {
-          await downloadAndPrintWorkbook(candidates[index], {
+          await downloadAndOpenWithSystem(candidates[index], {
             bearerToken: token ?? "",
-            fileName: item.file_name.replace(/\.pdf$/i, ".xlsx"),
+            fileName: item.file_name.replace(/\.xlsx$/i, ".pdf"),
           });
           return;
         } catch (error) {
-          lastError = error instanceof Error ? error : new Error("Failed to print export");
+          lastError = error instanceof Error ? error : new Error("Failed to open PDF");
         }
       }
-      throw lastError ?? new Error("Failed to print export");
+      throw lastError ?? new Error("Failed to open PDF");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to print export";
+      const message = error instanceof Error ? error.message : "Failed to open PDF";
       notify(message, "error");
     } finally {
       setOpeningExportId((current) => (current === item.id ? null : current));
+      setPdfProgressMessage(null);
     }
   };
 
@@ -145,6 +148,14 @@ export default function ExportsPage() {
         </Card>
 
         <Card title="Exports">
+          {pdfProgressMessage ? (
+            <div className="progress-feedback" role="status" aria-live="polite">
+              <div className="progress-feedback__label">{pdfProgressMessage}</div>
+              <div className="progress-feedback__bar" aria-hidden="true">
+                <div className="progress-feedback__bar-value" />
+              </div>
+            </div>
+          ) : null}
           {results.length === 0 ? (
             <p style={{ marginTop: "12px", color: "var(--color-text-secondary)" }}>
               No exports loaded. Use the filters to search.
@@ -170,8 +181,8 @@ export default function ExportsPage() {
                     <td>{row.file_name}</td>
                     <td>{row.size_bytes != null ? `${(row.size_bytes / 1024).toFixed(1)} KB` : "-"}</td>
                     <td style={{ textAlign: "right" }}>
-                      <Button variant="secondary" onClick={() => void handlePrint(row)} disabled={openingExportId === row.id}>
-                        {openingExportId === row.id ? "Opening Print..." : "Print"}
+                      <Button variant="secondary" onClick={() => void handleOpenPdf(row)} disabled={openingExportId === row.id}>
+                        {openingExportId === row.id ? "Opening PDF..." : "Open PDF"}
                       </Button>
                     </td>
                   </tr>

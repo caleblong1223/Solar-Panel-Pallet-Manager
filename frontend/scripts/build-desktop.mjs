@@ -97,7 +97,7 @@ function buildMacDmg() {
 function main() {
   const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
   if (process.platform === "win32") {
-    runOrThrow(npxCmd, ["tauri", "build", "--bundles", "msi", "nsis"], frontendDir);
+    runOrThrow(npxCmd, ["tauri", "build", "--bundles", "msi"], frontendDir);
   } else {
     runOrThrow(npxCmd, ["tauri", "build"], frontendDir);
   }

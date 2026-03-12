@@ -10,10 +10,20 @@ const outputDir = path.join(frontendDir, "dist", "installers");
 
 async function copyInstallers() {
   await fs.mkdir(outputDir, { recursive: true });
+  const existingOutputEntries = await fs.readdir(outputDir, { withFileTypes: true });
+  for (const entry of existingOutputEntries) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const fileName = entry.name.toLowerCase();
+    if (fileName.endsWith(".msi") || fileName.endsWith(".exe") || fileName.endsWith(".dmg")) {
+      await fs.rm(path.join(outputDir, entry.name), { force: true });
+    }
+  }
 
   const candidates = [];
-  const installerDirs = ["nsis", "msi", "dmg"];
-  const installerExtensions = [".exe", ".msi", ".dmg"];
+  const installerDirs = process.platform === "win32" ? ["msi"] : ["dmg"];
+  const installerExtensions = process.platform === "win32" ? [".msi"] : [".dmg"];
 
   for (const subDir of installerDirs) {
     const directory = path.join(bundleDir, subDir);

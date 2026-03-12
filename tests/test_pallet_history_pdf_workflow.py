@@ -110,3 +110,29 @@ def test_excel_to_pdf_prefers_libreoffice(monkeypatch, tmp_path):
 
     assert result == [expected_pdf]
     assert calls == [("libreoffice", [excel_file], expected_pdf)]
+
+
+def test_create_pdf_and_print_stops_after_pdf_flow(monkeypatch, tmp_path):
+    window = _make_window()
+    target_pdf = tmp_path / "pallet.pdf"
+    target_pdf.write_bytes(b"%PDF-1.4\n")
+
+    calls = {"printed": []}
+
+    monkeypatch.setattr(window, "_get_selected_export_file_paths", lambda: [tmp_path / "pallet.xlsx"])
+    monkeypatch.setattr(
+        window,
+        "_create_selected_pdfs",
+        lambda file_paths, progress_title, success_action: (target_pdf, 1),
+    )
+    monkeypatch.setattr(window, "_print_pdf", lambda pdf_path: calls["printed"].append(pdf_path))
+    monkeypatch.setattr(
+        window,
+        "get_selected_pallets",
+        lambda: pytest.fail("legacy Excel print workflow should not run after PDF creation succeeds"),
+    )
+    monkeypatch.setattr("app.pallet_history_window.messagebox.showinfo", lambda *args, **kwargs: None)
+
+    window.create_pdf_and_print()
+
+    assert calls["printed"] == [target_pdf]
